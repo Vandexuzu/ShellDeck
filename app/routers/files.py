@@ -47,7 +47,7 @@ async def _list_dir(sftp, path: str) -> list[FileEntry]:
 @router.get("/{device_id}/browse", response_model=list[FileEntry])
 async def browse(device_id: int, path: str = "/", db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[FileEntry]:
     device = db.get(Device, device_id)
-    if device is None or not _can_view(db, device, user):
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:
@@ -64,7 +64,7 @@ async def browse(device_id: int, path: str = "/", db: Session = Depends(get_db),
 @router.post("/{device_id}/read")
 async def read_file(device_id: int, body: FilePath, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or not _can_view(db, device, user):
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:
