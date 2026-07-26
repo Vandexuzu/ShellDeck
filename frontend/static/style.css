@@ -137,7 +137,7 @@ body {
 .auth-card input { width: 100%; margin-top: 6px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-family: inherit; font-size: 15px; transition: border-color .15s, box-shadow .15s; }
 .auth-card input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-t); }
 .auth-error { color: var(--danger); font-size: 13px; min-height: 18px; margin-bottom: 8px; text-align: center; }
-.btn-block { width: 100%; padding: 12px; font-size: 15px; margin-top: 4px; }
+.btn-block { width: 100%; padding: 12px; font-size: 15px; margin-top: 4px; justify-content: center; }
 .auth-hint { color: var(--muted); font-size: 12px; text-align: center; margin-top: 16px; }
 .form-error { color: var(--danger); font-size: 13px; min-height: 18px; margin-bottom: 8px; white-space: pre-wrap; }
 .muted { color: var(--muted); font-size: 12px; }
