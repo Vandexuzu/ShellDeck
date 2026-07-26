@@ -8,9 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import decrypt, encrypt
+from app.config import decrypt, encrypt, settings
 from app.db import get_db
-from app.models import Device, User
+from app.models import Device, SessionLog
 from app.schemas import DeviceCreate, DeviceOut, DeviceUpdate
 from app.security import get_current_user, operator_only
 
