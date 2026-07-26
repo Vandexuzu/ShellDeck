@@ -9,7 +9,7 @@ from app.config import decrypt, encrypt
 from app.db import get_db
 from app.models import SettingsRow
 from app.schemas import SettingsOut, SettingsUpdate
-from app.security import get_current_user
+from app.security import get_current_user, admin_only
 from app.notifications import send_telegram, send_discord, send_ntfy, send_gotify, send_slack, send_email, send_webhook
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
@@ -34,7 +34,7 @@ def get_settings(db: Session = Depends(get_db), _: object = Depends(get_current_
 def update_settings(
     payload: SettingsUpdate,
     db: Session = Depends(get_db),
-    _: object = Depends(get_current_user),
+    _: User = Depends(admin_only),
 ) -> SettingsRow:
     row = _row(db)
     if payload.notify_enabled is not None:
@@ -74,7 +74,7 @@ def update_settings(
 
 @router.post("/test")
 async def test_notification(
-    db: Session = Depends(get_db), _: object = Depends(get_current_user)
+    db: Session = Depends(get_db), _: User = Depends(admin_only)
 ) -> dict:
     """Send a test message via the currently configured channels."""
     row = _row(db)
@@ -104,7 +104,7 @@ async def test_notification(
 
 
 @router.get("/telegram/chatid")
-async def telegram_chat_id(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> dict:
+async def telegram_chat_id(db: Session = Depends(get_db), _: User = Depends(admin_only)) -> dict:
     """Fetch the most recent chat id from Telegram updates (requires the user to have
     messaged the bot first). Used to auto-fill the Telegram chat id field."""
     row = _row(db)

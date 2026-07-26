@@ -278,6 +278,23 @@
             <button id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
           </div>
         </div>
+        <div id="user-edit-form" class="user-form hidden">
+          <h3>Edit user</h3>
+          <input type="hidden" id="edit-user-id" />
+          <label>Username <input id="edit-user-username" class="input" /></label>
+          <label>New password <input id="edit-user-password" type="password" class="input" placeholder="leave blank to keep" autocomplete="new-password" /></label>
+          <label>Role
+            <select id="edit-user-role" class="input">
+              <option value="viewer">viewer (read-only)</option>
+              <option value="operator">operator (manage devices)</option>
+              <option value="admin">admin (full + user mgmt)</option>
+            </select>
+          </label>
+          <div class="modal-actions">
+            <button id="edit-user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
+            <button id="edit-user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+          </div>
+        </div>
       </div>
 
       <!-- Terminal view -->
@@ -377,6 +394,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=35"></script>
+  <script src="/static/app.js?v=36"></script>
 </body>
 </html>

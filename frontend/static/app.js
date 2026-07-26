@@ -743,17 +743,25 @@ async function loadUsers() {
         </select></td>
         <td data-label="Created" class="muted">${new Date(u.created_at).toLocaleDateString()}</td>
         <td data-label="Actions" class="di-actions">
-          <button class="btn btn-ghost btn-icon-xs danger user-del" data-id="${u.id}" data-name="${escapeHtml(u.username)}" title="Delete user">${icon("trash")}</button>
+          <button class="btn btn-ghost btn-icon-xs user-edit" data-id="${u.id}" data-name="${escapeHtml(u.username)}" data-role="${u.role}" title="Edit user">${icon("settings")}</button>
+          ${u.id === currentUser.id ? "" : `<button class="btn btn-ghost btn-icon-xs danger user-del" data-id="${u.id}" data-name="${escapeHtml(u.username)}" title="Delete user">${icon("trash")}</button>`}
         </td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll(".user-role").forEach(s => s.onchange = async () => {
-      await api(`/api/users/${s.dataset.id}/role`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: s.value }) });
-      loadUsers();
+      try {
+        await api(`/api/users/${s.dataset.id}/role`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: s.value }) });
+        showToast("Role updated", "ok");
+        loadUsers();
+      } catch (e) { showToast(e.message, "error"); loadUsers(); }
     });
+    box.querySelectorAll(".user-edit").forEach(b => b.onclick = () => openUserEdit(b.dataset.id, b.dataset.name, b.dataset.role));
     box.querySelectorAll(".user-del").forEach(b => b.onclick = async () => {
       if (!confirm(`Delete user ${b.dataset.name}?`)) return;
-      await api(`/api/users/${b.dataset.id}`, { method: "DELETE" });
-      loadUsers();
+      try {
+        await api(`/api/users/${b.dataset.id}`, { method: "DELETE" });
+        showToast("User deleted", "ok");
+        loadUsers();
+      } catch (e) { showToast(e.message, "error"); }
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
@@ -767,6 +775,30 @@ document.getElementById("user-save").onclick = async () => {
   try {
     await api("/api/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, role }) });
     document.getElementById("user-form").classList.add("hidden");
+    loadUsers();
+  } catch (e) { showToast(e.message, "error"); }
+};
+function openUserEdit(id, name, role) {
+  document.getElementById("edit-user-id").value = id;
+  document.getElementById("edit-user-username").value = name;
+  document.getElementById("edit-user-password").value = "";
+  document.getElementById("edit-user-role").value = role;
+  document.getElementById("user-form").classList.add("hidden");
+  document.getElementById("user-edit-form").classList.remove("hidden");
+}
+document.getElementById("edit-user-cancel").onclick = () => document.getElementById("user-edit-form").classList.add("hidden");
+document.getElementById("edit-user-save").onclick = async () => {
+  const id = document.getElementById("edit-user-id").value;
+  const username = document.getElementById("edit-user-username").value.trim();
+  const password = document.getElementById("edit-user-password").value;
+  const role = document.getElementById("edit-user-role").value;
+  const body = { username };
+  if (password) body.password = password;
+  if (role) body.role = role;
+  try {
+    await api(`/api/users/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    document.getElementById("user-edit-form").classList.add("hidden");
+    showToast("User updated", "ok");
     loadUsers();
   } catch (e) { showToast(e.message, "error"); }
 };
@@ -916,6 +948,7 @@ async function loadSettings() {
   } catch (e) { showToast(e.message, "error"); }
 }
 document.getElementById("set-save").onclick = async () => {
+  if (!currentUser || currentUser.role !== "admin") { showToast("Only admins can change system settings", "error"); return; }
   const payload = {
   notify_enabled: document.getElementById("set-notify").checked,
   telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),

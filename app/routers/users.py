@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
-from app.schemas import UserCreate, UserOut, UserRoleUpdate
+from app.schemas import UserCreate, UserOut, UserRoleUpdate, UserUpdate
 from app.security import get_current_user, hash_password, admin_only
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -42,6 +42,32 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = De
     return user
 
 
+@router.put("/{user_id}", response_model=UserOut)
+def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), _: User = Depends(_admin)) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Prevent an admin from locking themselves out: last admin cannot be demoted.
+    if user.role == "admin" and payload.role not in (None, "admin"):
+        admin_count = db.scalar(select(User).where(User.role == "admin"))
+        if admin_count <= 1:
+            raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+    if payload.username and payload.username != user.username:
+        if db.scalar(select(User).where(User.username == payload.username)):
+            raise HTTPException(status_code=400, detail="Username already taken")
+        user.username = payload.username
+    if payload.password:
+        user.password_hash = hash_password(payload.password)
+    if payload.role:
+        if payload.role not in ("admin", "operator", "viewer"):
+            raise HTTPException(status_code=400, detail="Role must be admin|operator|viewer")
+        user.role = payload.role
+        user.is_admin = (payload.role == "admin")
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 @router.post("/{user_id}/role", response_model=UserOut)
 def change_role(user_id: int, payload: UserRoleUpdate, db: Session = Depends(get_db), _: User = Depends(_admin)) -> User:
     if payload.role not in ("admin", "operator", "viewer"):
@@ -53,7 +79,7 @@ def change_role(user_id: int, payload: UserRoleUpdate, db: Session = Depends(get
     if user.role == "admin" and payload.role != "admin":
         admin_count = db.scalar(select(User).where(User.role == "admin"))
         if admin_count <= 1:
-            raise HTTPException(status_code=400, detail="Cannot remove the last admin")
+            raise HTTPException(status_code=400, detail="Cannot delete the last admin")
     user.role = payload.role
     user.is_admin = (payload.role == "admin")
     db.commit()
