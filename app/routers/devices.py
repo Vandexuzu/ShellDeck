@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 
+import asyncssh
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -45,6 +46,7 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
         private_key_enc=encrypt(payload.private_key or ""),
         os=payload.os,
         notes=payload.notes,
+        bastion_id=payload.bastion_id,
     )
     db.add(device)
     db.commit()
@@ -75,6 +77,34 @@ def export_devices(db: Session = Depends(get_db), user: User = Depends(get_curre
     )
 
 
+@router.get("/inventory/{fmt}")
+def inventory_export(fmt: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
+    """Export devices as an Ansible inventory (ini) or Terraform inventory (yaml)."""
+    devices = list(db.scalars(select(Device).where(Device.owner_id == user.id).order_by(Device.name)))
+    if fmt == "ansible":
+        lines = ["[shelldeck]", ""]
+        for d in devices:
+            lines.append(f"{d.name} ansible_host={d.host} ansible_port={d.port} ansible_user={d.username}")
+        content = "\n".join(lines) + "\n"
+        return Response(content=content, media_type="text/plain",
+                        headers={"Content-Disposition": "attachment; filename=shelldeck-inventory.ini"})
+    if fmt == "terraform":
+        hosts = []
+        for d in devices:
+            hosts.append({
+                "name": d.name,
+                "connection": d.host,
+                "user": d.username,
+                "port": d.port,
+                "os": d.os or "unknown",
+            })
+        yaml_block = "hosts = " + json.dumps(hosts, indent=2)
+        content = f"# Terraform-style inventory for ShellDeck devices\n{yaml_block}\n"
+        return Response(content=content, media_type="text/plain",
+                        headers={"Content-Disposition": "attachment; filename=shelldeck-inventory.tf"})
+    raise HTTPException(status_code=400, detail="fmt must be 'ansible' or 'terraform'")
+
+
 @router.post("/import")
 def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     """Import devices from an export. Secrets must be supplied in each entry."""
@@ -91,6 +121,7 @@ def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), u
             private_key_enc=encrypt(item.private_key or ""),
             os=item.os,
             notes=item.notes,
+            bastion_id=item.bastion_id if hasattr(item, "bastion_id") else None,
         )
         db.add(device)
         created += 1
@@ -132,3 +163,53 @@ def delete_device(device_id: int, db: Session = Depends(get_db), user: User = De
 def load_credentials(device: Device) -> tuple[str, str | None, str | None]:
     """Return (username, password, private_key) with decrypted secrets."""
     return device.username, decrypt(device.password_enc) or None, decrypt(device.private_key_enc) or None
+
+
+def _ssh_opts(device: Device, tunnel: object | None = None) -> dict:
+    """Build asyncssh connect options for a device. If `tunnel` (a bastion
+    SSHClientConnection) is provided, the connection is routed through it."""
+    username, password, private_key = load_credentials(device)
+    opts: dict = {
+        "host": device.host,
+        "port": device.port,
+        "username": username,
+        "known_hosts": None if settings.ssh_ignore_known_hosts else False,
+        "connect_timeout": 10,
+    }
+    if private_key:
+        opts["client_keys"] = [private_key]
+    else:
+        opts["password"] = password
+    if tunnel is not None:
+        opts["tunnel"] = tunnel
+    return opts
+
+
+async def connect_device(device: Device, db: Session) -> tuple[object, object | None]:
+    """Open an SSH connection to `device`, routing through its bastion if set.
+
+    Returns (conn, bastion_conn). The caller MUST close both (the bastion first
+    is not required; closing conn then bastion_conn is safe). If no bastion is
+    configured, bastion_conn is None.
+    """
+    bastion_conn = None
+    if device.bastion_id is not None:
+        bastion = db.get(Device, device.bastion_id)
+        if bastion is not None and bastion.owner_id == device.owner_id:
+            bastion_conn = await asyncssh.connect(**_ssh_opts(bastion))
+            conn = await asyncssh.connect(**_ssh_opts(device, tunnel=bastion_conn))
+            return conn, bastion_conn
+    conn = await asyncssh.connect(**_ssh_opts(device))
+    return conn, None
+
+
+async def _probe_reachable(device: Device, db: Session) -> bool:
+    """Return True if the device is reachable (directly or via bastion)."""
+    try:
+        conn, bastion = await connect_device(device, db)
+        conn.close()
+        if bastion:
+            bastion.close()
+        return True
+    except Exception:
+        return False

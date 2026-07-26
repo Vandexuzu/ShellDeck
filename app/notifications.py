@@ -67,27 +67,15 @@ async def notify(message: str, db: Session) -> None:
         await send_discord(s.discord_webhook, message)
 
 
-async def _probe(device: Device) -> bool:
-    """Return True if the device is reachable over SSH."""
-    from app.routers.devices import load_credentials
-    from app.config import settings
-    import asyncssh
-
-    username, password, private_key = load_credentials(device)
-    opts = {
-        "host": device.host,
-        "port": device.port,
-        "username": username,
-        "known_hosts": None if settings.ssh_ignore_known_hosts else False,
-        "connect_timeout": 8,
-    }
-    if private_key:
-        opts["client_keys"] = [private_key]
-    else:
-        opts["password"] = password
+async def _probe(device: Device, db: Session) -> bool:
+    """Return True if the device is reachable over SSH (directly or via bastion)."""
+    from app.routers.devices import connect_device
     try:
-        async with asyncssh.connect(**opts) as _conn:
-            return True
+        conn, bastion = await connect_device(device, db)
+        conn.close()
+        if bastion is not None:
+            bastion.close()
+        return True
     except Exception:
         return False
 
@@ -106,7 +94,7 @@ async def monitor_loop(interval: int = 60) -> None:
                 devices = db.scalars(select(Device)).all()
                 for d in devices:
                     try:
-                        ok = await _probe(d)
+                        ok = await _probe(d, db)
                     except Exception:
                         ok = False
                     prev = _last_state.get(d.id)

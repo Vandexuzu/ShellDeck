@@ -46,6 +46,8 @@ def update_settings(
         row.discord_webhook = payload.discord_webhook
     if payload.monitor_interval is not None:
         row.monitor_interval = max(10, min(payload.monitor_interval, 3600))
+    if payload.public_dashboard is not None:
+        row.public_dashboard = payload.public_dashboard
     db.commit()
     db.refresh(row)
     return row

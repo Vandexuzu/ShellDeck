@@ -42,6 +42,7 @@ class DeviceCreate(BaseModel):
     private_key: str | None = None
     os: str = ""
     notes: str = ""
+    bastion_id: int | None = None  # optional jump host (another owned device)
 
 
 class DeviceUpdate(BaseModel):
@@ -54,6 +55,7 @@ class DeviceUpdate(BaseModel):
     private_key: str | None = None
     os: str | None = None
     notes: str | None = None
+    bastion_id: int | None = None
 
 
 class DeviceOut(BaseModel):
@@ -66,6 +68,7 @@ class DeviceOut(BaseModel):
     auth_method: str
     os: str
     notes: str
+    bastion_id: int | None = None
     last_seen: datetime | None
     created_at: datetime
 
@@ -156,6 +159,7 @@ class SettingsOut(BaseModel):
     telegram_chat_id: str
     discord_webhook: str
     monitor_interval: int
+    public_dashboard: bool
 
 
 class SettingsUpdate(BaseModel):
@@ -164,6 +168,7 @@ class SettingsUpdate(BaseModel):
     telegram_chat_id: str | None = None
     discord_webhook: str | None = None
     monitor_interval: int | None = None
+    public_dashboard: bool | None = None
 
 
 # ------------------------------- Scheduled tasks ----------------------------

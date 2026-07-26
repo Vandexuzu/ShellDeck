@@ -151,3 +151,30 @@ def test_settings_and_scheduled():
     assert len(lst) == 1 and lst[0]["command"] == "uptime"
     # delete
     assert client.delete(f"/api/scheduled/{lst[0]['id']}", headers=ha).status_code == 204
+
+
+def test_inventory_and_public():
+    r = client.post("/api/auth/register", json={"username": "inv_admin", "password": "secret123"})
+    ha = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    client.post("/api/devices", headers=ha, json={"name": "srv1", "host": "10.0.0.5", "username": "root", "password": "p"})
+    # inventory ansible
+    a = client.get("/api/devices/inventory/ansible", headers=ha)
+    assert a.status_code == 200 and "srv1 ansible_host=10.0.0.5" in a.text
+    # inventory terraform
+    t = client.get("/api/devices/inventory/terraform", headers=ha)
+    assert t.status_code == 200 and "srv1" in t.text
+    # invalid fmt
+    assert client.get("/api/devices/inventory/xml", headers=ha).status_code == 400
+    # public dashboard disabled by default -> 404
+    assert client.get("/api/public/status").status_code == 404
+    # enable public dashboard via settings
+    client.put("/api/settings", headers=ha, json={"public_dashboard": True})
+    pub = client.get("/api/public/status")
+    assert pub.status_code == 200 and pub.json()["total"] >= 1
+    # bastion: create two devices, set one as bastion of the other
+    b = client.post("/api/devices", headers=ha, json={"name": "bastion", "host": "10.0.0.1", "username": "root", "password": "p"}).json()
+    d = client.post("/api/devices", headers=ha, json={"name": "target", "host": "10.0.0.2", "username": "root", "password": "p", "bastion_id": b["id"]}).json()
+    assert d["bastion_id"] == b["id"]
+    # device out includes bastion_id
+    got = client.get(f"/api/devices/{d['id']}", headers=ha).json()
+    assert got["bastion_id"] == b["id"]

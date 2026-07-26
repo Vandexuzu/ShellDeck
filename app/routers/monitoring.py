@@ -11,29 +11,17 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import load_credentials
+from app.routers.devices import connect_device, load_credentials
 from app.schemas import DeviceStatus
 from app.security import get_current_user
 
 router = APIRouter(prefix="/api/monitor", tags=["monitor"])
 
 
-async def _collect(device: Device) -> DeviceStatus:
-    username, password, private_key = load_credentials(device)
-    connect_opts = {
-        "host": device.host,
-        "port": device.port,
-        "username": username,
-        "known_hosts": None if settings.ssh_ignore_known_hosts else False,
-        "connect_timeout": 8,
-    }
-    if private_key:
-        connect_opts["client_keys"] = [private_key]
-    else:
-        connect_opts["password"] = password
-
+async def _collect(device: Device, db: Session) -> DeviceStatus:
     try:
-        async with asyncssh.connect(**connect_opts) as conn:
+        conn, bastion = await connect_device(device, db)
+        try:
             # uptime
             uptime = (await conn.run("uptime -p", check=False)).stdout.strip() or None
             # cpu load avg (1 min)
@@ -54,6 +42,10 @@ async def _collect(device: Device) -> DeviceStatus:
                 reachable=True, cpu_load=cpu_load, mem_used_pct=mem_pct,
                 disk_used_pct=disk_pct, uptime=uptime,
             )
+        finally:
+            conn.close()
+            if bastion is not None:
+                bastion.close()
     except Exception as exc:  # noqa: BLE001 - report any SSH failure as unreachable
         return DeviceStatus(
             id=device.id, name=device.name, host=device.host,
@@ -66,7 +58,7 @@ async def status_all(db: Session = Depends(get_db), user: User = Depends(get_cur
     devices = list(db.scalars(select(Device).where(Device.owner_id == user.id)))
     if not devices:
         return []
-    results = await asyncio.gather(*[_collect(d) for d in devices])
+    results = await asyncio.gather(*[_collect(d, db) for d in devices])
     return list(results)
 
 
@@ -75,4 +67,4 @@ async def status_one(device_id: int, db: Session = Depends(get_db), user: User =
     device = db.get(Device, device_id)
     if device is None or device.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Device not found")
-    return await _collect(device)
+    return await _collect(device, db)

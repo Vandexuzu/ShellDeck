@@ -14,34 +14,23 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import load_credentials
+from app.routers.devices import connect_device, load_credentials
 from app.schemas import DockerContainer, DockerAction, DockerRun
 from app.security import get_current_user, operator_only
 
 router = APIRouter(prefix="/api/docker", tags=["docker"])
 
 
-def _connect_opts(device: Device) -> dict:
-    username, password, private_key = load_credentials(device)
-    opts = {
-        "host": device.host,
-        "port": device.port,
-        "username": username,
-        "known_hosts": None if settings.ssh_ignore_known_hosts else False,
-        "connect_timeout": 10,
-    }
-    if private_key:
-        opts["client_keys"] = [private_key]
-    else:
-        opts["password"] = password
-    return opts
-
-
-async def _run(device: Device, command: str, timeout: int = 30) -> tuple[str, str, int]:
+async def _run(device: Device, command: str, db: Session, timeout: int = 30) -> tuple[str, str, int]:
     """Return (stdout, stderr, exit_status) from a command run on the device."""
-    async with asyncssh.connect(**_connect_opts(device)) as conn:
+    conn, bastion = await connect_device(device, db)
+    try:
         result = await conn.run(command, check=False, timeout=timeout)
         return result.stdout or "", result.stderr or "", result.exit_status or 0
+    finally:
+        conn.close()
+        if bastion is not None:
+            bastion.close()
 
 
 def _parse_ps(stdout: str) -> list[dict]:
@@ -75,6 +64,7 @@ async def list_containers(device_id: int, db: Session = Depends(get_db), user: U
     stdout, stderr, code = await _run(
         device,
         f"docker ps -a --format '{fmt}'",
+        db,
         timeout=30,
     )
     if code != 0:
@@ -90,7 +80,7 @@ async def container_logs(device_id: int, container_id: str, lines: int = 200, db
     # guard against shell injection in container id
     if not container_id.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid container id")
-    stdout, stderr, code = await _run(device, f"docker logs --tail {int(lines)} {container_id}", timeout=30)
+    stdout, stderr, code = await _run(device, f"docker logs --tail {int(lines)} {container_id}", db, timeout=30)
     if code != 0:
         raise HTTPException(status_code=502, detail=f"docker logs failed: {stderr.strip()}")
     return {"container_id": container_id, "logs": stdout}
@@ -107,7 +97,7 @@ async def container_action(device_id: int, body: DockerAction, db: Session = Dep
     if body.action not in ("start", "stop", "restart", "pause", "unpause", "kill", "remove"):
         raise HTTPException(status_code=400, detail="Action must be start|stop|restart|pause|unpause|kill|remove")
     extra = " -f" if body.action == "remove" else ""
-    stdout, stderr, code = await _run(device, f"docker {body.action} {cid}{extra}", timeout=60)
+    stdout, stderr, code = await _run(device, f"docker {body.action} {cid}{extra}", db, timeout=60)
     if code != 0:
         raise HTTPException(status_code=502, detail=f"docker {body.action} failed: {stderr.strip()}")
     return {"container_id": cid, "action": body.action, "ok": True}
@@ -121,7 +111,8 @@ async def container_stats(device_id: int, db: Session = Depends(get_db), user: U
     # `docker stats --no-stream` gives a one-shot snapshot (no live streaming needed).
     stdout, stderr, code = await _run(
         device,
-        "docker stats --no-stream --format '{{.Name}}\t{{.CPUPerc}}\t{{.MemPerc}}'",
+        "docker stats --no-stream --format '{{.Name}}\\t{{.CPUPerc}}\\t{{.MemPerc}}'",
+        db,
         timeout=30,
     )
     if code != 0:
@@ -151,7 +142,8 @@ async def docker_run(device_id: int, body: DockerRun, db: Session = Depends(get_
         args = shlex.split(cmd)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Bad command: {exc}")
-    async with asyncssh.connect(**_connect_opts(device)) as conn:
+    conn, bastion = await connect_device(device, db)
+    try:
         # `conn.run` only accepts a single command string (keyword-only options after),
         # so join args safely — each arg gets shell-quoted by shlex.join, neutralizing
         # any `; rm -rf` style injection.
@@ -173,3 +165,7 @@ async def docker_run(device_id: int, body: DockerRun, db: Session = Depends(get_
             "stderr": result.stderr or "",
             "exit_status": result.exit_status or 0,
         }
+    finally:
+        conn.close()
+        if bastion is not None:
+            bastion.close()

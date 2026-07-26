@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, SessionLog, User
-from app.routers.devices import load_credentials
+from app.routers.devices import connect_device
 from app.security import get_user_from_token_raw
 
 router = APIRouter(tags=["terminal"])
@@ -52,21 +52,8 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
 
         await websocket.accept()
 
-        username, password, private_key = load_credentials(device)
-        connect_opts = {
-            "host": device.host,
-            "port": device.port,
-            "username": username,
-            "known_hosts": None if settings.ssh_ignore_known_hosts else False,
-            "connect_timeout": 10,
-        }
-        if private_key:
-            connect_opts["client_keys"] = [private_key]
-        else:
-            connect_opts["password"] = password
-
         try:
-            conn = await asyncssh.connect(**connect_opts)
+            conn, bastion = await connect_device(device, db)
         except Exception as exc:  # noqa: BLE001
             await websocket.send_text(f"\r\n\x1b[31m[connection failed] {exc}\x1b[0m\r\n")
             await websocket.close()
@@ -136,6 +123,11 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
             try:
                 shell.close()
                 conn.close()
+                if bastion is not None:
+                    try:
+                        bastion.close()
+                    except Exception:  # noqa: BLE001
+                        pass
             except Exception:  # noqa: BLE001
                 pass
             log.ended_at = datetime.now(timezone.utc)

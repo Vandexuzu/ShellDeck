@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShellDeck — Status</title>
+  <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <style>
+    :root { --bg:#0f1117; --panel:#1a1d27; --border:#2a2e3a; --text:#e6e8ef; --muted:#8a90a2; --ok:#3fb950; --bad:#f85149; --warn:#d29922; --primary:#4f8cff; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,system-ui,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); padding:24px; }
+    header { display:flex; align-items:center; gap:12px; margin-bottom:24px; }
+    header svg { fill:var(--primary); }
+    h1 { font-size:20px; margin:0; }
+    .summary { display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
+    .pill { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px 18px; }
+    .pill b { font-size:22px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
+    .card .top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .card .name { font-weight:600; }
+    .dot { width:10px; height:10px; border-radius:50%; }
+    .dot.ok { background:var(--ok); } .dot.down { background:var(--bad); }
+    .metric { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin:4px 0; }
+    .metric b { color:var(--text); }
+    .bar { height:6px; background:var(--bg); border-radius:4px; overflow:hidden; margin-bottom:8px; }
+    .bar span { display:block; height:100%; background:var(--ok); }
+    .bar.warn span { background:var(--warn); } .bar.bad span { background:var(--bad); }
+    .empty { color:var(--muted); }
+    a.back { color:var(--primary); text-decoration:none; font-size:13px; }
+  </style>
+</head>
+<body>
+  <header>
+    <svg width="28" height="28" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    <h1>ShellDeck — Public Status</h1>
+  </header>
+  <div class="summary" id="summary"><div class="pill">Loading…</div></div>
+  <div class="grid" id="grid"><p class="empty">Fetching device status…</p></div>
+  <p style="margin-top:24px"><a class="back" href="/">← Powered by ShellDeck</a></p>
+  <script>
+    function bar(label, pct) {
+      if (pct == null) return "";
+      const cls = pct < 60 ? "ok" : pct < 85 ? "warn" : "bad";
+      return `<div class="metric"><span>${label}</span><b>${pct.toFixed(0)}%</b></div><div class="bar ${cls}"><span style="width:${pct}%"></span></div>`;
+    }
+    async function load() {
+      try {
+        const r = await fetch("/api/public/status");
+        if (!r.ok) { document.getElementById("grid").innerHTML = `<p class="empty">Public dashboard is disabled.</p>`; return; }
+        const d = await r.json();
+        document.getElementById("summary").innerHTML =
+          `<div class="pill">Total <b>${d.total}</b></div>` +
+          `<div class="pill" style="color:var(--ok)">Up <b>${d.up}</b></div>` +
+          `<div class="pill" style="color:var(--bad)">Down <b>${d.down}</b></div>`;
+        document.getElementById("grid").innerHTML = d.devices.map(dev => `
+          <div class="card">
+            <div class="top"><span class="name">${dev.name}</span><span class="dot ${dev.reachable ? "ok" : "down"}"></span></div>
+            <div class="metric"><span>Host</span><b>${dev.host}</b></div>
+            ${dev.reachable ? bar("CPU load", dev.cpu_load) + bar("Memory", dev.mem_used_pct) + bar("Disk", dev.disk_used_pct) + `<div class="metric"><span>Uptime</span><b>${dev.uptime || "-"}</b></div>` : `<div class="metric" style="color:var(--bad)"><b>Unreachable</b></div>`}
+          </div>`).join("") || `<p class="empty">No devices configured.</p>`;
+      } catch (e) { document.getElementById("grid").innerHTML = `<p class="empty">Error: ${e.message}</p>`; }
+    }
+    load(); setInterval(load, 30000);
+  </script>
+</body>
+</html>

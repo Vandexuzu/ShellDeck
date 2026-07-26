@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.db import init_db
 from app.routers import (
-    auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled,
+    auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled, public,
 )
 from app.notifications import monitor_loop
 from app.routers.scheduled import scheduler_loop
@@ -52,6 +52,7 @@ app.include_router(docker.router)
 app.include_router(users.router)
 app.include_router(settings_router.router)
 app.include_router(scheduled.router)
+app.include_router(public.router)
 
 # Static frontend (served at web root).
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
@@ -67,6 +68,15 @@ def index() -> FileResponse:
 def login_page() -> FileResponse:
     from pathlib import Path
     return FileResponse(Path(__file__).parent.parent / "frontend" / "login.html")
+
+
+@app.get("/public")
+def public_dashboard() -> FileResponse:
+    from pathlib import Path
+    p = Path(__file__).parent.parent / "frontend" / "public.html"
+    if not p.exists():
+        raise HTTPException(status_code=404, detail="Public dashboard disabled")
+    return FileResponse(p)
 
 
 @app.get("/health")

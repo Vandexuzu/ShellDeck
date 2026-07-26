@@ -25,6 +25,9 @@ Add your servers, VMs, and IoT devices, see live health (CPU / memory / disk / u
 - 📝 **Saved snippets** — store reusable command snippets and run them on any device with one click.
 - 🐳 **Docker manager** — list containers on a host, plus start / stop / restart / pause / kill / remove, stream **logs**, view **stats**, run free-form `docker` commands, and open an **interactive `exec`** shell into a container.
 - 📤 **Export / Import** — back up your device list as JSON (encrypted credentials stay encrypted) and restore it elsewhere.
+- 🗂 **Inventory export** — one-click export of devices as an **Ansible inventory** (`shelldeck-inventory.ini`) or **Terraform inventory** (`shelldeck-inventory.tf`) for use with your existing DevOps tooling.
+- 🌐 **Public health dashboard** — flip a switch in Settings to publish a read-only status page at `/public` (no login required) showing each device's reachability, CPU/memory/disk, and uptime.
+- 🪜 **Jump host / bastion** — mark any device as a bastion for another; ShellDeck tunnels the SSH connection through it automatically (great for NAT-traversed or segmented networks).
 - 🔔 **Alerts (Settings → Notifications)** — background monitor pings each device every N seconds; on a reachability change it sends a message to **Telegram** (bot token, encrypted at rest) and/or a **Discord webhook**. "Send test" button included.
 - ⏰ **Scheduled tasks** — create recurring jobs (command + target devices + interval in minutes). A background scheduler runs due tasks automatically — great for updates, health checks, or cleanup.
 - 📲 **PWA / Installable** — add ShellDeck to your phone's home screen (Brave/Chrome) for a native-app feel, with offline shell caching.
@@ -130,12 +133,10 @@ pytest          # 8 tests: auth, RBAC, devices, settings, scheduled tasks
 
 ## 🗺 Roadmap
 
-- [ ] WebSocket-based lightweight **agent** for NAT-traversed devices
 - [ ] Session **recording playback** (asciinema-style)
-- [ ] Jump host / bastion support
-- [ ] Ansible / Terraform inventory export
-- [ ] Public read-only health dashboard
+- [ ] WebSocket-based lightweight **agent** for NAT-traversed devices
 - [ ] 2FA / OIDC
+- [ ] Per-device connection pooling / concurrency limits
 
 ## 🤝 Contributing
 

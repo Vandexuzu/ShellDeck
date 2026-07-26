@@ -175,6 +175,20 @@ function openModal(id = null) {
   document.getElementById("modal-title").textContent = id ? "Edit Device" : "Add Device";
   document.getElementById("device-id").value = id || "";
   if (!id) document.getElementById("device-form").reset();
+  // Populate bastion (jump host) select with other devices.
+  const sel = document.getElementById("f-bastion");
+  const editingId = id;
+  sel.innerHTML = '<option value="">— none —</option>';
+  for (const d of currentDevices) {
+    if (editingId && String(d.id) === String(editingId)) continue;  // can't be its own bastion
+    const o = document.createElement("option");
+    o.value = d.id; o.textContent = `${d.name} (${d.host})`;
+    sel.appendChild(o);
+  }
+  if (id) {
+    // preselect bastion for editing
+    api(`/api/devices/${id}`).then(d => { sel.value = d.bastion_id ? String(d.bastion_id) : ""; }).catch(() => {});
+  }
 }
 function closeModal() { document.getElementById("modal").classList.add("hidden"); }
 
@@ -202,6 +216,7 @@ document.getElementById("device-form").onsubmit = async (e) => {
     private_key: document.getElementById("f-auth").value === "key" ? document.getElementById("f-key").value : "",
     os: document.getElementById("f-os").value,
     notes: document.getElementById("f-notes").value,
+    bastion_id: document.getElementById("f-bastion").value ? +document.getElementById("f-bastion").value : null,
   };
   try {
     if (id) await api(`/api/devices/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -231,6 +246,8 @@ document.getElementById("export-devices").onclick = async () => {
     URL.revokeObjectURL(url);
   } catch (e) { showToast(e.message, "error"); }
 };
+document.getElementById("inv-ansible").onclick = () => window.open("/api/devices/inventory/ansible", "_blank");
+document.getElementById("inv-terraform").onclick = () => window.open("/api/devices/inventory/terraform", "_blank");
 document.getElementById("import-devices").onclick = () => {
   document.getElementById("import-modal").classList.remove("hidden");
 };
@@ -647,15 +664,17 @@ async function loadSettings() {
     document.getElementById("set-tg-chat").value = s.telegram_chat_id || "";
     document.getElementById("set-discord").value = s.discord_webhook || "";
     document.getElementById("set-interval").value = s.monitor_interval;
+    document.getElementById("set-public").checked = s.public_dashboard;
     document.getElementById("set-tg-token").value = "";  // never echo token back
   } catch (e) { showToast(e.message, "error"); }
 }
 document.getElementById("set-save").onclick = async () => {
   const payload = {
-    notify_enabled: document.getElementById("set-notify").checked,
-    telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),
-    discord_webhook: document.getElementById("set-discord").value.trim(),
-    monitor_interval: parseInt(document.getElementById("set-interval").value, 10) || 60,
+  notify_enabled: document.getElementById("set-notify").checked,
+  telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),
+  discord_webhook: document.getElementById("set-discord").value.trim(),
+  monitor_interval: parseInt(document.getElementById("set-interval").value, 10) || 60,
+  public_dashboard: document.getElementById("set-public").checked,
   };
   const tok = document.getElementById("set-tg-token").value.trim();
   if (tok) payload.telegram_token = tok;

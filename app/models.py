@@ -46,6 +46,8 @@ class Device(Base):
     # Encrypted credentials at rest.
     password_enc: Mapped[str] = mapped_column(Text, default="")
     private_key_enc: Mapped[str] = mapped_column(Text, default="")
+    # Optional jump host: connect to this device THROUGH another owned device.
+    bastion_id: Mapped[int | None] = mapped_column(ForeignKey("devices.id"), nullable=True)
     # Optional metadata.
     os: Mapped[str] = mapped_column(String(64), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
@@ -97,6 +99,7 @@ class SettingsRow(Base):
     telegram_chat_id: Mapped[str] = mapped_column(String(64), default="")
     discord_webhook: Mapped[str] = mapped_column(Text, default="")      # raw URL, not secret-critical
     monitor_interval: Mapped[int] = mapped_column(Integer, default=60)  # seconds between checks
+    public_dashboard: Mapped[bool] = mapped_column(default=False)       # allow unauth /public view
 
 
 class ScheduledTask(Base):
