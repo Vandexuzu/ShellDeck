@@ -570,12 +570,12 @@ async function loadDocker() {
       <th>Name</th><th>Image</th><th>State</th><th>Status</th><th>Ports</th><th>Actions</th>
       </tr></thead><tbody>${containers.map(c => `
       <tr class="${c.state === 'running' ? 'up' : 'down'}">
-        <td>${escapeHtml(c.name)}</td>
-        <td class="muted">${escapeHtml(c.image)}</td>
-        <td>${escapeHtml(c.state)}</td>
-        <td>${escapeHtml(c.status)}</td>
-        <td class="muted">${escapeHtml(c.ports || '-')}</td>
-        <td class="di-actions">
+        <td data-label="Name">${escapeHtml(c.name)}</td>
+        <td data-label="Image" class="muted">${escapeHtml(c.image)}</td>
+        <td data-label="State">${escapeHtml(c.state)}</td>
+        <td data-label="Status">${escapeHtml(c.status)}</td>
+        <td data-label="Ports" class="muted">${escapeHtml(c.ports || '-')}</td>
+        <td data-label="Actions" class="di-actions">
           <button class="btn btn-ghost btn-icon-xs" data-logs="${escapeHtml(c.id)}" title="Logs">${icon("logs")}</button>
           ${c.state === 'running'
             ? `<button class="btn btn-ghost btn-icon-xs" data-act="stop" data-cid="${escapeHtml(c.id)}" title="Stop">${icon("stop")}</button>
@@ -649,13 +649,13 @@ async function loadUsers() {
       <th>ID</th><th>Username</th><th>Role</th><th>Created</th><th>Actions</th>
       </tr></thead><tbody>${users.map(u => `
       <tr>
-        <td>${u.id}</td>
-        <td>${escapeHtml(u.username)}</td>
-        <td><select class="input-sm user-role" data-id="${u.id}">
+        <td data-label="ID">${u.id}</td>
+        <td data-label="Username">${escapeHtml(u.username)}</td>
+        <td data-label="Role"><select class="input-sm user-role" data-id="${u.id}">
           ${["viewer", "operator", "admin"].map(r => `<option value="${r}" ${r === u.role ? "selected" : ""}>${r}</option>`).join("")}
         </select></td>
-        <td class="muted">${new Date(u.created_at).toLocaleDateString()}</td>
-        <td class="di-actions">
+        <td data-label="Created" class="muted">${new Date(u.created_at).toLocaleDateString()}</td>
+        <td data-label="Actions" class="di-actions">
           <button class="btn btn-ghost btn-icon-xs danger user-del" data-id="${u.id}" data-name="${escapeHtml(u.username)}" title="Delete user">${icon("trash")}</button>
         </td>
       </tr>`).join("")}</tbody></table>`;

@@ -241,4 +241,31 @@ body {
   .session-table td::before {
     content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left;
   }
+  /* Docker table: same mobile card treatment */
+  .docker-table, .docker-table tbody, .docker-table tr { display: block; width: 100%; }
+  .docker-table thead { display: none; }
+  .docker-table tr {
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; padding: 8px;
+  }
+  .docker-table td {
+    display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+    white-space: normal; font-size: 12px; text-align: right;
+  }
+  .docker-table td[data-label="Actions"] { justify-content: flex-start; flex-wrap: wrap; padding-top: 6px; }
+  .docker-table td::before {
+    content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left;
+  }
+  /* Users table: same mobile card treatment */
+  .user-table, .user-table tbody, .user-table tr { display: block; width: 100%; }
+  .user-table thead { display: none; }
+  .user-table tr {
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; padding: 8px;
+  }
+  .user-table td {
+    display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+    white-space: normal; font-size: 12px; text-align: right;
+  }
+  .user-table td::before {
+    content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left;
+  }
 }
