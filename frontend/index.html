@@ -151,6 +151,7 @@
           <label>Target devices <div id="sched-devices" class="device-check"></div></label>
           <label>Interval (minutes) <input id="sched-interval" class="input" type="number" value="60" min="1" /></label>
           <label class="switch-row"><span>Run once (execute a single time, then disable)</span><input type="checkbox" id="sched-runonce" /></label>
+          <label id="sched-runat-label" class="hidden">Run at <input id="sched-runat" class="input" type="datetime-local" /></label>
           <div class="modal-actions">
             <button id="sched-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
             <button id="sched-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
@@ -289,6 +290,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=23"></script>
+  <script src="/static/app.js?v=24"></script>
 </body>
 </html>

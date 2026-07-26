@@ -726,7 +726,7 @@ async function loadScheduled() {
       <div class="sched-card">
         <div class="sc-name">${escapeHtml(t.name)} ${t.enabled ? "" : "<span class='muted'>(paused)</span>"} ${t.run_once ? "<span class='muted'>· run once</span>" : ""}</div>
         <pre class="sc-cmd">${escapeHtml(t.command)}</pre>
-        <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · next: ${t.next_run ? new Date(t.next_run).toLocaleString() : "-"}</div>
+        <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · next: ${t.next_run ? new Date(t.next_run).toLocaleString() : (t.run_once ? "on create" : "-")}</div>
         <div class="di-actions">
           <button class="btn btn-primary btn-icon" data-run-now="${t.id}" title="Run now">${icon("play")}</button>
           <button class="btn btn-danger btn-icon" data-del-task="${t.id}" title="Delete task">${icon("trash")}</button>
@@ -749,6 +749,9 @@ document.getElementById("sched-add").onclick = () => {
   else box.innerHTML = currentDevices.map(d => `
     <label class="chk"><input type="checkbox" value="${d.id}" /> ${escapeHtml(d.name)} <span class="id-badge">#${d.id}</span></label>`).join("");
   document.getElementById("sched-form").classList.remove("hidden");
+};
+document.getElementById("sched-runonce").onchange = (e) => {
+  document.getElementById("sched-runat-label").classList.toggle("hidden", !e.target.checked);
 };
 document.getElementById("sched-export").onclick = async () => {
   try {
@@ -778,9 +781,11 @@ document.getElementById("sched-save").onclick = async () => {
   const ids = Array.from(document.querySelectorAll("#sched-devices input[type=checkbox]:checked")).map(c => parseInt(c.value, 10));
   const interval = parseInt(document.getElementById("sched-interval").value, 10) || 60;
   const run_once = document.getElementById("sched-runonce").checked;
+  const run_at_raw = document.getElementById("sched-runat").value;
+  const run_at = (run_once && run_at_raw) ? new Date(run_at_raw).toISOString() : null;
   if (!name || !command) { showToast("Name & command required", "error"); return; }
   try {
-    await api("/api/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, command, device_ids: ids, interval_minutes: interval, run_once }) });
+    await api("/api/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, command, device_ids: ids, interval_minutes: interval, run_once, run_at }) });
     document.getElementById("sched-form").classList.add("hidden");
     loadScheduled();
     showToast("Task created", "ok");
@@ -830,11 +835,11 @@ async function loadSessions() {
       <th>Device</th><th>Host</th><th>Started</th><th>Ended</th><th>Duration</th>
     </tr></thead><tbody>${rows.map(r => `
       <tr>
-        <td>${escapeHtml(r.device_name)}</td>
-        <td class="muted">${escapeHtml(r.device_host)}</td>
-        <td>${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
-        <td>${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
-        <td>${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
+        <td data-label="Device">${escapeHtml(r.device_name)}</td>
+        <td data-label="Host" class="muted">${escapeHtml(r.device_host)}</td>
+        <td data-label="Started">${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
+        <td data-label="Ended">${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
+        <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
       </tr>`).join("")}</tbody></table>`;
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }

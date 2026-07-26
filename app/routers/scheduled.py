@@ -30,6 +30,7 @@ def _serialize(task: ScheduledTask) -> dict:
         "interval_minutes": task.interval_minutes,
         "enabled": task.enabled,
         "run_once": task.run_once,
+        "run_at": task.run_at,
         "last_run": task.last_run,
         "next_run": task.next_run,
         "created_at": task.created_at,
@@ -53,9 +54,11 @@ def create_task(
         command=payload.command,
         device_ids=json.dumps(payload.device_ids),
         interval_minutes=payload.interval_minutes,
-        enabled=payload.enabled and not payload.run_once,
+        enabled=payload.enabled and not (payload.run_once and not payload.run_at),
         run_once=payload.run_once,
-        next_run=None if payload.run_once else now + timedelta(minutes=payload.interval_minutes),
+        run_at=payload.run_at,
+        next_run=(None if payload.run_once else now + timedelta(minutes=payload.interval_minutes))
+                    if not (payload.run_once and payload.run_at) else payload.run_at,
     )
     db.add(task)
     db.commit()
@@ -102,9 +105,11 @@ def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_d
             command=item.command,
             device_ids=json.dumps(item.device_ids),
             interval_minutes=item.interval_minutes,
-            enabled=item.enabled and not item.run_once,
+            enabled=item.enabled and not (item.run_once and not item.run_at),
             run_once=item.run_once,
-            next_run=None if item.run_once else now + timedelta(minutes=item.interval_minutes),
+            run_at=item.run_at,
+            next_run=(None if item.run_once else now + timedelta(minutes=item.interval_minutes))
+                        if not (item.run_once and item.run_at) else item.run_at,
         ))
         created += 1
     db.commit()

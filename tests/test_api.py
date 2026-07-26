@@ -215,6 +215,11 @@ def test_scheduled_run_once_and_run_now():
     # run_once -> created disabled, no next_run
     t = client.post("/api/scheduled", headers=ha, json={"name": "once", "command": "uptime", "device_ids": [dev["id"]], "interval_minutes": 60, "run_once": True}).json()
     assert t["run_once"] is True and t["enabled"] is False and t["next_run"] is None
+    # run_once + run_at(future) -> enabled, scheduled at run_at
+    from datetime import datetime, timedelta, timezone
+    future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
+    t2 = client.post("/api/scheduled", headers=ha, json={"name": "later", "command": "uptime", "device_ids": [dev["id"]], "interval_minutes": 60, "run_once": True, "run_at": future}).json()
+    assert t2["enabled"] is True and t2["next_run"] is not None
     # run now triggers execution and leaves it disabled
     rn = client.post(f"/api/scheduled/{t['id']}/run", headers=ha)
     assert rn.status_code == 200 and rn.json()["ok"] is True

@@ -189,6 +189,7 @@ class ScheduledTaskCreate(BaseModel):
     interval_minutes: int = Field(default=60, ge=1, le=10080)
     enabled: bool = True
     run_once: bool = False  # if True, run a single time then disable
+    run_at: datetime | None = None  # for run_once: schedule the single run at this time; if None, run immediately
 
 
 class ScheduledTaskUpdate(BaseModel):
@@ -208,6 +209,7 @@ class ScheduledTaskOut(BaseModel):
     interval_minutes: int
     enabled: bool
     run_once: bool = False
+    run_at: datetime | None = None
     last_run: datetime | None
     next_run: datetime | None
     created_at: datetime

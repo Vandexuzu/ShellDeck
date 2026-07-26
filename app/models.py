@@ -116,6 +116,7 @@ class ScheduledTask(Base):
     interval_minutes: Mapped[int] = mapped_column(Integer, default=60)
     enabled: Mapped[bool] = mapped_column(default=True)
     run_once: Mapped[bool] = mapped_column(default=False)
+    run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     next_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)

@@ -227,4 +227,18 @@ body {
   .content-head > div { display: flex; flex-wrap: wrap; gap: 6px; }
   .status-grid { grid-template-columns: 1fr; }
   #device-search { width: 100% !important; }
+  /* Session history: avoid horizontal overflow on mobile */
+  .session-list { padding: 12px; }
+  .session-table, .session-table tbody, .session-table tr { display: block; width: 100%; }
+  .session-table thead { display: none; }
+  .session-table tr {
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; padding: 8px;
+  }
+  .session-table td {
+    display: flex; justify-content: space-between; gap: 12px; padding: 3px 0;
+    white-space: normal; font-size: 12px; text-align: right;
+  }
+  .session-table td::before {
+    content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left;
+  }
 }
