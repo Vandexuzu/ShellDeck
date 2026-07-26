@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import connect_device, load_credentials
+from app.routers.devices import connect_device, load_credentials, _visible_devices
 from app.schemas import DeviceStatus
 from app.security import get_current_user
 
@@ -55,7 +55,7 @@ async def _collect(device: Device, db: Session) -> DeviceStatus:
 
 @router.get("/status", response_model=list[DeviceStatus])
 async def status_all(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[DeviceStatus]:
-    devices = list(db.scalars(select(Device).where(Device.owner_id == user.id)))
+    devices = list(db.scalars(_visible_devices(db, user)))
     if not devices:
         return []
     results = await asyncio.gather(*[_collect(d, db) for d in devices])
@@ -65,6 +65,12 @@ async def status_all(db: Session = Depends(get_db), user: User = Depends(get_cur
 @router.get("/status/{device_id}", response_model=DeviceStatus)
 async def status_one(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> DeviceStatus:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
+    # Admins can view any device; others only the shared (admin-owned) fleet.
+    if user.role != "admin":
+        from app.routers.devices import _admin_user
+        admin = _admin_user(db)
+        if not (admin and device.owner_id == admin.id):
+            raise HTTPException(status_code=404, detail="Device not found")
     return await _collect(device, db)
