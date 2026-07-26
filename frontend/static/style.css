@@ -73,6 +73,7 @@ body {
 .btn-danger { color: var(--danger); }
 .btn-danger:hover { border-color: var(--danger); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-xs { padding: 4px 10px; font-size: 12px; border-radius: 6px; margin-top: 4px; }
 
 /* icon buttons */
 .ic { width: 16px; height: 16px; flex: none; }

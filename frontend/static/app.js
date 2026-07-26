@@ -950,6 +950,23 @@ document.getElementById("set-test").onclick = async () => {
     btn.disabled = false;
   }
 };
+document.getElementById("set-tg-getid").onclick = async () => {
+  const btn = document.getElementById("set-tg-getid");
+  btn.disabled = true;
+  try {
+    const r = await api("/api/settings/telegram/chatid", { method: "GET" });
+    if (r.ok) {
+      document.getElementById("set-tg-chat").value = r.chat_id;
+      showToast("Chat ID auto-filled: " + r.chat_id + "\nNow click Save, then Send test.", "ok", 6000);
+    } else {
+      showToast("Cannot get chat ID: " + r.error, "error", 6000);
+    }
+  } catch (e) {
+    showToast("Error: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+};
 
 // ----------------------------- Session history -----------------------------
 async function loadSessions() {

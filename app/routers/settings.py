@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+import httpx
 from app.config import decrypt, encrypt
 from app.db import get_db
 from app.models import SettingsRow
@@ -100,3 +101,34 @@ async def test_notification(
         pw = decrypt(row.email_pass_enc) if row.email_pass_enc else ""
         results["email"] = await send_email(row.email_host, row.email_port or 587, row.email_user, pw, row.email_to, msg)
     return results
+
+
+@router.get("/telegram/chatid")
+async def telegram_chat_id(db: Session = Depends(get_db), _: object = Depends(get_current_user)) -> dict:
+    """Fetch the most recent chat id from Telegram updates (requires the user to have
+    messaged the bot first). Used to auto-fill the Telegram chat id field."""
+    row = _row(db)
+    token = decrypt(row.telegram_token_enc) if row.telegram_token_enc else ""
+    if not token:
+        return {"ok": False, "error": "Set the Telegram bot token first, then message the bot, then click again."}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"https://api.telegram.org/bot{token}/getUpdates", params={"limit": 10, "timeout": 0})
+            data = r.json()
+        if not data.get("ok"):
+            return {"ok": False, "error": data.get("description", "Telegram error")}
+        # Walk updates to find the most recent message chat id.
+        chat_id = None
+        for u in reversed(data.get("result", [])):
+            msg = u.get("message") or u.get("edited_message") or u.get("channel_post")
+            if msg and msg.get("chat", {}).get("id") is not None:
+                chat_id = msg["chat"]["id"]
+                break
+        if chat_id is None:
+            return {"ok": False, "error": "No messages yet — open a chat with the bot and send any message, then retry."}
+        # Persist so test/send work immediately.
+        row.telegram_chat_id = str(chat_id)
+        db.commit()
+        return {"ok": True, "chat_id": chat_id}
+    except Exception as e:
+        return {"ok": False, "error": f"{type(e).__name__}: {e}"}
