@@ -886,21 +886,24 @@ document.getElementById("sched-save").onclick = async () => {
 async function loadSettings() {
   try {
     const s = await api("/api/settings");
-    document.getElementById("set-notify").checked = s.notify_enabled;
-    document.getElementById("set-tg-chat").value = s.telegram_chat_id || "";
-    document.getElementById("set-discord").value = s.discord_webhook || "";
-    document.getElementById("set-ntfy").value = s.ntfy_url || "";
-    document.getElementById("set-gotify").value = s.gotify_url || "";
-    document.getElementById("set-slack").value = s.slack_webhook || "";
-    document.getElementById("set-webhook").value = s.webhook_url || "";
-    document.getElementById("set-email-to").value = s.email_to || "";
-    document.getElementById("set-email-host").value = s.email_host || "";
-    document.getElementById("set-email-port").value = s.email_port || 587;
-    document.getElementById("set-email-user").value = s.email_user || "";
-    document.getElementById("set-interval").value = s.monitor_interval;
-    document.getElementById("set-public").checked = s.public_dashboard;
-    document.getElementById("set-tg-token").value = "";  // never echo token back
-    document.getElementById("set-email-pass").value = "";  // never echo password back
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ""; };
+    const setCheck = (id, val) => { const el = document.getElementById(id); if (el) el.checked = !!val; };
+    setCheck("set-notify", s.notify_enabled);
+    set("set-tg-chat", s.telegram_chat_id);
+    set("set-discord", s.discord_webhook);
+    set("set-ntfy", s.ntfy_url);
+    set("set-gotify", s.gotify_url);
+    set("set-slack", s.slack_webhook);
+    set("set-webhook", s.webhook_url);
+    set("set-email-to", s.email_to);
+    set("set-email-host", s.email_host);
+    set("set-email-port", s.email_port || 587);
+    set("set-email-user", s.email_user);
+    set("set-interval", s.monitor_interval);
+    setCheck("set-public", s.public_dashboard);
+    // never echo token / password back
+    const tok = document.getElementById("set-tg-token"); if (tok) tok.value = "";
+    const ep = document.getElementById("set-email-pass"); if (ep) ep.value = "";
   } catch (e) { showToast(e.message, "error"); }
 }
 document.getElementById("set-save").onclick = async () => {
@@ -929,8 +932,23 @@ document.getElementById("set-save").onclick = async () => {
   } catch (e) { showToast(e.message, "error"); }
 };
 document.getElementById("set-test").onclick = async () => {
-  const r = await api("/api/settings/test", { method: "POST" });
-  showToast("Test sent: " + JSON.stringify(r), "ok");
+  const btn = document.getElementById("set-test");
+  btn.disabled = true;
+  try {
+    const r = await api("/api/settings/test", { method: "POST" });
+    // Build a readable summary of which channels fired.
+    const parts = Object.entries(r).map(([k, v]) => {
+      const ok = v === true;
+      const skipped = typeof v === "string" && v.startsWith("skipped");
+      const icon = ok ? "✅" : (skipped ? "⚪" : "❌");
+      return `${icon} ${k}`;
+    });
+    showToast("Test results:\n" + parts.join("\n"), "ok", 6000);
+  } catch (e) {
+    showToast("Test failed: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
 };
 
 // ----------------------------- Session history -----------------------------
