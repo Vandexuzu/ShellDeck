@@ -79,6 +79,7 @@ const ICONS = {
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
   check: '<polyline points="20 6 9 17 4 12"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 function icon(name, cls = "") {
   const body = ICONS[name] || "";
@@ -160,7 +161,10 @@ async function loadStatus() {
       const card = document.createElement("div");
       card.className = "status-card";
       const cls = s.reachable ? "ok" : "down";
-      const canAccess = (d) => currentUser && (currentUser.role === "admin" || (currentUser.role === "operator" && d.owner_id === currentUser.id));
+      // owner_id comes from the device list (DeviceStatus has no owner_id)
+      const dev = currentDevices.find(d => d.id === s.id);
+      const ownerId = dev ? dev.owner_id : null;
+      const canAccess = (d) => currentUser && (currentUser.role === "admin" || (currentUser.role === "operator" && ownerId === currentUser.id));
       const bar = (label, pct) => pct == null ? "" : `
         <div class="metric"><span>${label}</span><b>${pct.toFixed(0)}%</b></div>
         <div class="bar ${pct < 60 ? "ok" : pct < 85 ? "warn" : "bad"}"><span style="width:${pct}%"></span></div>`;
