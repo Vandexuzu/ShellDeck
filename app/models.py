@@ -132,6 +132,8 @@ class ScheduledTask(Base):
     run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     next_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Captured stdout/stderr from the most recent run (audit / visibility).
+    last_output: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     owner: Mapped["User"] = relationship()

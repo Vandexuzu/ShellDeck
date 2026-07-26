@@ -236,5 +236,6 @@ class ScheduledTaskOut(BaseModel):
     run_once: bool = False
     run_at: datetime | None = None
     last_run: datetime | None
+    last_output: str = ""
     next_run: datetime | None
     created_at: datetime

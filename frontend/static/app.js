@@ -815,6 +815,7 @@ async function loadScheduled() {
         <div class="sc-name">${escapeHtml(t.name)} ${t.enabled ? "" : "<span class='muted'>(paused)</span>"} ${t.run_once ? "<span class='muted'>· run once</span>" : ""}</div>
         <pre class="sc-cmd">${escapeHtml(t.command)}</pre>
         <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · ${t.run_at ? "at " + new Date(t.run_at).toLocaleString() : (t.next_run ? "next: " + new Date(t.next_run).toLocaleString() : (t.run_once ? "on create" : "-"))}</div>
+        ${t.last_output ? `<pre class="sc-out">${escapeHtml(t.last_output)}</pre>` : ""}
         <div class="di-actions">
           <button class="btn btn-primary btn-icon" data-run-now="${t.id}" title="Run now">${icon("play")}</button>
           <button class="btn btn-danger btn-icon" data-del-task="${t.id}" title="Delete task">${icon("trash")}</button>

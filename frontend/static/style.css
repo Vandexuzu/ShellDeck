@@ -199,6 +199,7 @@ body {
 .sched-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .sched-card .sc-name { font-weight: 600; margin-bottom: 6px; }
 .sched-card .sc-cmd { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 12px; white-space: pre-wrap; margin: 0 0 8px; }
+.sched-card .sc-out { background: #0b0f17; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; margin: 0 0 8px; }
 .sched-form { padding: 18px; max-width: 460px; display: flex; flex-direction: column; gap: 12px; }
 .device-check { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .chk { flex-direction: row !important; align-items: center; gap: 8px; color: var(--text) !important; font-size: 13px !important; }

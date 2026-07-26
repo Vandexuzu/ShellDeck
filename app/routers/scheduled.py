@@ -32,6 +32,7 @@ def _serialize(task: ScheduledTask) -> dict:
         "run_once": task.run_once,
         "run_at": task.run_at,
         "last_run": task.last_run,
+        "last_output": task.last_output,
         "next_run": task.next_run,
         "created_at": task.created_at,
     }
@@ -118,13 +119,22 @@ def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_d
 
 async def run_task(task: ScheduledTask, db: Session) -> None:
     """Execute the task's command across its devices (best-effort)."""
+    from app.routers.bulk import _run_on_device
     device_ids = json.loads(task.device_ids or "[]")
     devices = db.scalars(select(Device).where(Device.id.in_(device_ids), Device.owner_id == task.owner_id)).all()
+    outputs = []
     for d in devices:
         try:
-            await _run_on_device(d, task.command)
-        except Exception:
-            pass
+            res = await _run_on_device(d, task.command, db)
+            if res.reachable:
+                outputs.append(f"[{res.name}] {res.output}")
+            else:
+                outputs.append(f"[{res.name}] ERROR: {res.error}")
+        except Exception as exc:  # noqa: BLE001
+            outputs.append(f"[{d.name}] EXCEPTION: {type(exc).__name__}: {exc}")
+            import logging
+            logging.getLogger("shelldeck.scheduler").exception("scheduled task %s failed on %s", task.id, d.name)
+    task.last_output = "\n".join(outputs)
     task.last_run = datetime.now()
     if task.run_once:
         task.enabled = False
