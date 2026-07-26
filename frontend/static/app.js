@@ -669,8 +669,7 @@ async function loadDocker() {
             ? `<button class="btn btn-ghost btn-icon-xs" data-act="stop" data-cid="${escapeHtml(c.id)}" title="Stop">${icon("stop")}</button>
                <button class="btn btn-ghost btn-icon-xs" data-act="pause" data-cid="${escapeHtml(c.id)}" title="Pause">${icon("pause")}</button>
                <button class="btn btn-ghost btn-icon-xs danger" data-act="kill" data-cid="${escapeHtml(c.id)}" title="Kill">${icon("kill")}</button>`
-            : `<button class="btn btn-ghost btn-icon-xs" data-act="start" data-cid="${escapeHtml(c.id)}" title="Start">${icon("play")}</button>
-               <button class="btn btn-ghost btn-icon-xs" data-act="unpause" data-cid="${escapeHtml(c.id)}" title="Unpause">${icon("play")}</button>`}
+            : `<button class="btn btn-ghost btn-icon-xs" data-act="start" data-cid="${escapeHtml(c.id)}" title="Start">${icon("play")}</button>`}
           <button class="btn btn-ghost btn-icon-xs" data-act="restart" data-cid="${escapeHtml(c.id)}" title="Restart">${icon("restart")}</button>
           <button class="btn btn-ghost btn-icon-xs danger" data-act="remove" data-cid="${escapeHtml(c.id)}" title="Remove">${icon("trash")}</button>
           <button class="btn btn-primary btn-icon-xs" data-exec="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}" title="Exec (interactive shell)">${icon("terminal")}</button>
