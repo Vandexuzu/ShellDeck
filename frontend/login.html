@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShellDeck — Login</title>
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body class="auth-body">
+  <div class="auth-card">
+    <div class="auth-brand">⚡ ShellDeck</div>
+    <div class="auth-tabs">
+      <button id="tab-login" class="auth-tab active" type="button">Login</button>
+      <button id="tab-register" class="auth-tab" type="button">Register</button>
+    </div>
+    <form id="auth-form" autocomplete="on">
+      <label>Username
+        <input id="a-username" name="username" autocomplete="username" required />
+      </label>
+      <label>Password
+        <input id="a-password" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <div id="auth-error" class="auth-error"></div>
+      <button type="submit" id="auth-submit" class="btn btn-primary btn-block">Login</button>
+    </form>
+    <p class="auth-hint" id="auth-hint">Don't have an account? Switch to Register.</p>
+  </div>
+  <script src="/static/login.js"></script>
+</body>
+</html>

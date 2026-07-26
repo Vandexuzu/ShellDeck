@@ -1,0 +1,196 @@
+"""Pydantic schemas for request/response bodies."""
+from __future__ import annotations
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+# ------------------------------- Auth ---------------------------------------
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=6, max_length=128)
+    role: str = "viewer"  # admin | operator | viewer
+
+
+class UserRoleUpdate(BaseModel):
+    role: str  # admin | operator | viewer
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    role: str
+    is_admin: bool
+    created_at: datetime
+
+
+# ------------------------------- Devices ------------------------------------
+class DeviceCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    host: str
+    port: int = 22
+    username: str
+    auth_method: str = "password"  # password | key
+    password: str | None = None
+    private_key: str | None = None
+    os: str = ""
+    notes: str = ""
+
+
+class DeviceUpdate(BaseModel):
+    name: str | None = None
+    host: str | None = None
+    port: int | None = None
+    username: str | None = None
+    auth_method: str | None = None
+    password: str | None = None
+    private_key: str | None = None
+    os: str | None = None
+    notes: str | None = None
+
+
+class DeviceOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    host: str
+    port: int
+    username: str
+    auth_method: str
+    os: str
+    notes: str
+    last_seen: datetime | None
+    created_at: datetime
+
+
+class DeviceStatus(BaseModel):
+    id: int
+    name: str
+    host: str
+    reachable: bool
+    message: str = ""
+    cpu_load: float | None = None
+    mem_used_pct: float | None = None
+    disk_used_pct: float | None = None
+    uptime: str | None = None
+
+
+# ------------------------------- Snippets -----------------------------------
+class SnippetCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    command: str = Field(min_length=1)
+
+
+class SnippetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    command: str
+    created_at: datetime
+
+
+# ------------------------------- Bulk ---------------------------------------
+class BulkRun(BaseModel):
+    device_ids: list[int] = Field(min_length=1)
+    command: str = Field(min_length=1)
+
+
+class BulkResult(BaseModel):
+    device_id: int
+    name: str
+    host: str
+    reachable: bool
+    output: str = ""
+    error: str = ""
+
+
+# ------------------------------- Files (SFTP) -------------------------------
+class FileEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+    size: int
+    mtime: float | None = None
+
+
+class FilePath(BaseModel):
+    path: str = ""
+
+
+class FileWrite(BaseModel):
+    path: str
+    content: str = ""
+
+
+# ------------------------------- Docker -------------------------------------
+class DockerContainer(BaseModel):
+    id: str = ""
+    name: str = ""
+    image: str = ""
+    state: str = ""
+    status: str = ""
+    ports: str = ""
+
+
+class DockerAction(BaseModel):
+    container_id: str
+    action: str  # start | stop | restart | pause | unpause | kill | remove
+
+
+class DockerRun(BaseModel):
+    command: str  # everything after `docker`, e.g. "images" or "run --rm alpine echo hi"
+    pty: bool = False  # allocate a pseudo-terminal (needed for `exec -it`)
+
+
+# ------------------------------- Settings ----------------------------------
+class SettingsOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    notify_enabled: bool
+    telegram_chat_id: str
+    discord_webhook: str
+    monitor_interval: int
+
+
+class SettingsUpdate(BaseModel):
+    notify_enabled: bool | None = None
+    telegram_token: str | None = None   # raw token; encrypted before storing
+    telegram_chat_id: str | None = None
+    discord_webhook: str | None = None
+    monitor_interval: int | None = None
+
+
+# ------------------------------- Scheduled tasks ----------------------------
+class ScheduledTaskCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    command: str = Field(min_length=1)
+    device_ids: list[int] = Field(default_factory=list)
+    interval_minutes: int = Field(default=60, ge=1, le=10080)
+    enabled: bool = True
+
+
+class ScheduledTaskUpdate(BaseModel):
+    name: str | None = None
+    command: str | None = None
+    device_ids: list[int] | None = None
+    interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    enabled: bool | None = None
+
+
+class ScheduledTaskOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    command: str
+    device_ids: list[int]
+    interval_minutes: int
+    enabled: bool
+    last_run: datetime | None
+    next_run: datetime | None
+    created_at: datetime

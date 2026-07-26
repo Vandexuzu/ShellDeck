@@ -1,0 +1,119 @@
+"""SQLAlchemy ORM models."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from app.db import Base
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    username: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    # Password stored as pbkdf2 hash: "pbkdf2_sha256$iterations$salt$hash"
+    password_hash: Mapped[str] = mapped_column(String(255))
+    # Role-based access control. One of: "admin" | "operator" | "viewer".
+    # - admin:    full access + user management
+    # - operator: manage devices/shells/files, but cannot manage users
+    # - viewer:   read-only (no shell, no writes)
+    role: Mapped[str] = mapped_column(String(16), default="viewer")
+    is_admin: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    devices: Mapped[list["Device"]] = relationship(back_populates="owner")
+
+
+class Device(Base):
+    """A remote host the user can monitor and shell into over SSH."""
+
+    __tablename__ = "devices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    host: Mapped[str] = mapped_column(String(255))
+    port: Mapped[int] = mapped_column(Integer, default=22)
+    username: Mapped[str] = mapped_column(String(128))
+    auth_method: Mapped[str] = mapped_column(String(16), default="password")  # password | key
+    # Encrypted credentials at rest.
+    password_enc: Mapped[str] = mapped_column(Text, default="")
+    private_key_enc: Mapped[str] = mapped_column(Text, default="")
+    # Optional metadata.
+    os: Mapped[str] = mapped_column(String(64), default="")
+    notes: Mapped[str] = mapped_column(Text, default="")
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    owner: Mapped["User"] = relationship(back_populates="devices")
+    sessions: Mapped[list["SessionLog"]] = relationship(back_populates="device")
+
+
+class SessionLog(Base):
+    """Audit log of every remote shell session opened through ShellDeck."""
+
+    __tablename__ = "session_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # Plain-text command transcript (audit trail), NOT the full TTY recording.
+    transcript: Mapped[str] = mapped_column(Text, default="")
+
+    device: Mapped["Device"] = relationship(back_populates="sessions")
+
+
+class Snippet(Base):
+    """User-saved shell command snippets for quick reuse in the terminal."""
+
+    __tablename__ = "snippets"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    command: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    owner: Mapped["User"] = relationship()
+
+
+class SettingsRow(Base):
+    """Singleton app settings (id is always 1). Currently holds notification config."""
+
+    __tablename__ = "settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    notify_enabled: Mapped[bool] = mapped_column(default=False)
+    telegram_token_enc: Mapped[str] = mapped_column(Text, default="")   # bot token, encrypted
+    telegram_chat_id: Mapped[str] = mapped_column(String(64), default="")
+    discord_webhook: Mapped[str] = mapped_column(Text, default="")      # raw URL, not secret-critical
+    monitor_interval: Mapped[int] = mapped_column(Integer, default=60)  # seconds between checks
+
+
+class ScheduledTask(Base):
+    """A command scheduled to run periodically across selected devices."""
+
+    __tablename__ = "scheduled_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    command: Mapped[str] = mapped_column(Text)
+    # JSON list of device ids this task runs against.
+    device_ids: Mapped[str] = mapped_column(Text, default="[]")
+    interval_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    next_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    owner: Mapped["User"] = relationship()

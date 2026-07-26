@@ -1,0 +1,134 @@
+"""CRUD endpoints for managed devices."""
+from __future__ import annotations
+
+import json
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.config import decrypt, encrypt
+from app.db import get_db
+from app.models import Device, User
+from app.schemas import DeviceCreate, DeviceOut, DeviceUpdate
+from app.security import get_current_user, operator_only
+
+router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+
+def _owned(db: Session, device_id: int, user: User) -> Device:
+    device = db.get(Device, device_id)
+    if device is None or device.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return device
+
+
+def _to_out(device: Device) -> DeviceOut:
+    return DeviceOut.model_validate(device)
+
+
+@router.get("", response_model=list[DeviceOut])
+def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Device]:
+    return list(db.scalars(select(Device).where(Device.owner_id == user.id).order_by(Device.name)))
+
+
+@router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
+def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Device:
+    device = Device(
+        owner_id=user.id,
+        name=payload.name,
+        host=payload.host,
+        port=payload.port,
+        username=payload.username,
+        auth_method=payload.auth_method,
+        password_enc=encrypt(payload.password or ""),
+        private_key_enc=encrypt(payload.private_key or ""),
+        os=payload.os,
+        notes=payload.notes,
+    )
+    db.add(device)
+    db.commit()
+    db.refresh(device)
+    return _to_out(device)
+
+
+@router.get("/export")
+def export_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
+    """Export the user's devices (without secrets — user re-enters creds on import)."""
+    devices = list(db.scalars(select(Device).where(Device.owner_id == user.id).order_by(Device.name)))
+    payload = [
+        {
+            "name": d.name,
+            "host": d.host,
+            "port": d.port,
+            "username": d.username,
+            "auth_method": d.auth_method,
+            "os": d.os,
+            "notes": d.notes,
+        }
+        for d in devices
+    ]
+    return Response(
+        content=json.dumps(payload, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=shelldeck-devices.json"},
+    )
+
+
+@router.post("/import")
+def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """Import devices from an export. Secrets must be supplied in each entry."""
+    created = 0
+    for item in payload:
+        device = Device(
+            owner_id=user.id,
+            name=item.name,
+            host=item.host,
+            port=item.port,
+            username=item.username,
+            auth_method=item.auth_method,
+            password_enc=encrypt(item.password or ""),
+            private_key_enc=encrypt(item.private_key or ""),
+            os=item.os,
+            notes=item.notes,
+        )
+        db.add(device)
+        created += 1
+    db.commit()
+    return {"imported": created}
+
+
+@router.get("/{device_id}", response_model=DeviceOut)
+def get_device(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Device:
+    return _to_out(_owned(db, device_id, user))
+
+
+@router.put("/{device_id}", response_model=DeviceOut)
+def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Device:
+    device = _owned(db, device_id, user)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        if field == "password" and value:
+            device.password_enc = encrypt(value)
+        elif field == "private_key" and value:
+            device.private_key_enc = encrypt(value)
+        elif field in ("password", "private_key"):
+            continue
+        else:
+            setattr(device, field, value)
+    db.commit()
+    db.refresh(device)
+    return _to_out(device)
+
+
+@router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_device(device_id: int, db: Session = Depends(get_db), user: User = Depends(operator_only)):
+    from app.models import SessionLog
+    device = _owned(db, device_id, user)
+    db.query(SessionLog).filter(SessionLog.device_id == device.id).delete()
+    db.delete(device)
+    db.commit()
+
+
+def load_credentials(device: Device) -> tuple[str, str | None, str | None]:
+    """Return (username, password, private_key) with decrypted secrets."""
+    return device.username, decrypt(device.password_enc) or None, decrypt(device.private_key_enc) or None

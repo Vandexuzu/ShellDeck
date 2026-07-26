@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ShellDeck</title>
+  <link rel="manifest" href="/static/manifest.webmanifest" />
+  <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">⚡ ShellDeck</div>
+    <div class="topbar-right">
+      <span id="username"></span>
+      <button id="logout" class="btn btn-ghost btn-icon" title="Logout"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Sidebar: vertical navigation -->
+    <aside class="sidebar">
+      <nav class="side-nav">
+        <button class="side-nav-item active" data-tab="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/><path d="M9 22V12h6v10"/></svg> Devices</button>
+        <button class="side-nav-item" data-tab="files"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/></svg> Files</button>
+        <button class="side-nav-item" data-tab="bulk"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Bulk Run</button>
+        <button class="side-nav-item" data-tab="docker"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Docker</button>
+        <button class="side-nav-item" data-tab="snippets"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg> Snippets</button>
+        <button class="side-nav-item" data-tab="scheduled"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Scheduled</button>
+        <button class="side-nav-item" data-tab="settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
+        <button class="side-nav-item" id="side-users" data-tab="users" style="display:none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Users</button>
+      </nav>
+    </aside>
+
+    <!-- Content -->
+    <section class="content">
+      <!-- Devices / Monitoring view -->
+      <div id="view-devices">
+        <div class="content-head">
+          <h1>Remote Devices</h1>
+          <div>
+            <button id="add-device" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Add</span></button>
+            <button id="export-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
+            <button id="import-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
+            <button id="refresh-status" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16v5h5"/></svg><span>Refresh</span></button>
+          </div>
+        </div>
+        <div id="status-grid" class="status-grid"></div>
+      </div>
+
+      <!-- Files (SFTP) view -->
+      <div id="view-files" class="hidden">
+        <div class="content-head">
+          <h1>File Manager</h1>
+          <select id="files-device" class="input-sm"></select>
+        </div>
+        <div class="files-toolbar">
+          <button id="files-up" class="btn btn-ghost btn-icon" title="Up"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
+          <button id="files-mkdir" class="btn btn-ghost btn-icon" title="New folder"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
+          <button id="files-newfile" class="btn btn-ghost btn-icon" title="New file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
+          <span id="files-path" class="files-path">/</span>
+        </div>
+        <div id="files-list" class="files-list"></div>
+        <div id="file-editor" class="file-editor hidden">
+          <h3 id="file-editor-title">Edit file</h3>
+          <textarea id="file-editor-content" class="file-editor-content" spellcheck="false"></textarea>
+          <div class="modal-actions">
+            <button id="file-editor-cancel" class="btn btn-ghost">Cancel</button>
+            <button id="file-editor-save" class="btn btn-primary">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bulk run view -->
+      <div id="view-bulk" class="hidden">
+        <div class="content-head"><h1>Bulk Command Runner</h1></div>
+        <div class="bulk-box">
+          <label>Command
+            <textarea id="bulk-command" rows="3" placeholder="e.g. uname -a"></textarea>
+          </label>
+          <div class="bulk-targets">
+            <strong>Target devices:</strong>
+            <div id="bulk-devices" class="bulk-devices"></div>
+          </div>
+          <button id="bulk-run" class="btn btn-primary">Run on selected</button>
+          <div id="bulk-results" class="bulk-results"></div>
+        </div>
+      </div>
+
+      <!-- Docker view -->
+      <div id="view-docker" class="hidden">
+        <div class="content-head">
+          <h1>Docker Manager</h1>
+          <select id="docker-device" class="input-sm"></select>
+          <button id="docker-refresh" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16v5h5"/></svg><span>Refresh</span></button>
+          <button id="docker-stats" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>Stats</span></button>
+        </div>
+        <div id="docker-list" class="docker-list"></div>
+        <div class="docker-run">
+          <label class="docker-run-label">Run docker command on this device</label>
+          <div class="docker-run-row">
+            <span class="docker-run-prefix">docker</span>
+            <input id="docker-cmd" class="input" placeholder="images   |   network ls   |   run --rm alpine echo hi   |   compose -f app.yml up -d" />
+            <label class="docker-run-tty"><input type="checkbox" id="docker-pty" /> TTY</label>
+            <button id="docker-run-btn" class="btn btn-primary btn-sm">Run</button>
+          </div>
+          <pre id="docker-run-output" class="docker-run-output hidden"></pre>
+        </div>
+        <div id="docker-logs" class="docker-logs hidden">
+          <div class="content-head">
+            <h3 id="docker-logs-title">Logs</h3>
+            <button id="docker-logs-close" class="btn btn-ghost btn-icon" title="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+          </div>
+          <pre id="docker-logs-content" class="docker-logs-content"></pre>
+        </div>
+      </div>
+
+      <!-- Snippets view -->
+      <div id="view-snippets" class="hidden">
+        <div class="content-head">
+          <h1>Saved Snippets</h1>
+          <button id="snippet-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New snippet</span></button>
+        </div>
+        <div id="snippet-list" class="snippet-list"></div>
+      </div>
+
+      <!-- Scheduled Tasks view -->
+      <div id="view-scheduled" class="hidden">
+        <div class="content-head">
+          <h1>Scheduled Tasks</h1>
+          <button id="sched-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New task</span></button>
+        </div>
+        <div id="sched-list" class="sched-list"></div>
+        <div id="sched-form" class="sched-form hidden">
+          <h3>New scheduled task</h3>
+          <label>Name <input id="sched-name" class="input" placeholder="Daily update" /></label>
+          <label>Command <input id="sched-command" class="input" placeholder="apt update && apt upgrade -y" /></label>
+          <label>Target devices <div id="sched-devices" class="device-check"></div></label>
+          <label>Interval (minutes) <input id="sched-interval" class="input" type="number" value="60" min="1" /></label>
+          <div class="modal-actions">
+            <button id="sched-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
+            <button id="sched-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings view (notifications) -->
+      <div id="view-settings" class="hidden">
+        <div class="content-head"><h1>Settings</h1></div>
+        <div class="settings-box">
+          <h3>Notifications</h3>
+          <label class="switch-row"><span>Enable alerts</span><input type="checkbox" id="set-notify" /></label>
+          <label>Telegram bot token <input id="set-tg-token" class="input" type="password" placeholder="123456:ABC-DEF…" /></label>
+          <label>Telegram chat id <input id="set-tg-chat" class="input" placeholder="123456789" /></label>
+          <label>Discord webhook URL <input id="set-discord" class="input" placeholder="https://discord.com/api/webhooks/…" /></label>
+          <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10" max="3600" /></label>
+          <div class="modal-actions">
+            <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Send test</span></button>
+            <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users view (admin only) -->
+      <div id="view-users" class="hidden">
+        <div class="content-head">
+          <h1>Users</h1>
+          <button id="user-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New user</span></button>
+        </div>
+        <div id="user-list" class="user-list"></div>
+        <div id="user-form" class="user-form hidden">
+          <h3>New user</h3>
+          <label>Username <input id="user-username" class="input" /></label>
+          <label>Password <input id="user-password" type="password" class="input" /></label>
+          <label>Role
+            <select id="user-role" class="input">
+              <option value="viewer">viewer (read-only)</option>
+              <option value="operator">operator (manage devices)</option>
+              <option value="admin">admin (full + user mgmt)</option>
+            </select>
+          </label>
+          <div class="modal-actions">
+            <button id="user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
+            <button id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Terminal view -->
+      <div id="view-terminal" class="hidden">
+        <div class="terminal-head">
+          <h1 id="terminal-title">Shell</h1>
+          <button id="close-terminal" class="btn btn-ghost btn-icon" title="Close terminal"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+        </div>
+        <div id="terminal" class="terminal"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add / Edit device modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="modal-title">Add Device</h2>
+      <form id="device-form">
+        <input type="hidden" id="device-id" />
+        <label>Name <input id="f-name" required /></label>
+        <label>Host <input id="f-host" placeholder="192.168.1.10" required /></label>
+        <label>Port <input id="f-port" type="number" value="22" /></label>
+        <label>Username <input id="f-username" value="root" /></label>
+        <label>Auth method
+          <select id="f-auth">
+            <option value="password">Password</option>
+            <option value="key">Private key</option>
+          </select>
+        </label>
+        <label id="f-pass-label">Password <input id="f-password" type="password" /></label>
+        <label id="f-key-label" class="hidden">Private key (PEM)
+          <textarea id="f-key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
+        </label>
+        <label>OS <input id="f-os" placeholder="Ubuntu 22.04" /></label>
+        <label>Notes <textarea id="f-notes" rows="2"></textarea></label>
+        <div id="form-error" class="form-error"></div>
+        <div class="modal-actions">
+          <button type="button" id="modal-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
+          <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Import modal -->
+  <div id="import-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Import Devices (JSON)</h2>
+      <p class="muted">Paste exported JSON. Re-enter passwords — exports omit secrets.</p>
+      <textarea id="import-text" rows="8" placeholder='[{"name":"srv1","host":"1.2.3.4","username":"root","password":"..."}]'></textarea>
+      <div id="import-error" class="form-error"></div>
+      <div class="modal-actions">
+        <button id="import-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
+        <button id="import-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Import</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Snippet modal -->
+  <div id="snippet-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="snippet-title">New Snippet</h2>
+      <form id="snippet-form">
+        <input type="hidden" id="snippet-id" />
+        <label>Name <input id="s-name" class="input" required /></label>
+        <label>Command <textarea id="s-command" rows="3" class="input" required></textarea></label>
+        <div class="modal-actions">
+          <button type="button" id="snippet-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
+          <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+  <script src="/static/app.js?v=17"></script>
+</body>
+</html>

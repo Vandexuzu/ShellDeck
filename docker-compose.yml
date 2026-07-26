@@ -1,0 +1,15 @@
+services:
+  shelldeck:
+    build: .
+    container_name: shelldeck
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-to-a-long-random-string}
+      - DATABASE_URL=sqlite:///./data/shelldeck.db
+      - HOST=0.0.0.0
+      - PORT=8000
+      - SSH_IGNORE_KNOWN_HOSTS=true
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

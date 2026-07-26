@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Env / secrets
+.env
+.env.local
+*.local
+
+# Databases (runtime data)
+*.db
+*.sqlite
+*.sqlite3
+/data/
+
+# Test artifacts
+test_*.db
+diag.db
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Logs
+*.log
