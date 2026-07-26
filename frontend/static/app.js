@@ -183,7 +183,8 @@ async function loadStatus() {
           <button class="btn btn-danger btn-icon" data-del="${s.id}" title="Delete device">${icon("trash")}</button>` : `<span class="muted" style="font-size:11px">read-only</span>`}
         </div>`;
       grid.appendChild(card);
-      card.querySelector("[data-shell]").onclick = () => openTerminal(s.id, s.name);
+      const sh = card.querySelector("[data-shell]");
+      if (sh) sh.onclick = () => openTerminal(s.id, s.name);
       const fb = card.querySelector("[data-files]");
       if (fb) fb.onclick = () => { switchTab("files"); document.getElementById("files-device").value = s.id; loadFiles(); };
       const cb = card.querySelector("[data-clone]");
@@ -504,8 +505,9 @@ async function openFileEditor(path) {
 async function renderBulkDevices() {
   const box = document.getElementById("bulk-devices");
   box.innerHTML = "";
-  if (!currentDevices.length) { box.innerHTML = "<p class='muted'>No devices.</p>"; return; }
-  for (const d of currentDevices) {
+  const mine = currentDevices.filter(d => canAccessDevice(d));
+  if (!mine.length) { box.innerHTML = "<p class='muted'>No accessible devices.</p>"; return; }
+  for (const d of mine) {
     const id = "bulk-" + d.id;
     const lbl = document.createElement("label");
     lbl.className = "bulk-check";
