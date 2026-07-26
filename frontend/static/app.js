@@ -99,7 +99,7 @@ async function ensureAuth() {
 // ----------------------------- Tabs ----------------------------------------
 function switchTab(name) {
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["devices", "files", "bulk", "docker", "snippets", "scheduled", "settings", "users", "terminal"].forEach(v => {
+  ["devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "terminal"].forEach(v => {
     document.getElementById("view-" + v).classList.toggle("hidden", v !== name);
   });
   if (name === "files") loadFiles();
@@ -108,6 +108,7 @@ function switchTab(name) {
   if (name === "docker") loadDocker();
   if (name === "users") loadUsers();
   if (name === "scheduled") loadScheduled();
+  if (name === "sessions") loadSessions();
   if (name === "settings") loadSettings();
 }
 
@@ -128,8 +129,12 @@ async function loadStatus() {
   try {
     const statuses = await api("/api/monitor/status");
     grid.innerHTML = "";
-    if (!statuses.length) { grid.innerHTML = "<p style='color:var(--muted)'>No devices yet. Add one from the sidebar.</p>"; return; }
-    for (const s of statuses) {
+    const q = (document.getElementById("device-search")?.value || "").trim().toLowerCase();
+    const filtered = q
+      ? statuses.filter(s => s.name.toLowerCase().includes(q) || (s.host || "").toLowerCase().includes(q))
+      : statuses;
+    if (!filtered.length) { grid.innerHTML = "<p style='color:var(--muted)'>" + (q ? "No devices match your search." : "No devices yet. Add one from the sidebar.") + "</p>"; return; }
+    for (const s of filtered) {
       const card = document.createElement("div");
       card.className = "status-card";
       const cls = s.reachable ? "ok" : "down";
@@ -149,6 +154,7 @@ async function loadStatus() {
         <div class="di-actions" style="margin-top:10px">
           <button class="btn btn-primary btn-icon-text" data-shell="${s.id}" title="Open shell">${icon("terminal")}<span>Shell</span></button>
           <button class="btn btn-ghost btn-icon" data-files="${s.id}" title="File manager">${icon("folder")}</button>
+          <button class="btn btn-ghost btn-icon" data-clone="${s.id}" title="Clone device">${icon("copy")}</button>
           <button class="btn btn-ghost btn-icon" data-edit="${s.id}" title="Edit device">${icon("edit")}</button>
           <button class="btn btn-danger btn-icon" data-del="${s.id}" title="Delete device">${icon("trash")}</button>
         </div>`;
@@ -156,6 +162,8 @@ async function loadStatus() {
       card.querySelector("[data-shell]").onclick = () => openTerminal(s.id, s.name);
       const fb = card.querySelector("[data-files]");
       if (fb) fb.onclick = () => { switchTab("files"); document.getElementById("files-device").value = s.id; loadFiles(); };
+      const cb = card.querySelector("[data-clone]");
+      if (cb) cb.onclick = () => cloneDevice(s.id);
       const eb = card.querySelector("[data-edit]");
       if (eb) eb.onclick = () => openModal(+eb.dataset.edit);
       const db = card.querySelector("[data-del]");
@@ -167,6 +175,9 @@ async function loadStatus() {
     }
   } catch (e) { grid.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
+
+// Search box live filter
+document.getElementById("device-search")?.addEventListener("input", () => { loadStatus(); });
 
 // ----------------------------- Device modal --------------------------------
 function openModal(id = null) {
@@ -192,8 +203,57 @@ function openModal(id = null) {
 }
 function closeModal() { document.getElementById("modal").classList.add("hidden"); }
 
+async function cloneDevice(id) {
+  try {
+    const d = await api(`/api/devices/${id}`);
+    openModal();  // fresh add form
+    document.getElementById("f-name").value = d.name + " (copy)";
+    document.getElementById("f-host").value = d.host;
+    document.getElementById("f-port").value = d.port;
+    document.getElementById("f-username").value = d.username;
+    document.getElementById("f-auth").value = d.auth_method;
+    document.getElementById("f-auth").dispatchEvent(new Event("change"));
+    document.getElementById("f-os").value = d.os || "";
+    document.getElementById("f-notes").value = d.notes || "";
+    document.getElementById("f-bastion").value = d.bastion_id ? String(d.bastion_id) : "";
+    // Note: password/key are NOT returned by the API (security) — user must re-enter.
+    showToast("Cloned: enter password/key then Save", "ok");
+  } catch (e) { showToast(e.message, "error"); }
+}
+
 document.getElementById("add-device").onclick = () => openModal();
 document.getElementById("modal-cancel").onclick = closeModal;
+document.getElementById("modal-test").onclick = async () => {
+  const id = document.getElementById("device-id").value;
+  const errEl = document.getElementById("form-error");
+  if (errEl) errEl.textContent = "";
+  const payload = {
+    name: document.getElementById("f-name").value || "test",
+    host: document.getElementById("f-host").value,
+    port: +document.getElementById("f-port").value || 22,
+    username: document.getElementById("f-username").value,
+    auth_method: document.getElementById("f-auth").value,
+    password: document.getElementById("f-auth").value === "password" ? document.getElementById("f-password").value : "",
+    private_key: document.getElementById("f-auth").value === "key" ? document.getElementById("f-key").value : "",
+    os: document.getElementById("f-os").value,
+    notes: document.getElementById("f-notes").value,
+    bastion_id: document.getElementById("f-bastion").value ? +document.getElementById("f-bastion").value : null,
+  };
+  if (!payload.host) { showToast("Enter host first", "error"); return; }
+  try {
+    let res;
+    if (id) {
+      res = await api(`/api/devices/${id}/test`, { method: "GET" });
+    } else {
+      // Create temporary device, test, then delete it.
+      const created = await api("/api/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      res = await api(`/api/devices/${created.id}/test`, { method: "GET" });
+      await api(`/api/devices/${created.id}`, { method: "DELETE" });
+    }
+    if (res.ok) showToast("✅ " + res.message, "ok");
+    else showToast("❌ " + res.message, "error");
+  } catch (e) { showToast(e.message, "error"); }
+};
 
 document.getElementById("f-auth").onchange = (e) => {
   const isKey = e.target.value === "key";
@@ -246,8 +306,20 @@ document.getElementById("export-devices").onclick = async () => {
     URL.revokeObjectURL(url);
   } catch (e) { showToast(e.message, "error"); }
 };
-document.getElementById("inv-ansible").onclick = () => window.open("/api/devices/inventory/ansible", "_blank");
-document.getElementById("inv-terraform").onclick = () => window.open("/api/devices/inventory/terraform", "_blank");
+function downloadInventory(fmt, filename) {
+  fetch(`/api/devices/inventory/${fmt}`, { headers: authHeaders() })
+    .then(r => { if (!r.ok) throw new Error("Export failed (" + r.status + ")"); return r.blob(); })
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    })
+    .catch(e => showToast(e.message, "error"));
+}
+document.getElementById("inv-ansible").onclick = () => downloadInventory("ansible", "shelldeck-inventory.ini");
+document.getElementById("inv-terraform").onclick = () => downloadInventory("terraform", "shelldeck-inventory.tf");
 document.getElementById("import-devices").onclick = () => {
   document.getElementById("import-modal").classList.remove("hidden");
 };
@@ -687,6 +759,26 @@ document.getElementById("set-test").onclick = async () => {
   const r = await api("/api/settings/test", { method: "POST" });
   showToast("Test sent: " + JSON.stringify(r), "ok");
 };
+
+// ----------------------------- Session history -----------------------------
+async function loadSessions() {
+  const box = document.getElementById("session-list");
+  box.innerHTML = "<p class='muted'>Loading…</p>";
+  try {
+    const rows = await api("/api/devices/sessions");
+    if (!rows.length) { box.innerHTML = "<p class='muted'>No shell sessions recorded yet.</p>"; return; }
+    box.innerHTML = `<table class="session-table"><thead><tr>
+      <th>Device</th><th>Host</th><th>Started</th><th>Ended</th><th>Duration</th>
+    </tr></thead><tbody>${rows.map(r => `
+      <tr>
+        <td>${escapeHtml(r.device_name)}</td>
+        <td class="muted">${escapeHtml(r.device_host)}</td>
+        <td>${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
+        <td>${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
+        <td>${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
+}
 
 // ----------------------------- Boot ----------------------------------------
 document.querySelectorAll(".side-nav-item").forEach(t => t.onclick = () => switchTab(t.dataset.tab));

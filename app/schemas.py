@@ -73,6 +73,16 @@ class DeviceOut(BaseModel):
     created_at: datetime
 
 
+class SessionOut(BaseModel):
+    id: int
+    device_id: int
+    device_name: str
+    device_host: str
+    started_at: str | None
+    ended_at: str | None
+    duration_s: int | None
+
+
 class DeviceStatus(BaseModel):
     id: int
     name: str

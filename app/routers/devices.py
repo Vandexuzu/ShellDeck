@@ -129,6 +129,34 @@ def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), u
     return {"imported": created}
 
 
+# ----------------------------- Session audit log -----------------------------
+@router.get("/sessions")
+def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
+    """List shell sessions (audit trail) for the current user's devices."""
+    from app.models import SessionLog
+    rows = (
+        db.query(SessionLog)
+        .join(Device, Device.id == SessionLog.device_id)
+        .filter(Device.owner_id == user.id)
+        .order_by(SessionLog.started_at.desc())
+        .limit(200)
+        .all()
+    )
+    out = []
+    for r in rows:
+        dev = db.get(Device, r.device_id)
+        out.append({
+            "id": r.id,
+            "device_id": r.device_id,
+            "device_name": dev.name if dev else "(deleted)",
+            "device_host": dev.host if dev else "",
+            "started_at": r.started_at.isoformat() if r.started_at else None,
+            "ended_at": r.ended_at.isoformat() if r.ended_at else None,
+            "duration_s": int((r.ended_at - r.started_at).total_seconds()) if r.ended_at and r.started_at else None,
+        })
+    return out
+
+
 @router.get("/{device_id}", response_model=DeviceOut)
 def get_device(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Device:
     return _to_out(_owned(db, device_id, user))
@@ -213,3 +241,17 @@ async def _probe_reachable(device: Device, db: Session) -> bool:
         return True
     except Exception:
         return False
+
+
+@router.get("/{device_id}/test")
+async def test_connection(device_id: int, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Probe SSH connectivity to a device and return reachability + error detail."""
+    device = _owned(db, device_id, user)
+    try:
+        conn, bastion = await connect_device(device, db)
+        conn.close()
+        if bastion:
+            bastion.close()
+        return {"ok": True, "message": f"Connected to {device.username}@{device.host}:{device.port}"}
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "message": str(exc)[:300]}

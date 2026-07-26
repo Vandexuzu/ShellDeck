@@ -181,6 +181,10 @@ body {
 .user-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .user-table th, .user-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 .user-table th { color: var(--muted); font-weight: 600; }
+.session-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.session-table th, .session-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.session-table th { color: var(--muted); font-weight: 600; }
+.session-list { padding: 18px; }
 .user-form { padding: 18px; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
 .user-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 
