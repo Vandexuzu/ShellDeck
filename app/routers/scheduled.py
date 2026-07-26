@@ -47,7 +47,7 @@ def list_tasks(db: Session = Depends(get_db), user: User = Depends(operator_only
 def create_task(
     payload: ScheduledTaskCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)
 ) -> dict:
-    now = datetime.now(timezone.utc)
+    now = datetime.now()
     task = ScheduledTask(
         owner_id=user.id,
         name=payload.name,
@@ -98,7 +98,7 @@ def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_d
     from datetime import timedelta
     created = 0
     for item in payload:
-        now = datetime.now(timezone.utc)
+        now = datetime.now()
         db.add(ScheduledTask(
             owner_id=user.id,
             name=item.name,
@@ -125,7 +125,7 @@ async def run_task(task: ScheduledTask, db: Session) -> None:
             await _run_on_device(d, task.command)
         except Exception:
             pass
-    task.last_run = datetime.now(timezone.utc)
+    task.last_run = datetime.now()
     if task.run_once:
         task.enabled = False
         task.next_run = None
@@ -141,7 +141,7 @@ async def scheduler_loop() -> None:
             await asyncio.sleep(60)
             db = SessionLocal()
             try:
-                now = datetime.now(timezone.utc)
+                now = datetime.now()
                 due = db.scalars(
                     select(ScheduledTask).where(
                         ScheduledTask.enabled == True,  # noqa: E712

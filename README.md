@@ -165,7 +165,7 @@ Open **Sessions** to see every shell session. Click the list icon on a row to vi
 
 ## 🤝 Contributing
 
-PRs welcome. Keep it $0, agentless, and self-hosted. Run `pytest` before opening a PR.
+ShellDeck welcome. Keep it $0, agentless, and self-hosted. Run `pytest` before opening a ShellDeck.
 
 ## 📄 License
 

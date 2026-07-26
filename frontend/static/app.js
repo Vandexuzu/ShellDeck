@@ -814,7 +814,7 @@ async function loadScheduled() {
       <div class="sched-card">
         <div class="sc-name">${escapeHtml(t.name)} ${t.enabled ? "" : "<span class='muted'>(paused)</span>"} ${t.run_once ? "<span class='muted'>· run once</span>" : ""}</div>
         <pre class="sc-cmd">${escapeHtml(t.command)}</pre>
-        <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · next: ${t.next_run ? new Date(t.next_run).toLocaleString() : (t.run_once ? "on create" : "-")}</div>
+        <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · ${t.run_at ? "at " + new Date(t.run_at).toLocaleString() : (t.next_run ? "next: " + new Date(t.next_run).toLocaleString() : (t.run_once ? "on create" : "-"))}</div>
         <div class="di-actions">
           <button class="btn btn-primary btn-icon" data-run-now="${t.id}" title="Run now">${icon("play")}</button>
           <button class="btn btn-danger btn-icon" data-del-task="${t.id}" title="Delete task">${icon("trash")}</button>
@@ -870,7 +870,8 @@ document.getElementById("sched-save").onclick = async () => {
   const interval = parseInt(document.getElementById("sched-interval").value, 10) || 60;
   const run_once = document.getElementById("sched-runonce").checked;
   const run_at_raw = document.getElementById("sched-runat").value;
-  const run_at = (run_once && run_at_raw) ? new Date(run_at_raw).toISOString() : null;
+  // Send as a naive local datetime string (matches the machine's local time, no UTC conversion).
+  const run_at = (run_once && run_at_raw) ? run_at_raw : null;
   if (!name || !command) { showToast("Name & command required", "error"); return; }
   try {
     await api("/api/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, command, device_ids: ids, interval_minutes: interval, run_once, run_at }) });
