@@ -95,9 +95,10 @@ def test_export_import_devices():
     data = exp.json()
     assert len(data) == 1 and data[0]["name"] == "exp-1"
     assert "password" not in data[0]  # secrets omitted
-    # import into a fresh user
-    r2 = client.post("/api/auth/register", json={"username": "io_user2", "password": "secret123"})
-    token2 = r2.json()["access_token"]
+    # import into a fresh user (created by admin, since self-registration is now closed after first user)
+    cu = client.post("/api/users", headers=h, json={"username": "io_user2", "password": "secret123", "role": "admin"})
+    assert cu.status_code == 201
+    token2 = client.post("/api/auth/login", data={"username": "io_user2", "password": "secret123"}).json()["access_token"]
     h2 = {"Authorization": f"Bearer {token2}"}
     imp = client.post("/api/devices/import", headers=h2, json=[
         {**data[0], "password": "newpw"},
@@ -262,3 +263,29 @@ def test_settings_notification_channels_persist():
     assert s["ntfy_url"] == "https://ntfy.sh/mytopic"
     assert s["slack_webhook"] == "https://hooks.slack.com/x"
     assert s["webhook_url"] == "https://example.com/hook"
+
+
+def test_registration_closes_after_first_user_and_change_password():
+    # registration-open is true when no users exist
+    assert client.get("/api/auth/registration-open").json()["open"] is True
+    # first user registers fine (becomes admin)
+    r = client.post("/api/auth/register", json={"username": "reg_admin", "password": "secret123"})
+    assert r.status_code == 201
+    ha = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    # registration-open now reports closed
+    assert client.get("/api/auth/registration-open").json()["open"] is False
+    # a second self-registration is rejected
+    r2 = client.post("/api/auth/register", json={"username": "reg2", "password": "secret123"})
+    assert r2.status_code == 403
+    # but an admin can still create users via /api/users
+    cu = client.post("/api/users", headers=ha, json={"username": "reg_viewer", "password": "secret123", "role": "viewer"})
+    assert cu.status_code == 201
+    # change password: wrong old -> 400
+    assert client.post("/api/auth/change-password", headers=ha, json={"old_password": "wrong", "new_password": "newpass1"}).status_code == 400
+    # change password: correct old -> ok, then new password logs in
+    assert client.post("/api/auth/change-password", headers=ha, json={"old_password": "secret123", "new_password": "newpass1"}).status_code == 200
+    login = client.post("/api/auth/login", data={"username": "reg_admin", "password": "newpass1"})
+    assert login.status_code == 200
+    # revert so the test is deterministic
+    ht = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.post("/api/auth/change-password", headers=ht, json={"old_password": "newpass1", "new_password": "secret123"}).status_code == 200

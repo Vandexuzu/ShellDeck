@@ -12,6 +12,20 @@ const form = document.getElementById("auth-form");
 const errBox = document.getElementById("auth-error");
 const submitBtn = document.getElementById("auth-submit");
 
+// Hide the Register tab once the first user has been created (self-registration closed).
+(async () => {
+  try {
+    const r = await fetch(API + "/api/auth/registration-open");
+    const data = await r.json();
+    if (data && data.open === false) {
+      const regTab = document.getElementById("tab-register");
+      if (regTab) regTab.style.display = "none";
+      const hint = document.getElementById("auth-hint");
+      if (hint) hint.textContent = "Contact an admin to get an account.";
+    }
+  } catch (_) { /* leave register visible if check fails */ }
+})();
+
 form.onsubmit = async (e) => {
   e.preventDefault();
   console.log("login submit, mode=", mode);
@@ -70,4 +84,10 @@ function setMode(m) {
 
 document.getElementById("tab-login").onclick = () => setMode("login");
 document.getElementById("tab-register").onclick = () => setMode("register");
-if (params.get("register") === "1") setMode("register");
+if (params.get("register") === "1") {
+  // Only allow deep-link to register if self-registration is still open.
+  fetch(API + "/api/auth/registration-open").then(r => r.json()).then(d => {
+    if (d && d.open === true) setMode("register");
+    else setMode("login");
+  }).catch(() => setMode("login"));
+}

@@ -900,6 +900,9 @@ async function loadSettings() {
     set("set-email-user", s.email_user);
     set("set-interval", s.monitor_interval);
     setCheck("set-public", s.public_dashboard);
+    // Profile: show who is logged in.
+    const uEl = document.getElementById("set-username");
+    if (uEl && currentUser) uEl.textContent = `${currentUser.username} (${currentUser.role})`;
     // never echo token / password back
     const tok = document.getElementById("set-tg-token"); if (tok) tok.value = "";
     const ep = document.getElementById("set-email-pass"); if (ep) ep.value = "";
@@ -965,6 +968,21 @@ document.getElementById("set-tg-getid").onclick = async () => {
   } finally {
     btn.disabled = false;
   }
+};
+document.getElementById("pw-change").onclick = async () => {
+  const oldP = document.getElementById("pw-old").value;
+  const newP = document.getElementById("pw-new").value;
+  const conf = document.getElementById("pw-conf").value;
+  if (!oldP || !newP) { showToast("Enter current and new password", "error"); return; }
+  if (newP !== conf) { showToast("New passwords do not match", "error"); return; }
+  if (newP.length < 6) { showToast("New password must be at least 6 characters", "error"); return; }
+  try {
+    await api("/api/auth/change-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ old_password: oldP, new_password: newP }) });
+    document.getElementById("pw-old").value = "";
+    document.getElementById("pw-new").value = "";
+    document.getElementById("pw-conf").value = "";
+    showToast("Password changed", "ok");
+  } catch (e) { showToast(e.message, "error"); }
 };
 
 // ----------------------------- Session history -----------------------------
