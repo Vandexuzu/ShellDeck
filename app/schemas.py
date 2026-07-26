@@ -188,6 +188,7 @@ class ScheduledTaskCreate(BaseModel):
     device_ids: list[int] = Field(default_factory=list)
     interval_minutes: int = Field(default=60, ge=1, le=10080)
     enabled: bool = True
+    run_once: bool = False  # if True, run a single time then disable
 
 
 class ScheduledTaskUpdate(BaseModel):
@@ -206,6 +207,7 @@ class ScheduledTaskOut(BaseModel):
     device_ids: list[int]
     interval_minutes: int
     enabled: bool
+    run_once: bool = False
     last_run: datetime | None
     next_run: datetime | None
     created_at: datetime

@@ -70,6 +70,7 @@ const ICONS = {
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
   check: '<polyline points="20 6 9 17 4 12"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
 };
 function icon(name, cls = "") {
   const body = ICONS[name] || "";
@@ -723,10 +724,11 @@ async function loadScheduled() {
     if (!tasks.length) { box.innerHTML = "<p class='muted'>No scheduled tasks yet.</p>"; return; }
     box.innerHTML = tasks.map(t => `
       <div class="sched-card">
-        <div class="sc-name">${escapeHtml(t.name)} ${t.enabled ? "" : "<span class='muted'>(paused)</span>"}</div>
+        <div class="sc-name">${escapeHtml(t.name)} ${t.enabled ? "" : "<span class='muted'>(paused)</span>"} ${t.run_once ? "<span class='muted'>· run once</span>" : ""}</div>
         <pre class="sc-cmd">${escapeHtml(t.command)}</pre>
-        <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · every ${t.interval_minutes}m · next: ${t.next_run ? new Date(t.next_run).toLocaleString() : "-"}</div>
+        <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · next: ${t.next_run ? new Date(t.next_run).toLocaleString() : "-"}</div>
         <div class="di-actions">
+          <button class="btn btn-primary btn-icon" data-run-now="${t.id}" title="Run now">${icon("play")}</button>
           <button class="btn btn-danger btn-icon" data-del-task="${t.id}" title="Delete task">${icon("trash")}</button>
         </div>
       </div>`).join("");
@@ -734,6 +736,10 @@ async function loadScheduled() {
       if (!confirm("Delete this task?")) return;
       await api(`/api/scheduled/${b.dataset.delTask}`, { method: "DELETE" });
       loadScheduled();
+    });
+    box.querySelectorAll("[data-run-now]").forEach(b => b.onclick = async () => {
+      try { await api(`/api/scheduled/${b.dataset.runNow}/run`, { method: "POST" }); loadScheduled(); showToast("Task triggered", "ok"); }
+      catch (e) { showToast(e.message, "error"); }
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
@@ -771,9 +777,10 @@ document.getElementById("sched-save").onclick = async () => {
   const command = document.getElementById("sched-command").value.trim();
   const ids = Array.from(document.querySelectorAll("#sched-devices input[type=checkbox]:checked")).map(c => parseInt(c.value, 10));
   const interval = parseInt(document.getElementById("sched-interval").value, 10) || 60;
+  const run_once = document.getElementById("sched-runonce").checked;
   if (!name || !command) { showToast("Name & command required", "error"); return; }
   try {
-    await api("/api/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, command, device_ids: ids, interval_minutes: interval }) });
+    await api("/api/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, command, device_ids: ids, interval_minutes: interval, run_once }) });
     document.getElementById("sched-form").classList.add("hidden");
     loadScheduled();
     showToast("Task created", "ok");

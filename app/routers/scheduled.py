@@ -29,6 +29,7 @@ def _serialize(task: ScheduledTask) -> dict:
         "device_ids": json.loads(task.device_ids or "[]"),
         "interval_minutes": task.interval_minutes,
         "enabled": task.enabled,
+        "run_once": task.run_once,
         "last_run": task.last_run,
         "next_run": task.next_run,
         "created_at": task.created_at,
@@ -52,8 +53,9 @@ def create_task(
         command=payload.command,
         device_ids=json.dumps(payload.device_ids),
         interval_minutes=payload.interval_minutes,
-        enabled=payload.enabled,
-        next_run=now + timedelta(minutes=payload.interval_minutes),
+        enabled=payload.enabled and not payload.run_once,
+        run_once=payload.run_once,
+        next_run=None if payload.run_once else now + timedelta(minutes=payload.interval_minutes),
     )
     db.add(task)
     db.commit()
@@ -68,6 +70,16 @@ def delete_task(task_id: int, db: Session = Depends(get_db), user: User = Depend
         raise HTTPException(status_code=404, detail="Task not found")
     db.delete(task)
     db.commit()
+
+
+@router.post("/{task_id}/run")
+async def run_task_now(task_id: int, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Trigger a task immediately (Run Now), regardless of schedule."""
+    task = db.get(ScheduledTask, task_id)
+    if task is None or task.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Task not found")
+    await run_task(task, db)
+    return {"ok": True, "last_run": task.last_run.isoformat() if task.last_run else None}
 
 
 @router.get("/export")
@@ -90,8 +102,9 @@ def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_d
             command=item.command,
             device_ids=json.dumps(item.device_ids),
             interval_minutes=item.interval_minutes,
-            enabled=item.enabled,
-            next_run=now + timedelta(minutes=item.interval_minutes),
+            enabled=item.enabled and not item.run_once,
+            run_once=item.run_once,
+            next_run=None if item.run_once else now + timedelta(minutes=item.interval_minutes),
         ))
         created += 1
     db.commit()
@@ -108,7 +121,11 @@ async def run_task(task: ScheduledTask, db: Session) -> None:
         except Exception:
             pass
     task.last_run = datetime.now(timezone.utc)
-    task.next_run = task.last_run + timedelta(minutes=task.interval_minutes)
+    if task.run_once:
+        task.enabled = False
+        task.next_run = None
+    else:
+        task.next_run = task.last_run + timedelta(minutes=task.interval_minutes)
     db.commit()
 
 

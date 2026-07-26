@@ -206,3 +206,17 @@ def test_quick_wins():
     assert any(x["name"] == "t" for x in tasks)
     imp2 = client.post("/api/scheduled/import", headers=ha, json=[{"name": "t2", "command": "uptime", "device_ids": [], "interval_minutes": 15}])
     assert imp2.status_code == 200 and imp2.json()["imported"] == 1
+
+
+def test_scheduled_run_once_and_run_now():
+    r = client.post("/api/auth/register", json={"username": "ro_admin", "password": "secret123"})
+    ha = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    dev = client.post("/api/devices", headers=ha, json={"name": "gw", "host": "10.0.0.9", "username": "root", "password": "x"}).json()
+    # run_once -> created disabled, no next_run
+    t = client.post("/api/scheduled", headers=ha, json={"name": "once", "command": "uptime", "device_ids": [dev["id"]], "interval_minutes": 60, "run_once": True}).json()
+    assert t["run_once"] is True and t["enabled"] is False and t["next_run"] is None
+    # run now triggers execution and leaves it disabled
+    rn = client.post(f"/api/scheduled/{t['id']}/run", headers=ha)
+    assert rn.status_code == 200 and rn.json()["ok"] is True
+    got = [x for x in client.get("/api/scheduled", headers=ha).json() if x["id"] == t["id"]][0]
+    assert got["enabled"] is False and got["last_run"] is not None
