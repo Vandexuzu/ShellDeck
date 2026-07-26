@@ -1,18 +1,18 @@
-FROM python:3.12-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# crypto deps for asyncssh
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
-
+# Install dependencies first (better layer caching)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy application
 COPY app ./app
 COPY frontend ./frontend
 
-ENV PYTHONUNBUFFERED=1
+# Persist data + env across container restarts
+VOLUME ["/app/data"]
+
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000"]
