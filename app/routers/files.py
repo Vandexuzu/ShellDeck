@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import load_credentials
+from app.routers.devices import load_credentials, _can_view, _can_access
 from app.schemas import FileEntry, FilePath, FileWrite
 from app.security import get_current_user, operator_only
 
@@ -47,7 +47,7 @@ async def _list_dir(sftp, path: str) -> list[FileEntry]:
 @router.get("/{device_id}/browse", response_model=list[FileEntry])
 async def browse(device_id: int, path: str = "/", db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[FileEntry]:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:
@@ -64,7 +64,7 @@ async def browse(device_id: int, path: str = "/", db: Session = Depends(get_db),
 @router.post("/{device_id}/read")
 async def read_file(device_id: int, body: FilePath, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:
@@ -81,7 +81,7 @@ async def read_file(device_id: int, body: FilePath, db: Session = Depends(get_db
 @router.post("/{device_id}/write")
 async def write_file(device_id: int, body: FileWrite, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:
@@ -96,7 +96,7 @@ async def write_file(device_id: int, body: FileWrite, db: Session = Depends(get_
 @router.post("/{device_id}/mkdir")
 async def mkdir(device_id: int, body: FilePath, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:
@@ -110,7 +110,7 @@ async def mkdir(device_id: int, body: FilePath, db: Session = Depends(get_db), u
 @router.post("/{device_id}/delete")
 async def delete_file(device_id: int, body: FilePath, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
         async with asyncssh.connect(**_connect_opts(device)) as conn:

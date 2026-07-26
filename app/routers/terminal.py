@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, SessionLog, User
-from app.routers.devices import connect_device
+from app.routers.devices import connect_device, _can_access
 from app.security import get_user_from_token_raw
 
 router = APIRouter(tags=["terminal"])
@@ -46,7 +46,7 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
             return
 
         device = db.get(Device, device_id)
-        if device is None or device.owner_id != user.id:
+        if device is None or not _can_access(db, device, user):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 

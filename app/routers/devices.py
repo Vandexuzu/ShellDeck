@@ -19,36 +19,58 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 def _admin_user(db: Session) -> User | None:
-    """The primary admin (is_admin, lowest id) — owns all shared devices."""
+    """The primary admin (is_admin, lowest id)."""
     return db.scalar(select(User).where(User.is_admin).order_by(User.id))
 
 
 def _visible_devices(db: Session, user: User):
-    """Devices a user may see.
+    """Devices a user may *see* (read-only cards / status).
 
-    - admin: every device
-    - operator/viewer: only devices owned by the primary admin (shared fleet)
+    - admin:   every device
+    - viewer:  every device
+    - operator: the admin's shared fleet + the operator's own devices
     """
-    if user.role == "admin":
+    if user.role in ("admin", "viewer"):
         return select(Device).order_by(Device.name)
     admin = _admin_user(db)
     admin_id = admin.id if admin else -1
-    return select(Device).where(Device.owner_id == admin_id).order_by(Device.name)
+    return select(Device).where(
+        (Device.owner_id == admin_id) | (Device.owner_id == user.id)
+    ).order_by(Device.name)
+
+
+def _can_view(db: Session, device: Device, user: User) -> bool:
+    """Whether the user may *view* a device (status, file browse, docker read).
+
+    Admin and viewer may view any device; an operator may view the admin's
+    fleet and their own devices.
+    """
+    if user.role in ("admin", "viewer"):
+        return True
+    admin = _admin_user(db)
+    return device.owner_id == user.id or (admin is not None and device.owner_id == admin.id)
+
+
+def _can_access(db: Session, device: Device, user: User) -> bool:
+    """Whether the user may *act on* a device (shell, sftp write, docker, run).
+
+    Admin: any device. Operator: only their own. Viewer: never.
+    """
+    if user.role == "admin":
+        return True
+    if user.role == "operator":
+        return device.owner_id == user.id
+    return False
 
 
 def _owned(db: Session, device_id: int, user: User) -> Device:
-    """Resolve a device the current user is allowed to act on.
-
-    Admins can act on any device; operators act on the shared (admin-owned)
-    fleet. Viewers are rejected earlier by operator_only on write endpoints.
-    """
+    """Resolve a device the user is allowed to act on (admin: any, operator: own)."""
     device = db.get(Device, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
     if user.role == "admin":
         return device
-    admin = _admin_user(db)
-    if admin and device.owner_id == admin.id:
+    if user.role == "operator" and device.owner_id == user.id:
         return device
     raise HTTPException(status_code=404, detail="Device not found")
 
@@ -64,9 +86,8 @@ def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Device:
-    # Devices are owned by the primary admin so the whole team shares one fleet.
-    admin = _admin_user(db)
-    owner_id = admin.id if admin else user.id
+    # Operators own their own devices; admins own the shared fleet.
+    owner_id = user.id
     device = Device(
         owner_id=owner_id,
         name=payload.name,
@@ -202,9 +223,10 @@ def inventory_export(fmt: str, db: Session = Depends(get_db), user: User = Depen
 
 @router.post("/import")
 def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
-    """Import devices from an export. Secrets must be supplied in each entry."""
+    """Import devices from an export. Secrets must be supplied in each entry.
+    Admins import into the shared fleet; operators own their imports."""
     admin = _admin_user(db)
-    owner_id = admin.id if admin else user.id
+    owner_id = admin.id if (admin and user.role == "admin") else user.id
     created = 0
     for item in payload:
         device = Device(
@@ -242,14 +264,12 @@ class BulkUpdate(BulkIds):
 
 @router.delete("/bulk")
 def bulk_delete_devices(payload: BulkIds, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
-    """Delete multiple devices at once (must belong to the shared admin fleet)."""
+    """Delete multiple devices at once (own devices for operators; all for admins)."""
     from app.models import SessionLog
-    admin = _admin_user(db)
-    admin_id = admin.id if admin else -1
     deleted = 0
     for did in payload.device_ids:
         device = db.get(Device, did)
-        if device and (user.role == "admin" or device.owner_id == admin_id):
+        if device and (user.role == "admin" or device.owner_id == user.id):
             db.query(SessionLog).filter(SessionLog.device_id == device.id).delete()
             db.delete(device)
             deleted += 1
@@ -259,13 +279,11 @@ def bulk_delete_devices(payload: BulkIds, db: Session = Depends(get_db), user: U
 
 @router.put("/bulk")
 def bulk_update_devices(payload: BulkUpdate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
-    """Apply a set of fields (tags, notes, os, bastion_id) to multiple shared devices."""
-    admin = _admin_user(db)
-    admin_id = admin.id if admin else -1
+    """Apply a set of fields (tags, notes, os, bastion_id) to owned (or all) devices."""
     updated = 0
     for did in payload.device_ids:
         device = db.get(Device, did)
-        if device and (user.role == "admin" or device.owner_id == admin_id):
+        if device and (user.role == "admin" or device.owner_id == user.id):
             if payload.tags is not None:
                 device.tags = payload.tags
             if payload.notes is not None:

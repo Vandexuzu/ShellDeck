@@ -166,13 +166,14 @@ async function loadStatus() {
           <div class="metric"><span>Uptime</span><b>${escapeHtml(s.uptime || "-")}</b></div>
         ` : `<div class="metric"><span>Status</span><b style="color:var(--danger)">unreachable</b></div>
              <div class="metric"><span></span><b>${escapeHtml(s.message)}</b></div>`}
+        const canAccess = (d) => currentUser && (currentUser.role === "admin" || (currentUser.role === "operator" && d.owner_id === currentUser.id));
         ${s.tags ? `<div class="tag-row">${s.tags.split(",").map(t => `<span class="tag">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
         <div class="di-actions" style="margin-top:10px">
-          <button class="btn btn-primary btn-icon-text" data-shell="${s.id}" title="Open shell">${icon("terminal")}<span>Shell</span></button>
+          ${canAccess(s) ? `<button class="btn btn-primary btn-icon-text" data-shell="${s.id}" title="Open shell">${icon("terminal")}<span>Shell</span></button>
           <button class="btn btn-ghost btn-icon" data-files="${s.id}" title="File manager">${icon("folder")}</button>
           <button class="btn btn-ghost btn-icon" data-clone="${s.id}" title="Clone device">${icon("copy")}</button>
           <button class="btn btn-ghost btn-icon" data-edit="${s.id}" title="Edit device">${icon("edit")}</button>
-          <button class="btn btn-danger btn-icon" data-del="${s.id}" title="Delete device">${icon("trash")}</button>
+          <button class="btn btn-danger btn-icon" data-del="${s.id}" title="Delete device">${icon("trash")}</button>` : `<button class="btn btn-ghost btn-icon" data-files="${s.id}" title="View files (read-only)">${icon("folder")}</button><span class="muted" style="font-size:11px">read-only</span>`}
         </div>`;
       grid.appendChild(card);
       card.querySelector("[data-shell]").onclick = () => openTerminal(s.id, s.name);
@@ -1074,6 +1075,13 @@ document.getElementById("files-device").onchange = loadFiles;
   await loadStatus();
   refreshFilesDeviceSelect();
   refreshDockerDeviceSelect();
+  // Read-only roles (viewer) cannot create/modify anything — hide write buttons.
+  if (currentUser && currentUser.role === "viewer") {
+    ["add-device", "import-devices", "export-devices", "discover-tailscale", "inv-ansible", "inv-terraform"].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = "none";
+    });
+  }
   // Register service worker for PWA installability.
   if ("serviceWorker" in navigator) {
     try { await navigator.serviceWorker.register("/static/sw.js"); } catch (_) {}

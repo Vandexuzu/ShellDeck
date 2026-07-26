@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import connect_device, load_credentials, _visible_devices
+from app.routers.devices import connect_device, load_credentials, _visible_devices, _can_view
 from app.schemas import DeviceStatus
 from app.security import get_current_user
 
@@ -65,12 +65,6 @@ async def status_all(db: Session = Depends(get_db), user: User = Depends(get_cur
 @router.get("/status/{device_id}", response_model=DeviceStatus)
 async def status_one(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> DeviceStatus:
     device = db.get(Device, device_id)
-    if device is None:
+    if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
-    # Admins can view any device; others only the shared (admin-owned) fleet.
-    if user.role != "admin":
-        from app.routers.devices import _admin_user
-        admin = _admin_user(db)
-        if not (admin and device.owner_id == admin.id):
-            raise HTTPException(status_code=404, detail="Device not found")
     return await _collect(device, db)

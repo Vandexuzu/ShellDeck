@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import connect_device, load_credentials
+from app.routers.devices import connect_device, load_credentials, _can_access
 from app.schemas import BulkResult, BulkRun
 from app.security import get_current_user, operator_only
 
@@ -43,13 +43,10 @@ async def _run_on_device(device: Device, command: str, db: Session) -> BulkResul
 
 @router.post("/run", response_model=list[BulkResult])
 async def bulk_run(payload: BulkRun, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> list[BulkResult]:
-    devices = db.scalars(
-        select(Device).where(Device.id.in_(payload.device_ids), Device.owner_id == user.id)
-    ).all()
-    found = {d.id for d in devices}
-    missing = [i for i in payload.device_ids if i not in found]
-    if missing:
-        raise HTTPException(status_code=404, detail=f"Devices not found or not owned: {missing}")
-    results = await asyncio.gather(*[_run_on_device(d, payload.command, db) for d in devices])
+    devices = db.scalars(select(Device).where(Device.id.in_(payload.device_ids))).all()
+    accessible = [d for d in devices if _can_access(db, d, user)]
+    if len(accessible) != len(payload.device_ids):
+        raise HTTPException(status_code=404, detail="Some devices not found or not accessible")
+    results = await asyncio.gather(*[_run_on_device(d, payload.command, db) for d in accessible])
     return list(results)
 

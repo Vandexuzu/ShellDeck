@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import connect_device, load_credentials
+from app.routers.devices import connect_device, load_credentials, _can_view, _can_access
 from app.schemas import DockerContainer, DockerAction, DockerRun
 from app.security import get_current_user, operator_only
 
@@ -58,7 +58,7 @@ def _parse_ps(stdout: str) -> list[dict]:
 @router.get("/{device_id}/containers", response_model=list[DockerContainer])
 async def list_containers(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     fmt = "{{json .}}"
     stdout, stderr, code = await _run(
@@ -75,7 +75,7 @@ async def list_containers(device_id: int, db: Session = Depends(get_db), user: U
 @router.get("/{device_id}/logs/{container_id}")
 async def container_logs(device_id: int, container_id: str, lines: int = 200, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     # guard against shell injection in container id
     if not container_id.replace("_", "").replace("-", "").isalnum():
@@ -89,7 +89,7 @@ async def container_logs(device_id: int, container_id: str, lines: int = 200, db
 @router.post("/{device_id}/action")
 async def container_action(device_id: int, body: DockerAction, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     cid = body.container_id
     if not cid.replace("_", "").replace("-", "").isalnum():
@@ -106,7 +106,7 @@ async def container_action(device_id: int, body: DockerAction, db: Session = Dep
 @router.get("/{device_id}/stats")
 async def container_stats(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     # `docker stats --no-stream` gives a one-shot snapshot (no live streaming needed).
     stdout, stderr, code = await _run(
@@ -130,7 +130,7 @@ async def docker_run(device_id: int, body: DockerRun, db: Session = Depends(get_
     """Run an arbitrary `docker <command>` on the device (e.g. `images`, `network ls`,
     `run --rm alpine echo hi`, `compose -f app.yml up -d`)."""
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     cmd = body.command.strip()
     if not cmd:

@@ -76,6 +76,7 @@ class DeviceUpdate(BaseModel):
 class DeviceOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    owner_id: int
     name: str
     host: str
     port: int
