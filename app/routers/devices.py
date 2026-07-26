@@ -11,18 +11,46 @@ from sqlalchemy.orm import Session
 
 from app.config import decrypt, encrypt, settings
 from app.db import get_db
-from app.models import Device, SessionLog
+from app.models import Device, SessionLog, User
 from app.schemas import DeviceCreate, DeviceOut, DeviceUpdate
-from app.security import get_current_user, operator_only
+from app.security import get_current_user, operator_only, admin_only
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
+def _admin_user(db: Session) -> User | None:
+    """The primary admin (is_admin, lowest id) — owns all shared devices."""
+    return db.scalar(select(User).where(User.is_admin).order_by(User.id))
+
+
+def _visible_devices(db: Session, user: User):
+    """Devices a user may see.
+
+    - admin: every device
+    - operator/viewer: only devices owned by the primary admin (shared fleet)
+    """
+    if user.role == "admin":
+        return select(Device).order_by(Device.name)
+    admin = _admin_user(db)
+    admin_id = admin.id if admin else -1
+    return select(Device).where(Device.owner_id == admin_id).order_by(Device.name)
+
+
 def _owned(db: Session, device_id: int, user: User) -> Device:
+    """Resolve a device the current user is allowed to act on.
+
+    Admins can act on any device; operators act on the shared (admin-owned)
+    fleet. Viewers are rejected earlier by operator_only on write endpoints.
+    """
     device = db.get(Device, device_id)
-    if device is None or device.owner_id != user.id:
+    if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
-    return device
+    if user.role == "admin":
+        return device
+    admin = _admin_user(db)
+    if admin and device.owner_id == admin.id:
+        return device
+    raise HTTPException(status_code=404, detail="Device not found")
 
 
 def _to_out(device: Device) -> DeviceOut:
@@ -31,13 +59,16 @@ def _to_out(device: Device) -> DeviceOut:
 
 @router.get("", response_model=list[DeviceOut])
 def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Device]:
-    return list(db.scalars(select(Device).where(Device.owner_id == user.id).order_by(Device.name)))
+    return list(db.scalars(_visible_devices(db, user)))
 
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)
 def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Device:
+    # Devices are owned by the primary admin so the whole team shares one fleet.
+    admin = _admin_user(db)
+    owner_id = admin.id if admin else user.id
     device = Device(
-        owner_id=user.id,
+        owner_id=owner_id,
         name=payload.name,
         host=payload.host,
         port=payload.port,
@@ -100,7 +131,7 @@ def tailscale_discover(db: Session = Depends(get_db), user: User = Depends(get_c
     except Exception as exc:  # noqa: BLE001
         return {"available": True, "nodes": [], "error": str(exc)[:200]}
 
-    known_hosts = {d.host for d in db.scalars(select(Device).where(Device.owner_id == user.id)).all()}
+    known_hosts = {d.host for d in db.scalars(_visible_devices(db, user)).all()}
     nodes = []
     # `Self` and `Peer` maps keyed by IP.
     for section in ("Self", "Peer"):
@@ -120,7 +151,7 @@ def tailscale_discover(db: Session = Depends(get_db), user: User = Depends(get_c
 @router.get("/export")
 def export_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
     """Export the user's devices (without secrets — user re-enters creds on import)."""
-    devices = list(db.scalars(select(Device).where(Device.owner_id == user.id).order_by(Device.name)))
+    devices = list(db.scalars(_visible_devices(db, user)))
     payload = [
         {
             "name": d.name,
@@ -144,7 +175,7 @@ def export_devices(db: Session = Depends(get_db), user: User = Depends(get_curre
 @router.get("/inventory/{fmt}")
 def inventory_export(fmt: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
     """Export devices as an Ansible inventory (ini) or Terraform inventory (yaml)."""
-    devices = list(db.scalars(select(Device).where(Device.owner_id == user.id).order_by(Device.name)))
+    devices = list(db.scalars(_visible_devices(db, user)))
     if fmt == "ansible":
         lines = ["[shelldeck]", ""]
         for d in devices:
@@ -172,10 +203,12 @@ def inventory_export(fmt: str, db: Session = Depends(get_db), user: User = Depen
 @router.post("/import")
 def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     """Import devices from an export. Secrets must be supplied in each entry."""
+    admin = _admin_user(db)
+    owner_id = admin.id if admin else user.id
     created = 0
     for item in payload:
         device = Device(
-            owner_id=user.id,
+            owner_id=owner_id,
             name=item.name,
             host=item.host,
             port=item.port,
@@ -209,12 +242,14 @@ class BulkUpdate(BulkIds):
 
 @router.delete("/bulk")
 def bulk_delete_devices(payload: BulkIds, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
-    """Delete multiple owned devices at once."""
+    """Delete multiple devices at once (must belong to the shared admin fleet)."""
     from app.models import SessionLog
+    admin = _admin_user(db)
+    admin_id = admin.id if admin else -1
     deleted = 0
     for did in payload.device_ids:
         device = db.get(Device, did)
-        if device and device.owner_id == user.id:
+        if device and (user.role == "admin" or device.owner_id == admin_id):
             db.query(SessionLog).filter(SessionLog.device_id == device.id).delete()
             db.delete(device)
             deleted += 1
@@ -224,11 +259,13 @@ def bulk_delete_devices(payload: BulkIds, db: Session = Depends(get_db), user: U
 
 @router.put("/bulk")
 def bulk_update_devices(payload: BulkUpdate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
-    """Apply a set of fields (tags, notes, os, bastion_id) to multiple owned devices."""
+    """Apply a set of fields (tags, notes, os, bastion_id) to multiple shared devices."""
+    admin = _admin_user(db)
+    admin_id = admin.id if admin else -1
     updated = 0
     for did in payload.device_ids:
         device = db.get(Device, did)
-        if device and device.owner_id == user.id:
+        if device and (user.role == "admin" or device.owner_id == admin_id):
             if payload.tags is not None:
                 device.tags = payload.tags
             if payload.notes is not None:
@@ -247,10 +284,11 @@ def bulk_update_devices(payload: BulkUpdate, db: Session = Depends(get_db), user
 def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
     """List shell sessions (audit trail) for the current user's devices."""
     from app.models import SessionLog
+    vis = _visible_devices(db, user)
+    visible_ids = {d.id for d in db.scalars(vis).all()}
     rows = (
         db.query(SessionLog)
-        .join(Device, Device.id == SessionLog.device_id)
-        .filter(Device.owner_id == user.id)
+        .filter(SessionLog.device_id.in_(visible_ids))
         .order_by(SessionLog.started_at.desc())
         .limit(200)
         .all()
