@@ -123,8 +123,12 @@
       <!-- Snippets view -->
       <div id="view-snippets" class="hidden">
         <div class="content-head">
-          <h1>Saved Snippets</h1>
-          <button id="snippet-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New snippet</span></button>
+          <h1>Snippets</h1>
+          <div>
+            <button id="snip-export" class="btn btn-ghost btn-icon-text" title="Export snippets JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
+            <button id="snip-import" class="btn btn-ghost btn-icon-text" title="Import snippets JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
+            <button id="snippet-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New</span></button>
+          </div>
         </div>
         <div id="snippet-list" class="snippet-list"></div>
       </div>
@@ -133,7 +137,11 @@
       <div id="view-scheduled" class="hidden">
         <div class="content-head">
           <h1>Scheduled Tasks</h1>
-          <button id="sched-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New task</span></button>
+          <div>
+            <button id="sched-export" class="btn btn-ghost btn-icon-text" title="Export tasks JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
+            <button id="sched-import" class="btn btn-ghost btn-icon-text" title="Import tasks JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
+            <button id="sched-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New task</span></button>
+          </div>
         </div>
         <div id="sched-list" class="sched-list"></div>
         <div id="sched-form" class="sched-form hidden">
@@ -229,6 +237,10 @@
         <label id="f-key-label" class="hidden">Private key (PEM)
           <textarea id="f-key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
         </label>
+        <button type="button" id="f-genkey" class="btn btn-ghost btn-icon-text hidden"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Generate key</span></button>
+        <label id="f-pubkey-label" class="hidden">Public key (add to target's authorized_keys)
+          <textarea id="f-pubkey" rows="3" readonly placeholder="ssh-ed25519 AAAA..."></textarea>
+        </label>
         <label>OS <input id="f-os" placeholder="Ubuntu 22.04" /></label>
         <label>Notes <textarea id="f-notes" rows="2"></textarea></label>
         <label>Jump host (bastion) <select id="f-bastion"><option value="">— none —</option></select></label>
@@ -276,6 +288,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=20"></script>
+  <script src="/static/app.js?v=21"></script>
 </body>
 </html>

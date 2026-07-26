@@ -203,3 +203,26 @@ body {
 .device-check { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .chk { flex-direction: row !important; align-items: center; gap: 8px; color: var(--text) !important; font-size: 13px !important; }
 .id-badge { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+
+/* ---- Mobile: turn sidebar into a bottom nav ---- */
+@media (max-width: 768px) {
+  .layout { height: auto; min-height: calc(100vh - 53px); flex-direction: column; padding-bottom: 64px; }
+  .sidebar {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto;
+    width: 100%; flex-direction: row; border-right: none; border-top: 1px solid var(--border);
+    padding: 6px 4px; z-index: 50; background: var(--panel);
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .side-nav { flex-direction: row; gap: 2px; width: 100%; }
+  .side-nav-item {
+    flex: 1 0 auto; min-width: 64px; text-align: center; padding: 8px 4px; border-radius: 10px;
+    font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 2px; line-height: 1.1;
+  }
+  .side-nav-item .ic { width: 20px; height: 20px; }
+  .sidebar-head { display: none; }
+  .content { overflow-y: visible; }
+  .content-head { flex-wrap: wrap; gap: 8px; }
+  .content-head > div { display: flex; flex-wrap: wrap; gap: 6px; }
+  .status-grid { grid-template-columns: 1fr; }
+  #device-search { width: 100% !important; }
+}

@@ -70,6 +70,34 @@ def delete_task(task_id: int, db: Session = Depends(get_db), user: User = Depend
     db.commit()
 
 
+@router.get("/export")
+def export_tasks(db: Session = Depends(get_db), user: User = Depends(operator_only)) -> list[dict]:
+    """Export all scheduled tasks (no IDs/run-state) for backup."""
+    tasks = db.scalars(select(ScheduledTask).where(ScheduledTask.owner_id == user.id)).all()
+    return [_serialize(t) | {"id": None, "last_run": None, "next_run": None, "created_at": None} for t in tasks]
+
+
+@router.post("/import")
+def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Import scheduled tasks from an export (re-creates with fresh schedule)."""
+    from datetime import timedelta
+    created = 0
+    for item in payload:
+        now = datetime.now(timezone.utc)
+        db.add(ScheduledTask(
+            owner_id=user.id,
+            name=item.name,
+            command=item.command,
+            device_ids=json.dumps(item.device_ids),
+            interval_minutes=item.interval_minutes,
+            enabled=item.enabled,
+            next_run=now + timedelta(minutes=item.interval_minutes),
+        ))
+        created += 1
+    db.commit()
+    return {"imported": created}
+
+
 async def run_task(task: ScheduledTask, db: Session) -> None:
     """Execute the task's command across its devices (best-effort)."""
     device_ids = json.loads(task.device_ids or "[]")

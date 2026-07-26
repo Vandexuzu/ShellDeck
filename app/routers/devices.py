@@ -54,6 +54,24 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
     return _to_out(device)
 
 
+@router.get("/generate-key")
+def generate_ssh_key(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """Generate an ed25519 SSH keypair and return both private + public key (PEM)."""
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    from cryptography.hazmat.primitives import serialization
+    kp = ed25519.Ed25519PrivateKey.generate()
+    priv = kp.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    pub = kp.public_key().public_bytes(
+        encoding=serialization.Encoding.OpenSSH,
+        format=serialization.PublicFormat.OpenSSH,
+    ).decode()
+    return {"private_key": priv, "public_key": pub}
+
+
 @router.get("/export")
 def export_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
     """Export the user's devices (without secrets — user re-enters creds on import)."""

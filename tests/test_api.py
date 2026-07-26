@@ -178,3 +178,31 @@ def test_inventory_and_public():
     # device out includes bastion_id
     got = client.get(f"/api/devices/{d['id']}", headers=ha).json()
     assert got["bastion_id"] == b["id"]
+
+
+def test_quick_wins():
+    r = client.post("/api/auth/register", json={"username": "qw_admin", "password": "secret123"})
+    ha = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    # generate-key returns ed25519 keypair
+    k = client.get("/api/devices/generate-key", headers=ha).json()
+    assert k["private_key"].startswith("-----BEGIN OPENSSH PRIVATE KEY-----")
+    assert k["public_key"].startswith("ssh-ed25519 ")
+    # test-connection on a device (no device yet -> create one, expect reachable or detailed error)
+    dev = client.post("/api/devices", headers=ha, json={"name": "gw", "host": "10.0.0.5", "username": "root", "password": "x"}).json()
+    tc = client.get(f"/api/devices/{dev['id']}/test", headers=ha)
+    assert tc.status_code == 200 and "ok" in tc.json()
+    # sessions endpoint returns a list
+    assert isinstance(client.get("/api/devices/sessions", headers=ha).json(), list)
+    # snippets export/import roundtrip
+    client.post("/api/snippets", headers=ha, json={"name": "uptime", "command": "uptime"})
+    snips = client.get("/api/snippets/export", headers=ha).json()
+    assert any(s["name"] == "uptime" for s in snips)
+    imp = client.post("/api/snippets/import", headers=ha, json=[{"name": "dup", "command": "echo hi"}])
+    assert imp.status_code == 200 and imp.json()["imported"] == 1
+    # scheduled export/import roundtrip
+    st = client.post("/api/scheduled", headers=ha, json={"name": "t", "command": "uptime", "device_ids": [dev["id"]], "interval_minutes": 30})
+    assert st.status_code in (200, 201)
+    tasks = client.get("/api/scheduled/export", headers=ha).json()
+    assert any(x["name"] == "t" for x in tasks)
+    imp2 = client.post("/api/scheduled/import", headers=ha, json=[{"name": "t2", "command": "uptime", "device_ids": [], "interval_minutes": 15}])
+    assert imp2.status_code == 200 and imp2.json()["imported"] == 1

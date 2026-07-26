@@ -259,6 +259,16 @@ document.getElementById("f-auth").onchange = (e) => {
   const isKey = e.target.value === "key";
   document.getElementById("f-pass-label").classList.toggle("hidden", isKey);
   document.getElementById("f-key-label").classList.toggle("hidden", !isKey);
+  document.getElementById("f-genkey").classList.toggle("hidden", !isKey);
+  document.getElementById("f-pubkey-label").classList.toggle("hidden", !isKey);
+};
+document.getElementById("f-genkey").onclick = async () => {
+  try {
+    const k = await api("/api/devices/generate-key");
+    document.getElementById("f-key").value = k.private_key;
+    document.getElementById("f-pubkey").value = k.public_key;
+    showToast("Keypair generated — copy the public key to the host's authorized_keys", "ok");
+  } catch (e) { showToast(e.message, "error"); }
 };
 
 document.getElementById("device-form").onsubmit = async (e) => {
@@ -502,6 +512,27 @@ function openSnippetModal(id = null, snips = []) {
   }
 }
 document.getElementById("snippet-add").onclick = () => openSnippetModal();
+document.getElementById("snip-export").onclick = async () => {
+  try {
+    const data = await api("/api/snippets/export");
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "shelldeck-snippets.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { showToast(e.message, "error"); }
+};
+document.getElementById("snip-import").onclick = () => {
+  const txt = prompt("Paste snippets JSON export:");
+  if (!txt) return;
+  try {
+    const data = JSON.parse(txt);
+    api("/api/snippets/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+      .then(r => { loadSnippets(); showToast(`Imported ${r.imported} snippet(s)`, "ok"); })
+      .catch(e => showToast(e.message, "error"));
+  } catch (e) { showToast("Invalid JSON", "error"); }
+};
 document.getElementById("snippet-cancel").onclick = () => document.getElementById("snippet-modal").classList.add("hidden");
 document.getElementById("snippet-form").onsubmit = async (e) => {
   e.preventDefault();
@@ -712,6 +743,27 @@ document.getElementById("sched-add").onclick = () => {
   else box.innerHTML = currentDevices.map(d => `
     <label class="chk"><input type="checkbox" value="${d.id}" /> ${escapeHtml(d.name)} <span class="id-badge">#${d.id}</span></label>`).join("");
   document.getElementById("sched-form").classList.remove("hidden");
+};
+document.getElementById("sched-export").onclick = async () => {
+  try {
+    const data = await api("/api/scheduled/export");
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "shelldeck-tasks.json";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) { showToast(e.message, "error"); }
+};
+document.getElementById("sched-import").onclick = () => {
+  const txt = prompt("Paste scheduled tasks JSON export:");
+  if (!txt) return;
+  try {
+    const data = JSON.parse(txt);
+    api("/api/scheduled/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+      .then(r => { loadScheduled(); showToast(`Imported ${r.imported} task(s)`, "ok"); })
+      .catch(e => showToast(e.message, "error"));
+  } catch (e) { showToast("Invalid JSON", "error"); }
 };
 document.getElementById("sched-cancel").onclick = () => document.getElementById("sched-form").classList.add("hidden");
 document.getElementById("sched-save").onclick = async () => {
