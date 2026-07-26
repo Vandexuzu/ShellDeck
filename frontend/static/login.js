@@ -22,6 +22,10 @@ const submitBtn = document.getElementById("auth-submit");
       if (regTab) regTab.style.display = "none";
       const hint = document.getElementById("auth-hint");
       if (hint) hint.textContent = "Contact an admin to get an account.";
+      // With only the Login tab left, the tab switcher is redundant — hide it
+      // so it doesn't look like two identical "Login" buttons.
+      const tabs = document.querySelector(".auth-tabs");
+      if (tabs) tabs.style.display = "none";
     }
   } catch (_) { /* leave register visible if check fails */ }
 })();

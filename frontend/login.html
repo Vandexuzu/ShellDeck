@@ -6,6 +6,14 @@
   <title>ShellDeck — Login</title>
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("shelldeck_theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (_) {}
+    })();
+  </script>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body class="auth-body">
@@ -27,6 +35,6 @@
     </form>
     <p class="auth-hint" id="auth-hint">Don't have an account? Switch to Register.</p>
   </div>
-  <script src="/static/login.js"></script>
+  <script src="/static/login.js?v=2"></script>
 </body>
 </html>

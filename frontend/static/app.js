@@ -900,6 +900,13 @@ async function loadSettings() {
     set("set-email-user", s.email_user);
     set("set-interval", s.monitor_interval);
     setCheck("set-public", s.public_dashboard);
+    // Appearance: reflect saved theme.
+    const themeSel = document.getElementById("set-theme");
+    if (themeSel) {
+      let saved = "dark";
+      try { saved = localStorage.getItem("shelldeck_theme") || "dark"; } catch (_) {}
+      themeSel.value = saved === "light" ? "light" : "dark";
+    }
     // Profile: show who is logged in.
     const uEl = document.getElementById("set-username");
     if (uEl && currentUser) uEl.textContent = `${currentUser.username} (${currentUser.role})`;
@@ -968,6 +975,12 @@ document.getElementById("set-tg-getid").onclick = async () => {
   } finally {
     btn.disabled = false;
   }
+};
+document.getElementById("set-theme").onchange = () => {
+  const t = document.getElementById("set-theme").value === "light" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
+  showToast("Theme: " + t, "ok");
 };
 document.getElementById("pw-change").onclick = async () => {
   const oldP = document.getElementById("pw-old").value;

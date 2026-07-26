@@ -6,6 +6,15 @@
   <title>ShellDeck</title>
   <link rel="manifest" href="/static/manifest.webmanifest" />
   <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <script>
+    // Apply saved theme before paint to avoid a flash of the wrong theme.
+    (function () {
+      try {
+        var t = localStorage.getItem("shelldeck_theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (_) {}
+    })();
+  </script>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </head>
@@ -222,6 +231,17 @@
           </div>
         </div>
 
+        <div class="settings-box" style="margin-top:24px">
+          <h3>Appearance</h3>
+          <label class="switch-row"><span>Theme</span>
+            <select id="set-theme" class="input" style="max-width:160px">
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </label>
+          <p class="muted">Theme is saved on this device only.</p>
+        </div>
+
         <!-- Profile / change password -->
         <div class="settings-box" style="margin-top:24px">
           <h3>Profile</h3>
@@ -357,6 +377,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=34"></script>
+  <script src="/static/app.js?v=35"></script>
 </body>
 </html>
