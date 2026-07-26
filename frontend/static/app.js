@@ -527,7 +527,7 @@ document.getElementById("bulk-run").onclick = async () => {
   if (!ids.length) { showToast("Select at least one device", "error"); return; }
   const res = await api("/api/bulk/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_ids: ids, command: cmd }) });
   const box = document.getElementById("bulk-results");
-  list.innerHTML = res.map(r => `
+  box.innerHTML = res.map(r => `
     <div class="bulk-result ${r.reachable ? "ok" : "down"}">
       <div class="br-head"><b>${escapeHtml(r.name)}</b> <span class="muted">${escapeHtml(r.host)}</span> ${r.reachable ? "✅" : "❌"}</div>
       <pre class="br-out">${escapeHtml(r.reachable ? r.output : r.error)}</pre>
