@@ -51,6 +51,8 @@ class Device(Base):
     # Optional metadata.
     os: Mapped[str] = mapped_column(String(64), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
+    tags: Mapped[str] = mapped_column(Text, default="")  # comma-separated tags
+    tailscale: Mapped[bool] = mapped_column(default=False)  # reachable via Tailscale (.ts.net)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
@@ -70,6 +72,8 @@ class SessionLog(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Plain-text command transcript (audit trail), NOT the full TTY recording.
     transcript: Mapped[str] = mapped_column(Text, default="")
+    # Newline-separated list of commands typed by the user during the session.
+    commands: Mapped[str] = mapped_column(Text, default="")
 
     device: Mapped["Device"] = relationship(back_populates="sessions")
 
@@ -98,6 +102,15 @@ class SettingsRow(Base):
     telegram_token_enc: Mapped[str] = mapped_column(Text, default="")   # bot token, encrypted
     telegram_chat_id: Mapped[str] = mapped_column(String(64), default="")
     discord_webhook: Mapped[str] = mapped_column(Text, default="")      # raw URL, not secret-critical
+    ntfy_url: Mapped[str] = mapped_column(Text, default="")          # ntfy/ntfy.sh topic URL
+    gotify_url: Mapped[str] = mapped_column(Text, default="")         # Gotify server+token URL
+    slack_webhook: Mapped[str] = mapped_column(Text, default="")       # Slack incoming webhook
+    email_to: Mapped[str] = mapped_column(String(255), default="")       # SMTP recipient
+    email_host: Mapped[str] = mapped_column(String(255), default="")
+    email_port: Mapped[int] = mapped_column(Integer, default=587)
+    email_user: Mapped[str] = mapped_column(String(255), default="")
+    email_pass_enc: Mapped[str] = mapped_column(Text, default="")      # SMTP password, encrypted
+    webhook_url: Mapped[str] = mapped_column(Text, default="")         # custom generic webhook (POST JSON)
     monitor_interval: Mapped[int] = mapped_column(Integer, default=60)  # seconds between checks
     public_dashboard: Mapped[bool] = mapped_column(default=False)       # allow unauth /public view
 

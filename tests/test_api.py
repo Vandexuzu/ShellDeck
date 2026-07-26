@@ -225,3 +225,40 @@ def test_scheduled_run_once_and_run_now():
     assert rn.status_code == 200 and rn.json()["ok"] is True
     got = [x for x in client.get("/api/scheduled", headers=ha).json() if x["id"] == t["id"]][0]
     assert got["enabled"] is False and got["last_run"] is not None
+
+
+def test_device_tags_tsl_bulk_and_sessions_commands():
+    r = client.post("/api/auth/register", json={"username": "feat_admin", "password": "secret123"})
+    ha = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    # create device with tags + tailscale flag
+    d = client.post("/api/devices", headers=ha, json={"name": "tsa", "host": "100.64.0.1", "username": "root", "tags": "prod,web", "tailscale": True}).json()
+    assert d["tags"] == "prod,web" and d["tailscale"] is True
+    d2 = client.post("/api/devices", headers=ha, json={"name": "tsb", "host": "100.64.0.2", "username": "root", "tags": "prod"}).json()
+    # bulk update tags
+    bu = client.put("/api/devices/bulk", headers=ha, json={"device_ids": [d["id"], d2["id"]], "tags": "updated"}).json()
+    assert bu["updated"] == 2
+    # bulk delete
+    import json as _json
+    bd = client.request("DELETE", "/api/devices/bulk", headers={**ha, "Content-Type": "application/json"}, content=_json.dumps({"device_ids": [d["id"], d2["id"]]})).json()
+    assert bd["deleted"] == 2
+    # tailscale discover endpoint responds (available True/False both acceptable)
+    ts = client.get("/api/devices/tailscale/discover", headers=ha).json()
+    assert "available" in ts and "nodes" in ts
+    # settings carries new notification channels
+    s = client.get("/api/settings", headers=ha).json()
+    for k in ("ntfy_url", "gotify_url", "slack_webhook", "webhook_url", "email_to"):
+        assert k in s
+    # sessions endpoint returns commands field
+    sess = client.get("/api/devices/sessions", headers=ha).json()
+    assert isinstance(sess, list)
+
+
+def test_settings_notification_channels_persist():
+    r = client.post("/api/auth/register", json={"username": "notif_admin", "password": "secret123"})
+    ha = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    upd = client.put("/api/settings", headers=ha, json={"notify_enabled": True, "ntfy_url": "https://ntfy.sh/mytopic", "slack_webhook": "https://hooks.slack.com/x", "webhook_url": "https://example.com/hook"})
+    assert upd.status_code in (200, 204)
+    s = client.get("/api/settings", headers=ha).json()
+    assert s["ntfy_url"] == "https://ntfy.sh/mytopic"
+    assert s["slack_webhook"] == "https://hooks.slack.com/x"
+    assert s["webhook_url"] == "https://example.com/hook"

@@ -52,6 +52,7 @@ const ICONS = {
   pause: '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>',
   kill: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
   logs: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/>',
+  list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>',
   activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
   plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -116,8 +117,15 @@ function switchTab(name) {
 // ----------------------------- Devices -------------------------------------
 async function loadDevices() {
   currentDevices = await api("/api/devices");
-  // Device list UI removed in favour of status cards (which carry Edit/Del).
-  // We still keep currentDevices for selects and refresh dependent views.
+  // Build the tag filter dropdown from all device tags.
+  const tagSel = document.getElementById("device-tag-filter");
+  if (tagSel) {
+    const all = new Set();
+    for (const d of currentDevices) (d.tags || "").split(",").forEach(t => { const v = t.trim(); if (v) all.add(v); });
+    const cur = tagSel.value;
+    tagSel.innerHTML = '<option value="">All tags</option>' + [...all].sort().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+    tagSel.value = [...all].includes(cur) ? cur : "";
+  }
   refreshFilesDeviceSelect();
   refreshDockerDeviceSelect();
   return currentDevices;
@@ -131,9 +139,15 @@ async function loadStatus() {
     const statuses = await api("/api/monitor/status");
     grid.innerHTML = "";
     const q = (document.getElementById("device-search")?.value || "").trim().toLowerCase();
-    const filtered = q
-      ? statuses.filter(s => s.name.toLowerCase().includes(q) || (s.host || "").toLowerCase().includes(q))
-      : statuses;
+    const tag = (document.getElementById("device-tag-filter")?.value || "").trim().toLowerCase();
+    const filtered = statuses.filter(s => {
+      if (q && !(s.name.toLowerCase().includes(q) || (s.host || "").toLowerCase().includes(q))) return false;
+      if (tag) {
+        const dtags = (currentDevices.find(d => d.id === s.id)?.tags || "").toLowerCase().split(",").map(t => t.trim());
+        if (!dtags.includes(tag)) return false;
+      }
+      return true;
+    });
     if (!filtered.length) { grid.innerHTML = "<p style='color:var(--muted)'>" + (q ? "No devices match your search." : "No devices yet. Add one from the sidebar.") + "</p>"; return; }
     for (const s of filtered) {
       const card = document.createElement("div");
@@ -143,7 +157,7 @@ async function loadStatus() {
         <div class="metric"><span>${label}</span><b>${pct.toFixed(0)}%</b></div>
         <div class="bar ${pct < 60 ? "ok" : pct < 85 ? "warn" : "bad"}"><span style="width:${pct}%"></span></div>`;
       card.innerHTML = `
-        <div class="sc-title"><span>${escapeHtml(s.name)}</span><span class="dot ${cls}"></span></div>
+        <div class="sc-title"><span>${escapeHtml(s.name)} ${s.tailscale ? '<span class="ts-badge" title="Tailscale">TS</span>' : ''}</span><span class="dot ${cls}"></span></div>
         <div class="metric"><span>Host</span><b>${escapeHtml(s.host)}</b></div>
         ${s.reachable ? `
           ${bar("CPU load", s.cpu_load)}
@@ -152,6 +166,7 @@ async function loadStatus() {
           <div class="metric"><span>Uptime</span><b>${escapeHtml(s.uptime || "-")}</b></div>
         ` : `<div class="metric"><span>Status</span><b style="color:var(--danger)">unreachable</b></div>
              <div class="metric"><span></span><b>${escapeHtml(s.message)}</b></div>`}
+        ${s.tags ? `<div class="tag-row">${s.tags.split(",").map(t => `<span class="tag">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
         <div class="di-actions" style="margin-top:10px">
           <button class="btn btn-primary btn-icon-text" data-shell="${s.id}" title="Open shell">${icon("terminal")}<span>Shell</span></button>
           <button class="btn btn-ghost btn-icon" data-files="${s.id}" title="File manager">${icon("folder")}</button>
@@ -179,6 +194,7 @@ async function loadStatus() {
 
 // Search box live filter
 document.getElementById("device-search")?.addEventListener("input", () => { loadStatus(); });
+document.getElementById("device-tag-filter")?.addEventListener("change", () => { loadStatus(); });
 
 // ----------------------------- Device modal --------------------------------
 function openModal(id = null) {
@@ -199,7 +215,7 @@ function openModal(id = null) {
   }
   if (id) {
     // preselect bastion for editing
-    api(`/api/devices/${id}`).then(d => { sel.value = d.bastion_id ? String(d.bastion_id) : ""; }).catch(() => {});
+    api(`/api/devices/${id}`).then(d => { sel.value = d.bastion_id ? String(d.bastion_id) : ""; document.getElementById("f-tailscale").checked = !!d.tailscale; }).catch(() => {});
   }
 }
 function closeModal() { document.getElementById("modal").classList.add("hidden"); }
@@ -216,6 +232,8 @@ async function cloneDevice(id) {
     document.getElementById("f-auth").dispatchEvent(new Event("change"));
     document.getElementById("f-os").value = d.os || "";
     document.getElementById("f-notes").value = d.notes || "";
+    document.getElementById("f-tags").value = d.tags || "";
+    document.getElementById("f-tailscale").checked = !!d.tailscale;
     document.getElementById("f-bastion").value = d.bastion_id ? String(d.bastion_id) : "";
     // Note: password/key are NOT returned by the API (security) — user must re-enter.
     showToast("Cloned: enter password/key then Save", "ok");
@@ -287,6 +305,8 @@ document.getElementById("device-form").onsubmit = async (e) => {
     private_key: document.getElementById("f-auth").value === "key" ? document.getElementById("f-key").value : "",
     os: document.getElementById("f-os").value,
     notes: document.getElementById("f-notes").value,
+    tags: document.getElementById("f-tags").value.trim(),
+    tailscale: document.getElementById("f-tailscale").checked,
     bastion_id: document.getElementById("f-bastion").value ? +document.getElementById("f-bastion").value : null,
   };
   try {
@@ -334,6 +354,38 @@ document.getElementById("inv-terraform").onclick = () => downloadInventory("terr
 document.getElementById("import-devices").onclick = () => {
   document.getElementById("import-modal").classList.remove("hidden");
 };
+// Tailscale discovery
+document.getElementById("discover-tailscale").onclick = async () => {
+  const list = document.getElementById("ts-list");
+  const errEl = document.getElementById("ts-error");
+  errEl.textContent = "";
+  list.innerHTML = "<p class='muted'>Scanning Tailscale network…</p>";
+  document.getElementById("ts-modal").classList.remove("hidden");
+  try {
+    const data = await api("/api/devices/tailscale/discover");
+    if (!data.available) {
+      list.innerHTML = `<p style='color:var(--danger)'>Tailscale CLI not available on this host.${data.error ? " (" + escapeHtml(data.error) + ")" : ""}</p>`;
+      return;
+    }
+    if (!data.nodes.length) {
+      list.innerHTML = "<p class='muted'>No new Tailscale devices found (or all already added).</p>";
+      return;
+    }
+    list.innerHTML = data.nodes.map((n, i) => `
+      <div class="ts-node" data-ip="${escapeHtml(n.ip)}" data-name="${escapeHtml(n.name)}">
+        <div><b>${escapeHtml(n.name)}</b> ${n.online ? '<span class="dot up"></span>' : '<span class="dot down"></span>'}</div>
+        <div class="muted" style="font-size:12px">${escapeHtml(n.ip)}${n.hostname ? " · " + escapeHtml(n.hostname) : ""}${n.os ? " · " + escapeHtml(n.os) : ""}</div>
+      </div>`).join("");
+    list.querySelectorAll(".ts-node").forEach(el => el.onclick = () => {
+      openModal();
+      document.getElementById("f-name").value = el.dataset.name;
+      document.getElementById("f-host").value = el.dataset.ip;
+      document.getElementById("f-tailscale").checked = true;
+      document.getElementById("ts-modal").classList.add("hidden");
+    });
+  } catch (e) { errEl.textContent = "Error: " + e.message; }
+};
+document.getElementById("ts-cancel").onclick = () => document.getElementById("ts-modal").classList.add("hidden");
 document.getElementById("import-cancel").onclick = () => document.getElementById("import-modal").classList.add("hidden");
 document.getElementById("import-save").onclick = async () => {
   const errEl = document.getElementById("import-error");
@@ -450,6 +502,7 @@ async function renderBulkDevices() {
     lbl.innerHTML = `<input type="checkbox" id="${id}" value="${d.id}" checked /> ${escapeHtml(d.name)} <span class="muted">(${escapeHtml(d.host)})</span>`;
     box.appendChild(lbl);
   }
+  fillBulkBastion();
 }
 document.getElementById("bulk-run").onclick = async () => {
   const cmd = document.getElementById("bulk-command").value.trim();
@@ -458,11 +511,46 @@ document.getElementById("bulk-run").onclick = async () => {
   if (!ids.length) { showToast("Select at least one device", "error"); return; }
   const res = await api("/api/bulk/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_ids: ids, command: cmd }) });
   const box = document.getElementById("bulk-results");
-  box.innerHTML = res.map(r => `
+  list.innerHTML = res.map(r => `
     <div class="bulk-result ${r.reachable ? "ok" : "down"}">
       <div class="br-head"><b>${escapeHtml(r.name)}</b> <span class="muted">${escapeHtml(r.host)}</span> ${r.reachable ? "✅" : "❌"}</div>
       <pre class="br-out">${escapeHtml(r.reachable ? r.output : r.error)}</pre>
     </div>`).join("");
+};
+// populate bulk bastion select from current devices (called on load + refresh)
+function fillBulkBastion() {
+  const sel = document.getElementById("bulk-bastion");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— none —</option>' + currentDevices.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("");
+}
+document.getElementById("bulk-apply").onclick = async () => {
+  const ids = [...document.querySelectorAll("#bulk-devices input:checked")].map(c => +c.value);
+  if (!ids.length) { showToast("Select at least one device", "error"); return; }
+  const payload = { device_ids: ids };
+  const tags = document.getElementById("bulk-tags").value.trim();
+  const os = document.getElementById("bulk-os").value.trim();
+  const notes = document.getElementById("bulk-notes").value.trim();
+  const bastion = document.getElementById("bulk-bastion").value;
+  if (tags) payload.tags = tags;
+  if (os) payload.os = os;
+  if (notes) payload.notes = notes;
+  if (bastion) payload.bastion_id = +bastion;
+  if (Object.keys(payload).length === 1) { showToast("Fill at least one field to edit", "error"); return; }
+  try {
+    const r = await api("/api/devices/bulk", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    showToast(`Updated ${r.updated} device(s)`, "ok");
+    loadDevices(); loadStatus();
+  } catch (e) { showToast(e.message, "error"); }
+};
+document.getElementById("bulk-delete").onclick = async () => {
+  const ids = [...document.querySelectorAll("#bulk-devices input:checked")].map(c => +c.value);
+  if (!ids.length) { showToast("Select at least one device", "error"); return; }
+  if (!confirm(`Delete ${ids.length} device(s)? This also removes their session history.`)) return;
+  try {
+    const r = await api("/api/devices/bulk", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_ids: ids }) });
+    showToast(`Deleted ${r.deleted} device(s)`, "ok");
+    loadDevices(); loadStatus();
+  } catch (e) { showToast(e.message, "error"); }
 };
 
 // ----------------------------- Snippets ------------------------------------
@@ -799,9 +887,18 @@ async function loadSettings() {
     document.getElementById("set-notify").checked = s.notify_enabled;
     document.getElementById("set-tg-chat").value = s.telegram_chat_id || "";
     document.getElementById("set-discord").value = s.discord_webhook || "";
+    document.getElementById("set-ntfy").value = s.ntfy_url || "";
+    document.getElementById("set-gotify").value = s.gotify_url || "";
+    document.getElementById("set-slack").value = s.slack_webhook || "";
+    document.getElementById("set-webhook").value = s.webhook_url || "";
+    document.getElementById("set-email-to").value = s.email_to || "";
+    document.getElementById("set-email-host").value = s.email_host || "";
+    document.getElementById("set-email-port").value = s.email_port || 587;
+    document.getElementById("set-email-user").value = s.email_user || "";
     document.getElementById("set-interval").value = s.monitor_interval;
     document.getElementById("set-public").checked = s.public_dashboard;
     document.getElementById("set-tg-token").value = "";  // never echo token back
+    document.getElementById("set-email-pass").value = "";  // never echo password back
   } catch (e) { showToast(e.message, "error"); }
 }
 document.getElementById("set-save").onclick = async () => {
@@ -809,11 +906,21 @@ document.getElementById("set-save").onclick = async () => {
   notify_enabled: document.getElementById("set-notify").checked,
   telegram_chat_id: document.getElementById("set-tg-chat").value.trim(),
   discord_webhook: document.getElementById("set-discord").value.trim(),
+  ntfy_url: document.getElementById("set-ntfy").value.trim(),
+  gotify_url: document.getElementById("set-gotify").value.trim(),
+  slack_webhook: document.getElementById("set-slack").value.trim(),
+  webhook_url: document.getElementById("set-webhook").value.trim(),
+  email_to: document.getElementById("set-email-to").value.trim(),
+  email_host: document.getElementById("set-email-host").value.trim(),
+  email_port: parseInt(document.getElementById("set-email-port").value, 10) || 587,
+  email_user: document.getElementById("set-email-user").value.trim(),
   monitor_interval: parseInt(document.getElementById("set-interval").value, 10) || 60,
   public_dashboard: document.getElementById("set-public").checked,
   };
   const tok = document.getElementById("set-tg-token").value.trim();
   if (tok) payload.telegram_token = tok;
+  const ep = document.getElementById("set-email-pass").value.trim();
+  if (ep) payload.email_password = ep;
   try {
     await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     showToast("Settings saved", "ok");
@@ -832,7 +939,7 @@ async function loadSessions() {
     const rows = await api("/api/devices/sessions");
     if (!rows.length) { box.innerHTML = "<p class='muted'>No shell sessions recorded yet.</p>"; return; }
     box.innerHTML = `<table class="session-table"><thead><tr>
-      <th>Device</th><th>Host</th><th>Started</th><th>Ended</th><th>Duration</th>
+      <th>Device</th><th>Host</th><th>Started</th><th>Ended</th><th>Duration</th><th>Commands</th>
     </tr></thead><tbody>${rows.map(r => `
       <tr>
         <td data-label="Device">${escapeHtml(r.device_name)}</td>
@@ -840,12 +947,22 @@ async function loadSessions() {
         <td data-label="Started">${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
         <td data-label="Ended">${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
+        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button></td>
       </tr>`).join("")}</tbody></table>`;
+    box.querySelectorAll("[data-cmds]").forEach(b => b.onclick = () => {
+      const r = rows.find(x => String(x.id) === b.dataset.cmds);
+      const cmds = (r.commands || "").split("\n").filter(Boolean);
+      const out = document.getElementById("session-cmds");
+      out.classList.remove("hidden");
+      document.getElementById("session-cmds-title").textContent = `Commands — ${r.device_name}`;
+      document.getElementById("session-cmds-body").textContent = cmds.length ? cmds.map(c => "$ " + c).join("\n") : "(no commands recorded)";
+    });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
 
 // ----------------------------- Boot ----------------------------------------
 document.querySelectorAll(".side-nav-item").forEach(t => t.onclick = () => switchTab(t.dataset.tab));
+document.getElementById("session-cmds-close").onclick = () => document.getElementById("session-cmds").classList.add("hidden");
 document.getElementById("logout").onclick = logout;
 document.getElementById("refresh-status").onclick = loadStatus;
 document.getElementById("files-device").onchange = loadFiles;

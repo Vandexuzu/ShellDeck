@@ -42,9 +42,11 @@
           <h1>Remote Devices</h1>
           <div>
             <input id="device-search" class="input" style="width:200px;display:inline-block" placeholder="Search devices…" />
+            <select id="device-tag-filter" class="input" style="width:auto;display:inline-block"><option value="">All tags</option></select>
             <button id="add-device" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Add</span></button>
             <button id="export-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
             <button id="import-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
+            <button id="discover-tailscale" class="btn btn-ghost btn-icon-text" title="Discover Tailscale devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg><span>TS</span></button>
             <button id="inv-ansible" class="btn btn-ghost btn-icon-text" title="Ansible inventory"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 2 2 4-4"/><path d="M21 10V8a2 2 0 0 0-2-2h-4"/><path d="M3 8V6a2 2 0 0 1 2-2h4"/><path d="M3 16v2a2 2 0 0 0 2 2h4"/><path d="M8 8h8"/></svg><span>Ansible</span></button>
             <button id="inv-terraform" class="btn btn-ghost btn-icon-text" title="Terraform inventory"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 2 2 4-4"/><path d="M21 10V8a2 2 0 0 0-2-2h-4"/><path d="M3 8V6a2 2 0 0 1 2-2h4"/><path d="M3 16v2a2 2 0 0 0 2 2h4"/><path d="M8 8h8"/></svg><span>Terraform</span></button>
             <button id="refresh-status" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16v5h5"/></svg><span>Refresh</span></button>
@@ -88,6 +90,20 @@
             <div id="bulk-devices" class="bulk-devices"></div>
           </div>
           <button id="bulk-run" class="btn btn-primary">Run on selected</button>
+          <hr style="border-color:var(--border);margin:14px 0" />
+          <div class="bulk-edit">
+            <strong>Bulk edit selected</strong>
+            <div class="bulk-edit-grid">
+              <label>Tags <input id="bulk-tags" class="input" placeholder="prod, web" /></label>
+              <label>OS <input id="bulk-os" class="input" placeholder="Ubuntu 22.04" /></label>
+              <label>Notes <input id="bulk-notes" class="input" placeholder="optional" /></label>
+              <label>Jump host (bastion)
+                <select id="bulk-bastion" class="input"><option value="">— none —</option></select>
+              </label>
+            </div>
+            <button id="bulk-apply" class="btn btn-ghost">Apply to selected</button>
+          </div>
+          <button id="bulk-delete" class="btn btn-danger">Delete selected</button>
           <div id="bulk-results" class="bulk-results"></div>
         </div>
       </div>
@@ -165,6 +181,17 @@
         <div id="session-list" class="session-list"></div>
       </div>
 
+      <!-- Session command history modal -->
+      <div id="session-cmds" class="modal hidden">
+        <div class="modal-card">
+          <h2 id="session-cmds-title">Commands</h2>
+          <pre id="session-cmds-body" style="white-space:pre-wrap;max-height:50vh;overflow:auto"></pre>
+          <div class="modal-actions">
+            <button id="session-cmds-close" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close</span></button>
+          </div>
+        </div>
+      </div>
+
       <!-- Settings view (notifications) -->
       <div id="view-settings" class="hidden">
         <div class="content-head"><h1>Settings</h1></div>
@@ -174,6 +201,19 @@
           <label>Telegram bot token <input id="set-tg-token" class="input" type="password" placeholder="123456:ABC-DEF…" /></label>
           <label>Telegram chat id <input id="set-tg-chat" class="input" placeholder="123456789" /></label>
           <label>Discord webhook URL <input id="set-discord" class="input" placeholder="https://discord.com/api/webhooks/…" /></label>
+          <label>ntfy URL <input id="set-ntfy" class="input" placeholder="https://ntfy.sh/topic" /></label>
+          <label>Gotify URL <input id="set-gotify" class="input" placeholder="https://gotify.example.com/message?token=…" /></label>
+          <label>Slack webhook <input id="set-slack" class="input" placeholder="https://hooks.slack.com/services/…" /></label>
+          <label>Custom webhook (POST JSON) <input id="set-webhook" class="input" placeholder="https://example.com/hook" /></label>
+          <label>Email (SMTP) — to <input id="set-email-to" class="input" placeholder="alerts@example.com" /></label>
+          <label>SMTP host / port / user / password
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              <input id="set-email-host" class="input" style="flex:2;min-width:120px" placeholder="smtp.example.com" />
+              <input id="set-email-port" class="input" type="number" style="width:70px" placeholder="587" />
+              <input id="set-email-user" class="input" style="flex:2;min-width:120px" placeholder="user@ex.com" />
+              <input id="set-email-pass" class="input" type="password" style="flex:2;min-width:120px" placeholder="password" />
+            </div>
+          </label>
           <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10" max="3600" /></label>
           <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank" style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
           <div class="modal-actions">
@@ -245,6 +285,8 @@
         </label>
         <label>OS <input id="f-os" placeholder="Ubuntu 22.04" /></label>
         <label>Notes <textarea id="f-notes" rows="2"></textarea></label>
+        <label>Tags <input id="f-tags" placeholder="prod, web, critical" /></label>
+        <label class="switch-row"><span>Reachable via Tailscale (.ts.net)</span><input type="checkbox" id="f-tailscale" /></label>
         <label>Jump host (bastion) <select id="f-bastion"><option value="">— none —</option></select></label>
         <div id="form-error" class="form-error"></div>
         <div class="modal-actions">
@@ -253,6 +295,19 @@
           <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Tailscale discover modal -->
+  <div id="ts-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2>Discover Tailscale Devices</h2>
+      <p class="muted">Devices found on your Tailscale network. Click one to prefill a new device (Tailscale is auto-enabled).</p>
+      <div id="ts-list" class="ts-list"></div>
+      <div id="ts-error" class="form-error"></div>
+      <div class="modal-actions">
+        <button id="ts-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close</span></button>
+      </div>
     </div>
   </div>
 
@@ -290,6 +345,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=26"></script>
+  <script src="/static/app.js?v=28"></script>
 </body>
 </html>

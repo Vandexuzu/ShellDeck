@@ -55,6 +55,72 @@ async def send_discord(webhook: str, text: str) -> bool:
         return False
 
 
+async def send_ntfy(url: str, text: str) -> bool:
+    if not url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(url, json={"message": text, "title": "ShellDeck"})
+            return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+async def send_gotify(url: str, text: str) -> bool:
+    if not url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(url, json={"title": "ShellDeck", "message": text})
+            return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+async def send_slack(url: str, text: str) -> bool:
+    if not url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(url, json={"text": text})
+            return r.status_code in (200, 201, 204)
+    except Exception:
+        return False
+
+
+async def send_email(host: str, port: int, user: str, password: str, to: str, text: str) -> bool:
+    if not (host and to):
+        return False
+    try:
+        import smtplib
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["Subject"] = "ShellDeck alert"
+        msg["From"] = user or to
+        msg["To"] = to
+        msg.set_content(text)
+        with smtplib.SMTP(host, port, timeout=10) as s:
+            if user:
+                s.starttls()
+                s.login(user, password)
+            s.send_message(msg)
+        return True
+    except Exception:
+        return False
+
+
+async def send_webhook(url: str, text: str) -> bool:
+    """Generic custom webhook: POST {text, source:'ShellDeck'} as JSON."""
+    if not url:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(url, json={"text": text, "source": "ShellDeck"})
+            return r.status_code in (200, 201, 202, 204)
+    except Exception:
+        return False
+
+
 async def notify(message: str, db: Session) -> None:
     """Send a notification through whichever channels are configured."""
     s = _get_settings(db)
@@ -65,6 +131,17 @@ async def notify(message: str, db: Session) -> None:
         await send_telegram(token, s.telegram_chat_id, message)
     if s.discord_webhook:
         await send_discord(s.discord_webhook, message)
+    if s.ntfy_url:
+        await send_ntfy(s.ntfy_url, message)
+    if s.gotify_url:
+        await send_gotify(s.gotify_url, message)
+    if s.slack_webhook:
+        await send_slack(s.slack_webhook, message)
+    if s.webhook_url:
+        await send_webhook(s.webhook_url, message)
+    if s.email_to:
+        pw = decrypt(s.email_pass_enc) if s.email_pass_enc else ""
+        await send_email(s.email_host, s.email_port or 587, s.email_user, pw, s.email_to, message)
 
 
 async def _probe(device: Device, db: Session) -> bool:

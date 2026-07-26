@@ -43,6 +43,8 @@ class DeviceCreate(BaseModel):
     os: str = ""
     notes: str = ""
     bastion_id: int | None = None  # optional jump host (another owned device)
+    tags: str = ""  # comma-separated
+    tailscale: bool = False
 
 
 class DeviceUpdate(BaseModel):
@@ -56,6 +58,8 @@ class DeviceUpdate(BaseModel):
     os: str | None = None
     notes: str | None = None
     bastion_id: int | None = None
+    tags: str | None = None
+    tailscale: bool | None = None
 
 
 class DeviceOut(BaseModel):
@@ -69,6 +73,8 @@ class DeviceOut(BaseModel):
     os: str
     notes: str
     bastion_id: int | None = None
+    tags: str = ""
+    tailscale: bool = False
     last_seen: datetime | None
     created_at: datetime
 
@@ -81,6 +87,7 @@ class SessionOut(BaseModel):
     started_at: str | None
     ended_at: str | None
     duration_s: int | None
+    commands: str | None = ""
 
 
 class DeviceStatus(BaseModel):
@@ -93,6 +100,7 @@ class DeviceStatus(BaseModel):
     mem_used_pct: float | None = None
     disk_used_pct: float | None = None
     uptime: str | None = None
+    tailscale: bool = False
 
 
 # ------------------------------- Snippets -----------------------------------
@@ -168,6 +176,14 @@ class SettingsOut(BaseModel):
     notify_enabled: bool
     telegram_chat_id: str
     discord_webhook: str
+    ntfy_url: str = ""
+    gotify_url: str = ""
+    slack_webhook: str = ""
+    email_to: str = ""
+    email_host: str = ""
+    email_port: int = 587
+    email_user: str = ""
+    webhook_url: str = ""
     monitor_interval: int
     public_dashboard: bool
 
@@ -177,6 +193,15 @@ class SettingsUpdate(BaseModel):
     telegram_token: str | None = None   # raw token; encrypted before storing
     telegram_chat_id: str | None = None
     discord_webhook: str | None = None
+    ntfy_url: str | None = None
+    gotify_url: str | None = None
+    slack_webhook: str | None = None
+    email_to: str | None = None
+    email_host: str | None = None
+    email_port: int | None = None
+    email_user: str | None = None
+    email_password: str | None = None   # raw password; encrypted before storing
+    webhook_url: str | None = None
     monitor_interval: int | None = None
     public_dashboard: bool | None = None
 

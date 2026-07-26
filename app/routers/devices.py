@@ -5,6 +5,7 @@ import json
 
 import asyncssh
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -47,6 +48,8 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
         os=payload.os,
         notes=payload.notes,
         bastion_id=payload.bastion_id,
+        tags=payload.tags,
+        tailscale=payload.tailscale,
     )
     db.add(device)
     db.commit()
@@ -72,6 +75,48 @@ def generate_ssh_key(db: Session = Depends(get_db), user: User = Depends(get_cur
     return {"private_key": priv, "public_key": pub}
 
 
+@router.get("/tailscale/discover")
+def tailscale_discover(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """Discover Tailscale devices on the local network via `tailscale status --json`.
+
+    Returns a list of nodes (name, ip, hostname, os) that are not yet added as
+    ShellDeck devices. Requires the `tailscale` CLI on the host (the ShellDeck
+    server box, e.g. your Tailscale node).
+    """
+    import json as _json
+    import shutil
+    import subprocess
+
+    if shutil.which("tailscale") is None:
+        return {"available": False, "nodes": [], "error": "tailscale CLI not found on host"}
+    try:
+        out = subprocess.run(
+            ["tailscale", "status", "--json"],
+            capture_output=True, text=True, timeout=15,
+        )
+        if out.returncode != 0:
+            return {"available": True, "nodes": [], "error": out.stderr.strip()[:200]}
+        data = _json.loads(out.stdout)
+    except Exception as exc:  # noqa: BLE001
+        return {"available": True, "nodes": [], "error": str(exc)[:200]}
+
+    known_hosts = {d.host for d in db.scalars(select(Device).where(Device.owner_id == user.id)).all()}
+    nodes = []
+    # `Self` and `Peer` maps keyed by IP.
+    for section in ("Self", "Peer"):
+        for ip, node in (data.get(section) or {}).items():
+            if ip in known_hosts:
+                continue
+            nodes.append({
+                "ip": ip,
+                "name": node.get("HostName") or node.get("DisplayName") or ip,
+                "hostname": node.get("DNSName", "").rstrip(".") or None,
+                "os": node.get("OS", "") or "",
+                "online": bool(node.get("Online", False)),
+            })
+    return {"available": True, "nodes": nodes}
+
+
 @router.get("/export")
 def export_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Response:
     """Export the user's devices (without secrets — user re-enters creds on import)."""
@@ -85,6 +130,7 @@ def export_devices(db: Session = Depends(get_db), user: User = Depends(get_curre
             "auth_method": d.auth_method,
             "os": d.os,
             "notes": d.notes,
+            "tags": d.tags,
         }
         for d in devices
     ]
@@ -140,11 +186,60 @@ def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), u
             os=item.os,
             notes=item.notes,
             bastion_id=item.bastion_id if hasattr(item, "bastion_id") else None,
+            tags=item.tags if hasattr(item, "tags") else "",
+            tailscale=item.tailscale if hasattr(item, "tailscale") else False,
         )
         db.add(device)
         created += 1
     db.commit()
     return {"imported": created}
+
+
+# ----------------------------- Bulk operations -----------------------------
+class BulkIds(BaseModel):
+    device_ids: list[int] = Field(min_length=1)
+
+
+class BulkUpdate(BulkIds):
+    tags: str | None = None
+    notes: str | None = None
+    os: str | None = None
+    bastion_id: int | None = None
+
+
+@router.delete("/bulk")
+def bulk_delete_devices(payload: BulkIds, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Delete multiple owned devices at once."""
+    from app.models import SessionLog
+    deleted = 0
+    for did in payload.device_ids:
+        device = db.get(Device, did)
+        if device and device.owner_id == user.id:
+            db.query(SessionLog).filter(SessionLog.device_id == device.id).delete()
+            db.delete(device)
+            deleted += 1
+    db.commit()
+    return {"deleted": deleted}
+
+
+@router.put("/bulk")
+def bulk_update_devices(payload: BulkUpdate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Apply a set of fields (tags, notes, os, bastion_id) to multiple owned devices."""
+    updated = 0
+    for did in payload.device_ids:
+        device = db.get(Device, did)
+        if device and device.owner_id == user.id:
+            if payload.tags is not None:
+                device.tags = payload.tags
+            if payload.notes is not None:
+                device.notes = payload.notes
+            if payload.os is not None:
+                device.os = payload.os
+            if payload.bastion_id is not None:
+                device.bastion_id = payload.bastion_id
+            updated += 1
+    db.commit()
+    return {"updated": updated}
 
 
 # ----------------------------- Session audit log -----------------------------
@@ -171,6 +266,7 @@ def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_curren
             "started_at": r.started_at.isoformat() if r.started_at else None,
             "ended_at": r.ended_at.isoformat() if r.ended_at else None,
             "duration_s": int((r.ended_at - r.started_at).total_seconds()) if r.ended_at and r.started_at else None,
+            "commands": r.commands or "",
         })
     return out
 

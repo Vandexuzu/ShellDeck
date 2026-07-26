@@ -83,6 +83,9 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
 
         shell = process  # SSHClientProcess: stdin/stdout are the live shell
 
+        # Buffer keystrokes to extract typed command lines for the audit log.
+        cmd_buf = ""
+
         # Read from SSH -> browser.
         async def ssh_to_ws() -> None:
             try:
@@ -98,6 +101,7 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
 
         # Read from browser -> SSH.
         async def ws_to_ssh() -> None:
+            nonlocal cmd_buf
             try:
                 while True:
                     msg = await websocket.receive_text()
@@ -110,6 +114,16 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                             pass
                     else:
                         shell.stdin.write(msg)
+                        # Record typed command lines (on Enter) for the audit trail.
+                        if "\r" in msg or "\n" in msg:
+                            cmd_buf += msg.replace("\r", "\n")
+                            while "\n" in cmd_buf:
+                                line, cmd_buf = cmd_buf.split("\n", 1)
+                                line = line.strip()
+                                if line:
+                                    entry = (log.commands + "\n" + line) if log.commands else line
+                                    log.commands = entry
+                                    db.commit()
             except WebSocketDisconnect:
                 pass
             except Exception:  # noqa: BLE001

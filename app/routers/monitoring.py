@@ -40,7 +40,7 @@ async def _collect(device: Device, db: Session) -> DeviceStatus:
             return DeviceStatus(
                 id=device.id, name=device.name, host=device.host,
                 reachable=True, cpu_load=cpu_load, mem_used_pct=mem_pct,
-                disk_used_pct=disk_pct, uptime=uptime,
+                disk_used_pct=disk_pct, uptime=uptime, tailscale=device.tailscale,
             )
         finally:
             conn.close()
@@ -49,7 +49,7 @@ async def _collect(device: Device, db: Session) -> DeviceStatus:
     except Exception as exc:  # noqa: BLE001 - report any SSH failure as unreachable
         return DeviceStatus(
             id=device.id, name=device.name, host=device.host,
-            reachable=False, message=str(exc)[:200],
+            reachable=False, message=str(exc)[:200], tailscale=device.tailscale,
         )
 
 

@@ -203,6 +203,14 @@ body {
 .device-check { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .chk { flex-direction: row !important; align-items: center; gap: 8px; color: var(--text) !important; font-size: 13px !important; }
 .id-badge { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.tag { background: var(--primary-t); color: var(--primary); border: 1px solid var(--primary); border-radius: 999px; padding: 1px 8px; font-size: 11px; }
+.bulk-edit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 8px 0; }
+.bulk-edit { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin: 8px 0; }
+.ts-badge { background: var(--primary); color: #fff; border-radius: 4px; padding: 0 5px; font-size: 10px; font-weight: 700; margin-left: 6px; }
+.ts-list { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow: auto; }
+.ts-node { border: 1px solid var(--border); border-radius: 8px; padding: 10px; cursor: pointer; }
+.ts-node:hover { border-color: var(--primary); }
 
 /* ---- Mobile: turn sidebar into a bottom nav ---- */
 @media (max-width: 768px) {
