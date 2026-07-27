@@ -1426,6 +1426,7 @@ async function loadSettings() {
     set("set-email-user", s.email_user);
     set("set-interval", s.monitor_interval);
     setCheck("set-public", s.public_dashboard);
+    setCheck("set-oidc", s.oidc_enabled);
     // Appearance: reflect saved theme.
     const themeSel = document.getElementById("set-theme");
     if (themeSel) {
@@ -1458,6 +1459,7 @@ document.getElementById("set-save").onclick = async () => {
   email_user: document.getElementById("set-email-user").value.trim(),
   monitor_interval: parseInt(document.getElementById("set-interval").value, 10) || 60,
   public_dashboard: document.getElementById("set-public").checked,
+  oidc_enabled: document.getElementById("set-oidc").checked,
   };
   const tok = document.getElementById("set-tg-token").value.trim();
   if (tok) payload.telegram_token = tok;

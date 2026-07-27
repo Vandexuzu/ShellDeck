@@ -67,6 +67,8 @@ def update_settings(
         row.monitor_interval = max(10, min(payload.monitor_interval, 3600))
     if payload.public_dashboard is not None:
         row.public_dashboard = payload.public_dashboard
+    if payload.oidc_enabled is not None:
+        row.oidc_enabled = payload.oidc_enabled
     db.commit()
     db.refresh(row)
     return row

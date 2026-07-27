@@ -119,6 +119,7 @@ class SettingsRow(Base):
     webhook_url: Mapped[str] = mapped_column(Text, default="")         # custom generic webhook (POST JSON)
     monitor_interval: Mapped[int] = mapped_column(Integer, default=60)  # seconds between checks
     public_dashboard: Mapped[bool] = mapped_column(default=False)       # allow unauth /public view
+    oidc_enabled: Mapped[bool] = mapped_column(default=False)          # enable OIDC SSO login
 
 
 class ScheduledTask(Base):

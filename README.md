@@ -142,7 +142,7 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Terminal broadcast (send a command to all open terminals)
 - [x] Audit search (filter session history by device/host/command)
 - [x] Two-factor auth (TOTP / 2FA, RFC 6238, no external dependency)
-- [ ] OIDC single sign-on (Google / GitHub / corporate) — server + login flow implemented, enable via env
+- [x] OIDC single sign-on (Google / GitHub / corporate) — server + login flow + Settings toggle (env-gated client config)
 
 ## 🤝 Contributing
 

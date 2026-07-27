@@ -205,6 +205,7 @@ class SettingsOut(BaseModel):
     webhook_url: str = ""
     monitor_interval: int
     public_dashboard: bool
+    oidc_enabled: bool
 
 
 class SettingsUpdate(BaseModel):
@@ -223,6 +224,7 @@ class SettingsUpdate(BaseModel):
     webhook_url: str | None = None
     monitor_interval: int | None = None
     public_dashboard: bool | None = None
+    oidc_enabled: bool | None = None
 
 
 # ------------------------------- Scheduled tasks ----------------------------

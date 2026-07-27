@@ -1,4 +1,5 @@
-"""One-off migration: add SessionLog.recording and User.totp_secret columns.
+"""One-off migration: add SessionLog.recording, User.totp_secret, and
+SettingsRow.oidc_enabled columns.
 
 Run once after pulling this version:
     python migrations/add_recording_column.py
@@ -11,6 +12,7 @@ db = SessionLocal()
 for table, col, ddl in [
     ("session_logs", "recording", "ALTER TABLE session_logs ADD COLUMN recording TEXT"),
     ("users", "totp_secret", "ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64)"),
+    ("settings", "oidc_enabled", "ALTER TABLE settings ADD COLUMN oidc_enabled BOOLEAN NOT NULL DEFAULT 0"),
 ]:
     cols = [c[1] for c in db.execute(text(f"PRAGMA table_info({table})")).fetchall()]
     if col not in cols:

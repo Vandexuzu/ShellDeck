@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import User
+from app.models import SettingsRow, User
 from app.security import create_access_token, hash_password
 
 router = APIRouter(prefix="/api/oidc", tags=["oidc"])
@@ -48,14 +48,21 @@ async def _discover() -> dict:
 
 
 @router.get("/enabled")
-def oidc_enabled() -> dict:
-    return {"enabled": bool(settings.oidc_enabled and settings.oidc_discovery_url)}
+def oidc_enabled(db: Session = Depends(get_db)) -> dict:
+    """OIDC login is active when an admin flips the switch in Settings AND the
+    server has a discovery URL + client credentials configured via env."""
+    row = db.get(SettingsRow, 1)
+    switch_on = bool(row and row.oidc_enabled) if row else False
+    configured = bool(settings.oidc_discovery_url and settings.oidc_client_id and settings.oidc_client_secret)
+    return {"enabled": switch_on and configured, "switch_on": switch_on, "configured": configured}
 
 
 @router.get("/login")
-async def oidc_login(request: Request) -> Response:
+async def oidc_login(request: Request, db: Session = Depends(get_db)) -> Response:
     """Begin the OIDC authorization-code (PKCE) flow. Returns a redirect."""
-    if not settings.oidc_enabled:
+    row = db.get(SettingsRow, 1)
+    switch_on = bool(row and row.oidc_enabled) if row else False
+    if not switch_on or not settings.oidc_discovery_url:
         raise HTTPException(status_code=400, detail="OIDC disabled")
     disc = await _discover()
     state = secrets.token_urlsafe(24)

@@ -257,6 +257,8 @@
           </label>
           <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10" max="3600" /></label>
           <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank" style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
+          <label class="switch-row"><span>Enable OIDC single sign-on (SSO login via your IdP)</span><input type="checkbox" id="set-oidc" /></label>
+          <p class="muted" style="font-size:12px">OIDC also requires server env vars: <code>OIDC_DISCOVERY_URL</code>, <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code>. The SSO button appears on the login page once enabled and configured.</p>
           <div class="modal-actions">
             <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Send test</span></button>
             <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
@@ -476,6 +478,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=64"></script>
+  <script src="/static/app.js?v=65"></script>
 </body>
 </html>
