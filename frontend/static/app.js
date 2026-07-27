@@ -1225,7 +1225,7 @@ function closeTab(id) {
     }
   }
   renderTabBar();
-  if (tabs.size === 0) { switchTab("devices"); showTerminalNav(false); clearSavedTabs(); }
+  if (tabs.size === 0) { showTerminalNav(false); clearSavedTabs(); switchTab("home"); }
   else saveTabs();
 }
 
@@ -1308,7 +1308,7 @@ document.getElementById("close-terminal").onclick = () => {
   // Close the active tab; if it was the last, leave the tab bar/terminal view.
   if (activeTabId) { closeTab(activeTabId); return; }
   for (const id of [...tabs.keys()]) closeTab(id);
-  switchTab("devices");
+  switchTab("home");
 };
 
 // Terminal broadcast: send a command to every open terminal pane.
