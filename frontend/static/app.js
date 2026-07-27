@@ -122,7 +122,7 @@ function switchTab(name) {
   if (name === "agents") loadAgents();
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
-  if (name === "settings") loadSettings();
+  if (name === "settings") { loadSettings(); refreshTotpStatus(); }
   if (name === "terminal") {
     // The terminal view was just shown (or re-shown) — re-fit the active
     // xterm pane so it picks up the correct dimensions after being hidden.
@@ -1177,6 +1177,24 @@ function closeActiveSplit(tabId, sp) {
   saveTabs();
 }
 
+// Send a command string to every open terminal pane (all tabs, all splits).
+function broadcastTerminals(cmd) {
+  if (!cmd) return 0;
+  let n = 0;
+  const data = cmd + "\r";
+  for (const tab of tabs.values()) {
+    for (const pane of tab.splits) {
+      try {
+        if (pane.ws && pane.ws.readyState === WebSocket.OPEN) {
+          pane.ws.send(data);
+          n++;
+        }
+      } catch (_) {}
+    }
+  }
+  return n;
+}
+
 function activateTab(id) {
   const t = tabs.get(id);
   if (!t) return;
@@ -1291,6 +1309,21 @@ document.getElementById("close-terminal").onclick = () => {
   for (const id of [...tabs.keys()]) closeTab(id);
   switchTab("devices");
 };
+
+// Terminal broadcast: send a command to every open terminal pane.
+function doBroadcast() {
+  const inp = document.getElementById("broadcast-input");
+  const cmd = (inp.value || "").trim();
+  if (!cmd) return;
+  const n = broadcastTerminals(cmd);
+  document.getElementById("broadcast-count").textContent = n ? `sent to ${n} terminal(s)` : "no open terminals";
+  showToast(n ? `Broadcast sent to ${n} terminal(s)` : "No open terminals to broadcast to", n ? "" : "error");
+  inp.value = "";
+}
+document.getElementById("broadcast-send").onclick = doBroadcast;
+document.getElementById("broadcast-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); doBroadcast(); }
+});
 
 // ----------------------------- Scheduled tasks -----------------------------
 async function loadScheduled() {
@@ -1478,6 +1511,45 @@ document.getElementById("set-theme").onchange = () => {
   applyBrandLogo(t);
   showToast("Theme: " + t, "ok");
 };
+
+// ---- 2FA (TOTP) ----
+async function refreshTotpStatus() {
+  try {
+    const s = await api("/api/auth/2fa/status");
+    const enabled = !!s.enabled;
+    document.getElementById("totp-status-text").textContent = enabled
+      ? "2FA is enabled on your account."
+      : "2FA is not enabled.";
+    document.getElementById("totp-enabled-actions").style.display = enabled ? "" : "none";
+    document.getElementById("totp-disabled-actions").style.display = enabled ? "none" : "";
+    document.getElementById("totp-setup").classList.add("hidden");
+  } catch (_) { /* ignore */ }
+}
+document.getElementById("totp-start").onclick = async () => {
+  try {
+    const d = await api("/api/auth/2fa/setup", { method: "GET" });
+    document.getElementById("totp-uri").textContent = d.otpauth_uri;
+    document.getElementById("totp-setup").classList.remove("hidden");
+    document.getElementById("totp-disabled-actions").style.display = "none";
+  } catch (e) { showToast("2FA setup failed: " + e.message, "error"); }
+};
+document.getElementById("totp-confirm").onclick = async () => {
+  const secret = (document.getElementById("totp-uri").textContent.match(/secret=([^&]+)/) || [])[1];
+  const code = document.getElementById("totp-code").value.trim();
+  if (!secret || !code) { showToast("Enter the 6-digit code", "error"); return; }
+  try {
+    await api("/api/auth/2fa/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret, code }) });
+    showToast("2FA enabled", "ok");
+    await refreshTotpStatus();
+  } catch (e) { showToast("Invalid code: " + e.message, "error"); }
+};
+document.getElementById("totp-disable").onclick = async () => {
+  try {
+    await api("/api/auth/2fa/disable", { method: "POST" });
+    showToast("2FA disabled", "ok");
+    await refreshTotpStatus();
+  } catch (e) { showToast("Failed: " + e.message, "error"); }
+};
 // Quick theme toggle in the header: dark -> light -> premium -> dark (cycle).
 document.getElementById("theme-toggle").onclick = () => {
   const cur = document.documentElement.getAttribute("data-theme") || "dark";
@@ -1517,7 +1589,8 @@ async function loadSessions() {
   const box = document.getElementById("session-list");
   box.innerHTML = "<p class='muted'>Loading…</p>";
   try {
-    const rows = await api("/api/devices/sessions");
+    const q = (document.getElementById("session-search")?.value || "").trim();
+    const rows = await api("/api/devices/sessions" + (q ? "?q=" + encodeURIComponent(q) : ""));
     if (!rows.length) { box.innerHTML = "<p class='muted'>No shell sessions recorded yet.</p>"; return; }
     box.innerHTML = `<table class="session-table"><thead><tr>
       <th>Device</th><th>Host</th><th>Started</th><th>Ended</th><th>Duration</th><th>Commands</th>
@@ -1636,5 +1709,17 @@ document.getElementById("files-device").onchange = loadFiles;
   // Register service worker for PWA installability.
   if ("serviceWorker" in navigator) {
     try { await navigator.serviceWorker.register("/static/sw.js"); } catch (_) {}
+  }
+  // Audit search: debounced live filter on the Sessions view.
+  const ss = document.getElementById("session-search");
+  if (ss) {
+    let st;
+    ss.addEventListener("input", () => {
+      clearTimeout(st);
+      st = setTimeout(() => {
+        const view = document.getElementById("view-sessions");
+        if (view && !view.classList.contains("hidden")) loadSessions();
+      }, 300);
+    });
   }
 })();

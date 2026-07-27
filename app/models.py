@@ -27,6 +27,8 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(16), default="viewer")
     is_admin: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    # TOTP secret (base32) for optional 2FA. Empty/None = 2FA disabled.
+    totp_secret: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
 
     devices: Mapped[list["Device"]] = relationship(back_populates="owner")
 

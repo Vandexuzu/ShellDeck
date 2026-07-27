@@ -32,8 +32,12 @@
       <label>Password
         <input id="a-password" name="password" type="password" autocomplete="current-password" required />
       </label>
+      <label id="totp-field" style="display:none">2FA Code
+        <input id="a-totp" name="totp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+      </label>
       <div id="auth-error" class="auth-error"></div>
       <button type="submit" id="auth-submit" class="btn btn-primary btn-block">Login</button>
+      <button type="button" id="oidc-login" class="btn btn-ghost btn-block hidden" style="margin-top:8px">Sign in with SSO</button>
     </form>
     <p class="auth-hint" id="auth-hint">Don't have an account? Switch to Register.</p>
   </div>
@@ -47,6 +51,6 @@
       } catch (_) {}
     })();
   </script>
-  <script src="/static/login.js?v=2"></script>
+  <script src="/static/login.js?v=3"></script>
 </body>
 </html>

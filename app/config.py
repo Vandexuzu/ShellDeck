@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # protection. Set to False in production and manage known_hosts instead.
     ssh_ignore_known_hosts: bool = True
 
+    # Optional OIDC single sign-on. Leave unset to disable.
+    oidc_enabled: bool = False
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_discovery_url: str = ""   # e.g. https://accounts.google.com/.well-known/openid-configuration
+    oidc_scopes: str = "openid email profile"
+
 
 settings = Settings()
 

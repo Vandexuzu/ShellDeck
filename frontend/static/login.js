@@ -45,10 +45,13 @@ form.onsubmit = async (e) => {
     const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/register";
     let res;
     if (mode === "login") {
+      const body = new URLSearchParams({ username, password });
+      const totp = document.getElementById("a-totp").value.trim();
+      if (totp) body.set("scope", totp); // 2FA code rides in OAuth2 `scope`
       res = await fetch(API + endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ username, password }),
+        body,
       });
     } else {
       res = await fetch(API + endpoint, {
@@ -56,6 +59,11 @@ form.onsubmit = async (e) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username, password }),
       });
+    }
+    if (res.status === 401 && res.headers.get("X-ShellDeck-Need-Totp")) {
+      document.getElementById("totp-field").style.display = "";
+      document.getElementById("a-totp").focus();
+      throw new Error("Enter your 2FA code");
     }
     if (!res.ok) {
       let msg = "Authentication failed";
@@ -72,6 +80,31 @@ form.onsubmit = async (e) => {
     submitBtn.disabled = false;
   }
 };
+
+// OIDC callback support: the callback page redirects to /#token=... — capture it.
+(function () {
+  if (location.hash.startsWith("#token=")) {
+    const t = location.hash.slice("#token=".length);
+    if (t) {
+      localStorage.setItem("shelldeck_token", t);
+      history.replaceState(null, "", "/");
+      location.href = "/";
+    }
+  }
+})();
+
+// Show OIDC SSO button if configured on the server.
+(async () => {
+  try {
+    const r = await fetch(API + "/api/oidc/enabled");
+    const d = await r.json();
+    if (d && d.enabled) {
+      const btn = document.getElementById("oidc-login");
+      btn.classList.remove("hidden");
+      btn.onclick = () => { location.href = API + "/api/oidc/login"; };
+    }
+  } catch (_) { /* OIDC not available */ }
+})();
 
 function setMode(m) {
   mode = m;

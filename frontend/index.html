@@ -197,6 +197,9 @@
       <!-- Session history view -->
       <div id="view-sessions" class="hidden">
         <div class="content-head"><h1>Session History</h1></div>
+        <div class="toolbar-row">
+          <input id="session-search" class="input-sm" type="search" placeholder="Search device, host, user, or command…" style="flex:1;min-width:0" />
+        </div>
         <div id="session-list" class="session-list"></div>
       </div>
 
@@ -257,6 +260,25 @@
           <div class="modal-actions">
             <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Send test</span></button>
             <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+          </div>
+        </div>
+
+        <div class="settings-box" style="margin-top:24px">
+          <h3>Two-Factor Authentication (TOTP)</h3>
+          <p class="muted" id="totp-status-text">Checking…</p>
+          <div id="totp-setup" class="hidden">
+            <p>Scan this with Google Authenticator / FreeOTP, then enter the 6-digit code to enable:</p>
+            <pre id="totp-uri" style="word-break:break-all;background:var(--surface-2,#11161d);padding:8px;border-radius:8px;font-size:12px"></pre>
+            <label>6-digit code <input id="totp-code" class="input" inputmode="numeric" placeholder="123456" /></label>
+            <div class="modal-actions">
+              <button id="totp-confirm" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Enable 2FA</span></button>
+            </div>
+          </div>
+          <div id="totp-enabled-actions">
+            <button id="totp-disable" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Disable 2FA</span></button>
+          </div>
+          <div id="totp-disabled-actions">
+            <button id="totp-start" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Enable 2FA</span></button>
           </div>
         </div>
 
@@ -353,6 +375,12 @@
 
       <div id="view-terminal" class="hidden">
         <div class="terminal-head">
+          <div class="terminal-broadcast-bar" id="broadcast-bar">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M21 12a9 9 0 0 1-2.64 6.36M3 12a9 9 0 0 1 2.64-6.36"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+            <input id="broadcast-input" class="input-sm" type="text" placeholder="Broadcast command to all open terminals…" />
+            <button id="broadcast-send" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg><span>Send</span></button>
+            <span id="broadcast-count" class="muted"></span>
+          </div>
           <div class="tab-bar" id="tab-bar"></div>
           <button id="close-terminal" class="btn btn-ghost btn-icon" title="Close terminal"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
@@ -447,6 +475,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=60"></script>
+  <script src="/static/app.js?v=62"></script>
 </body>
 </html>

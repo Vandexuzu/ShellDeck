@@ -40,6 +40,42 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
+# ------------------------------- TOTP (2FA) ---------------------------------
+# RFC 6238 implementation using only the stdlib (no external dependency).
+import base64 as _b64
+import hmac as _hmac
+import struct as _struct
+import time as _time
+
+_TOTP_STEP = 30
+_TOTP_DIGITS = 6
+
+
+def generate_totp_secret() -> str:
+    """Return a new base32-encoded TOTP secret (no padding)."""
+    return _b64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+
+
+def _totp_at(secret: str, counter: int) -> str:
+    key = _b64.b32decode(secret + "=" * ((8 - len(secret) % 8) % 8))
+    msg = _struct.pack(">Q", counter)
+    h = _hmac.new(key, msg, hashlib.sha1).digest()
+    offset = h[-1] & 0xF
+    code = (_struct.unpack(">I", h[offset:offset + 4])[0] & 0x7FFFFFFF) % (10 ** _TOTP_DIGITS)
+    return str(code).zfill(_TOTP_DIGITS)
+
+
+def verify_totp(secret: str, token: str) -> bool:
+    """Check a 6-digit TOTP token allowing +/-1 step of clock skew."""
+    if not secret or not token:
+        return False
+    token = token.strip().replace(" ", "")
+    if not token.isdigit() or len(token) != _TOTP_DIGITS:
+        return False
+    counter = int(_time.time() // _TOTP_STEP)
+    return any(_totp_at(secret, counter + i) == token for i in (-1, 0, 1))
+
+
 # ------------------------------- JWT tokens ---------------------------------
 def create_access_token(user_id: int) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)

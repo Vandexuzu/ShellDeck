@@ -309,26 +309,41 @@ def bulk_update_devices(payload: BulkUpdate, db: Session = Depends(get_db), user
 
 # ----------------------------- Session audit log -----------------------------
 @router.get("/sessions")
-def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[dict]:
-    """List shell sessions (audit trail) for the current user's devices."""
+def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_current_user), q: str | None = None) -> list[dict]:
+    """List shell sessions (audit trail) for the current user's devices.
+
+    If `q` is provided, filter by device name/host, username, or recorded command text.
+    """
     from app.models import SessionLog
     vis = _visible_devices(db, user)
     visible_ids = {d.id for d in db.scalars(vis).all()}
-    rows = (
-        db.query(SessionLog)
-        .filter(SessionLog.device_id.in_(visible_ids))
-        .order_by(SessionLog.started_at.desc())
-        .limit(200)
-        .all()
-    )
+    query = db.query(SessionLog).filter(SessionLog.device_id.in_(visible_ids))
+    if q:
+        like = f"%{q.strip()}%"
+        query = query.filter(
+            (SessionLog.commands.ilike(like)) |
+            (SessionLog.transcript.ilike(like))
+        )
+    rows = query.order_by(SessionLog.started_at.desc()).limit(500).all()
     out = []
+    # Cache device names/hosts so we can also match on them without extra queries.
+    dev_cache = {}
     for r in rows:
-        dev = db.get(Device, r.device_id)
+        dev = dev_cache.get(r.device_id)
+        if dev is None:
+            dev = db.get(Device, r.device_id)
+            dev_cache[r.device_id] = dev
+        dev_name = dev.name if dev else "(deleted)"
+        dev_host = dev.host if dev else ""
+        if q:
+            needle = q.strip().lower()
+            if needle not in (dev_name + " " + dev_host + " " + (r.commands or "") + " " + (r.transcript or "")).lower():
+                continue
         out.append({
             "id": r.id,
             "device_id": r.device_id,
-            "device_name": dev.name if dev else "(deleted)",
-            "device_host": dev.host if dev else "",
+            "device_name": dev_name,
+            "device_host": dev_host,
             "started_at": r.started_at.isoformat() if r.started_at else None,
             "ended_at": r.ended_at.isoformat() if r.ended_at else None,
             "duration_s": int((r.ended_at - r.started_at).total_seconds()) if r.ended_at and r.started_at else None,

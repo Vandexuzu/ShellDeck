@@ -1,18 +1,22 @@
-"""One-off migration: add SessionLog.recording column for TTY playback.
+"""One-off migration: add SessionLog.recording and User.totp_secret columns.
 
 Run once after pulling this version:
     python migrations/add_recording_column.py
-Safe to re-run (checks for existing column first).
+Safe to re-run (checks for existing columns first).
 """
 from app.db import SessionLocal
 from sqlalchemy import text
 
 db = SessionLocal()
-cols = [c[1] for c in db.execute(text("PRAGMA table_info(session_logs)")).fetchall()]
-if "recording" not in cols:
-    db.execute(text("ALTER TABLE session_logs ADD COLUMN recording TEXT"))
-    db.commit()
-    print("Added 'recording' column to session_logs.")
-else:
-    print("'recording' column already present — nothing to do.")
+for table, col, ddl in [
+    ("session_logs", "recording", "ALTER TABLE session_logs ADD COLUMN recording TEXT"),
+    ("users", "totp_secret", "ALTER TABLE users ADD COLUMN totp_secret VARCHAR(64)"),
+]:
+    cols = [c[1] for c in db.execute(text(f"PRAGMA table_info({table})")).fetchall()]
+    if col not in cols:
+        db.execute(text(ddl))
+        db.commit()
+        print(f"Added '{col}' column to {table}.")
+    else:
+        print(f"'{col}' column already present in {table} — nothing to do.")
 db.close()

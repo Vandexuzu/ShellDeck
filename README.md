@@ -139,8 +139,10 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Tab persistence across reload
 - [x] File manager over agent relay (NAT devices)
 - [x] Session recording playback (asciinema-style TTY replay)
-- [ ] 2FA / OIDC
-- [ ] Prometheus metrics export
+- [x] Terminal broadcast (send a command to all open terminals)
+- [x] Audit search (filter session history by device/host/command)
+- [x] Two-factor auth (TOTP / 2FA, RFC 6238, no external dependency)
+- [ ] OIDC single sign-on (Google / GitHub / corporate) — server + login flow implemented, enable via env
 
 ## 🤝 Contributing
 
