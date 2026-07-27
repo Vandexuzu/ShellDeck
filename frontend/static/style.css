@@ -364,7 +364,14 @@ body {
 .user-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 
 /* settings */
-.settings-box { padding: 18px; max-width: 460px; display: flex; flex-direction: column; gap: 14px; }
+.settings-box { padding: 22px; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Give the Settings view some breathing room so boxes don't hug the edges
+   (especially on mobile). Scoped to #view-settings to avoid touching other views. */
+#view-settings.content { padding: 20px 18px 40px; }
+@media (max-width: 640px) {
+  #view-settings.content { padding: 16px 14px 32px; }
+}
 .settings-box h3 { margin: 0 0 4px; }
 .settings-box label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .switch-row { flex-direction: row !important; align-items: center; justify-content: space-between; }

@@ -33,6 +33,47 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
 
 
+# ----------------------------- Login rate limiting -------------------------
+# In-memory, per-client-IP throttling on /api/auth/login to blunt brute-force.
+# Self-hosted single instance: good enough; swap for Redis if you scale out.
+from collections import defaultdict
+from time import time
+
+_LOGIN_FAILS: dict[str, list[float]] = defaultdict(list)
+_LOGIN_WINDOW = 900      # 15 minutes
+_LOGIN_MAX_FAILS = 10    # lock out after this many failures in the window
+
+
+def _client_ip(request) -> str:
+    fwd = request.headers.get("X-Forwarded-For")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def login_rate_limit(request, call_next):
+    if request.url.path == "/api/auth/login" and request.method == "POST":
+        ip = _client_ip(request)
+        now = time()
+        # Drop failures older than the window.
+        _LOGIN_FAILS[ip] = [t for t in _LOGIN_FAILS[ip] if now - t < _LOGIN_WINDOW]
+        if len(_LOGIN_FAILS[ip]) >= _LOGIN_MAX_FAILS:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many failed login attempts. Try again later."},
+            )
+        response = await call_next(request)
+        # A 401/403 counts as a failed attempt; any other status resets the counter.
+        if response.status_code in (401, 403):
+            _LOGIN_FAILS[ip].append(now)
+        else:
+            _LOGIN_FAILS[ip].clear()
+        return response
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def no_cache_static(request, call_next):
     response = await call_next(request)

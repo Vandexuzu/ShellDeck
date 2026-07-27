@@ -23,6 +23,29 @@ def init_db() -> None:
     import app.models  # noqa: F401  (side-effect: registers models)
 
     Base.metadata.create_all(bind=engine)
+    # Idempotent column migration for existing databases (does not drop data).
+    # create_all() won't add columns to already-created tables, so new columns
+    # added in later releases (e.g. users.totp_secret) must be added explicitly
+    # or existing installs break / silently lose data.
+    _migrate_columns()
+
+
+def _migrate_columns() -> None:
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    with SessionLocal() as db:
+        # (table, column, DDL) — only added if missing.
+        expected = [
+            ("users", "totp_secret", "VARCHAR(64)"),
+        ]
+        for table, col, ddl in expected:
+            if table not in insp.get_table_names():
+                continue
+            cols = {c["name"] for c in insp.get_columns(table)}
+            if col not in cols:
+                db.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {ddl}"))
+        db.commit()
 
 
 def get_db() -> Generator[Session, None, None]:

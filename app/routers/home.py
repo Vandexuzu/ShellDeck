@@ -29,9 +29,11 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
 
     # --- A: stat cards ---------------------------------------------------
     total = len(devices)
-    # Lightweight reachability: probe in parallel (reuse monitor collector).
+    # Lightweight reachability: probe ALL visible devices in parallel (reuse
+    # monitor collector). No artificial 10-device cap — every device counts
+    # toward the online stat and the health list.
     if devices:
-        statuses = await asyncio.gather(*[_collect(d, db) for d in devices[:10]])
+        statuses = await asyncio.gather(*[_collect(d, db) for d in devices])
     else:
         statuses = []
     online = sum(1 for s in statuses if s.reachable)
