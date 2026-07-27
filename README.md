@@ -21,13 +21,14 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 |---|---|
 | 🖥 **Devices** | Add hosts (password / SSH-key), tag them, filter by tag, Tailscale auto-discover |
 | 📊 **Live monitor** | CPU / memory / disk / uptime over SSH; cards go red when down |
-| 💻 **In-browser shell** | Real PTY terminal (xterm.js ⇄ asyncssh over WebSocket) |
-| 📁 **SFTP manager** | Browse / upload / download / edit / delete remote files |
+| 💻 **In-browser shell** | Real PTY terminal (xterm.js ⇄ asyncssh over WebSocket); multi-tab, split panes, survives reload |
+| 📁 **SFTP manager** | Browse / upload / download / edit / delete remote files; filter; drag-and-drop; upload-from-URL |
 | ⚡ **Bulk runner** | Run one command on many devices; bulk-edit or bulk-delete |
 | 📝 **Snippets** | Save reusable commands, run on any device |
 | 🐳 **Docker** | Start / stop / restart / logs / exec into containers |
 | ⏰ **Scheduler** | Recurring or run-once jobs per device |
 | 🔔 **Alerts** | Telegram · Discord · ntfy · Gotify · Slack · Email · webhook |
+| 🕸 **Agent relay** | Reach devices behind NAT/firewall — full shell **and** file manager over an outbound WebSocket |
 | 🌐 **Public dashboard** | Read-only status page at `/public` (no login) |
 | 🪜 **Bastion** | Tunnel SSH through a jump host automatically |
 | 📲 **PWA** | Install to phone home screen; mobile UI (cards + bottom nav) |
@@ -77,17 +78,19 @@ location / {
 
 ## 🧱 Architecture
 
-```
+```text
 Browser (xterm.js + vanilla JS, PWA)
    │  HTTPS / WebSocket
    ▼
-FastAPI ── asyncssh ──► your devices
+FastAPI ── asyncssh ──► your devices (agentless)
    ├─ /api/terminal/{id}   interactive shell
    ├─ /api/bulk            parallel SSH
    ├─ /api/docker          remote docker CLI
+   ├─ /api/files/{id}      SFTP browse/upload/download
+   ├─ /api/agents/ws       outbound tunnel from NAT devices
    └─ background loops: monitor (alerts) + scheduler (jobs)
    ▼
-SQLite  (users · devices · snippets · scheduled_tasks · session_logs · settings)
+SQLite  (users · devices · snippets · scheduled_tasks · session_logs · settings · agents)
 ```
 
 - **Backend:** FastAPI · asyncssh · SQLAlchemy · SQLite
@@ -131,6 +134,10 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 
 - [x] Cron-expression schedules
 - [x] WebSocket agents (reverse tunnel for NAT devices)
+- [x] Multi-tab terminal with device picker
+- [x] Split terminal panes
+- [x] Tab persistence across reload
+- [x] File manager over agent relay (NAT devices)
 - [ ] Session recording playback (asciinema-style)
 - [ ] 2FA / OIDC
 - [ ] Prometheus metrics export
