@@ -217,7 +217,7 @@ class FsRequest(BaseModel):
     data: str | None = None
 
 
-async def agent_fs_relay(device_id: int, req: FsRequest, db: Session) -> dict:
+async def agent_fs_relay(device_id: int, req: FsRequest, db: Session) -> object:
     """Relay a file-system operation to the device's connected agent and wait
     for the result. Raises HTTPException on agent error or timeout."""
     token = device_agent_token(db, device_id)
