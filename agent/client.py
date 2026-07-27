@@ -172,11 +172,81 @@ class AgentClient:
                 if cid in self.sessions:
                     return
                 self.sessions[cid] = Session(ws, cid, msg.get("cols", 80), msg.get("rows", 24), msg.get("data", ""))
+        elif t == "fs":
+            self._handle_fs(ws, msg)
         elif cid is not None:
             with self.lock:
                 sess = self.sessions.get(cid)
             if sess is not None:
                 sess.queue.put(msg)
+
+    # ----- File-system relay (for devices behind NAT reached via agent) -----
+    def _handle_fs(self, ws, msg):
+        import os as _os
+        import shutil
+        import stat as _stat
+
+        cid = msg.get("cid")
+        op = msg.get("op")
+        path = msg.get("path", "/")
+        try:
+            result = None
+            if op == "list":
+                entries = []
+                for name in sorted(_os.listdir(path)):
+                    full = _os.path.join(path.rstrip("/"), name)
+                    try:
+                        st = _os.stat(full)
+                        is_dir = _stat.S_ISDIR(st.st_mode)
+                    except OSError:
+                        is_dir = False
+                        st = None
+                    entries.append({
+                        "name": name,
+                        "path": full,
+                        "is_dir": is_dir,
+                        "size": st.st_size if st else 0,
+                        "mtime": int(st.st_mtime) if st else 0,
+                    })
+                entries.sort(key=lambda e: (not e["is_dir"], e["name"].lower()))
+                result = entries
+            elif op == "read":
+                with open(path, "r", errors="replace") as f:
+                    data = f.read(2_000_000)
+                result = {"content": data}
+            elif op == "read_b64":
+                with open(path, "rb") as f:
+                    raw = f.read(2_000_000)
+                import base64 as _b64
+                result = {"content": _b64.b64encode(raw).decode("ascii")}
+            elif op == "write":
+                content = msg.get("data", "")
+                with open(path, "w") as f:
+                    f.write(content)
+                result = {"written": len(content)}
+            elif op == "write_b64":
+                import base64 as _b64
+                raw = _b64.b64decode(msg.get("data", ""))
+                with open(path, "wb") as f:
+                    f.write(raw)
+                result = {"written": len(raw)}
+            elif op == "mkdir":
+                _os.makedirs(path, exist_ok=True)
+                result = {"created": True}
+            elif op == "delete":
+                if _os.path.isdir(path) and not _os.path.islink(path):
+                    shutil.rmtree(path)
+                else:
+                    _os.remove(path)
+                result = {"deleted": True}
+            elif op == "stat":
+                st = _os.stat(path)
+                result = {"size": st.st_size}
+            else:
+                raise ValueError(f"unknown fs op: {op}")
+            ws.send_text(json.dumps({"t": "fs", "cid": cid, "ok": True, "result": result}))
+        except Exception as exc:
+            ws.send_text(json.dumps({"t": "fs", "cid": cid, "ok": False, "err": f"{type(exc).__name__}: {exc}"}))
 
     def run(self) -> None:
         while True:

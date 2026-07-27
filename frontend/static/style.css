@@ -199,6 +199,13 @@ body {
 .terminal-pane { position: absolute; inset: 0; display: none; padding: 8px; }
 .terminal-pane.active { display: block; }
 .terminal-pane .terminal { height: 100%; }
+.terminal-split { display: flex; gap: 8px; height: 100%; width: 100%; }
+.terminal-split .terminal-col { position: relative; flex: 1 1 0; min-width: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; padding: 8px; }
+.terminal-split .terminal-col .terminal { height: 100%; }
+.terminal-split .terminal-col .split-close { position: absolute; top: 4px; right: 4px; z-index: 5; opacity: .55; }
+.terminal-split .terminal-col .split-close:hover { opacity: 1; }
+.terminal-toolbar { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.files-list.drag-over { outline: 2px dashed var(--accent, #3882F6); outline-offset: -4px; background: rgba(56,130,246,.06); }
 .tab-bar { display: flex; align-items: stretch; gap: 4px; overflow-x: auto; flex: 1; min-width: 0; padding: 4px 0; -webkit-overflow-scrolling: touch; }
 .tab { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); cursor: pointer; font-size: 13px; white-space: nowrap; max-width: 200px; flex: none; transition: background .15s, border-color .15s, box-shadow .15s; }
 .tab .tab-title { overflow: hidden; text-overflow: ellipsis; }

@@ -127,7 +127,7 @@ function switchTab(name) {
     // The terminal view was just shown (or re-shown) — re-fit the active
     // xterm pane so it picks up the correct dimensions after being hidden.
     const t = tabs.get(activeTabId);
-    if (t) { try { t.fit.fit(); } catch (_) {} try { t.term.focus(); } catch (_) {} }
+    if (t) { fitTab(t); try { t.splits[t.activeSplit || 0].term.focus(); } catch (_) {} }
   }
 }
 
@@ -425,6 +425,20 @@ document.getElementById("import-save").onclick = async () => {
 
 // ----------------------------- Files (SFTP) --------------------------------
 let filesCurrent = { deviceId: null, path: "/" };
+function currentFilesDevice() {
+  return currentDevices.find(d => d.id === filesCurrent.deviceId) || null;
+}
+function filesApiBase() {
+  const dev = currentFilesDevice();
+  return (dev && dev.has_agent) ? `/api/agents/fs/${filesCurrent.deviceId}` : `/api/files/${filesCurrent.deviceId}`;
+}
+async function fsOp(op, path, data) {
+  const dev = currentFilesDevice();
+  if (dev && dev.has_agent) {
+    return await api(filesApiBase(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op, path, data }) });
+  }
+  return null; // caller falls back to direct SFTP endpoint
+}
 function refreshFilesDeviceSelect() {
   const sel = document.getElementById("files-device");
   sel.innerHTML = "";
@@ -450,33 +464,77 @@ async function listFiles(path) {
   const list = document.getElementById("files-list");
   list.innerHTML = "<p class='muted'>Loading…</p>";
   try {
-    const entries = await api(`/api/files/${filesCurrent.deviceId}/browse?path=${encodeURIComponent(path)}`);
+    const dev = currentFilesDevice();
+    let entries;
+    if (dev && dev.has_agent) {
+      entries = await fsOp("list", path);
+    } else {
+      entries = await api(`/api/files/${filesCurrent.deviceId}/browse?path=${encodeURIComponent(path)}`);
+    }
     filesCurrent.path = path;
     document.getElementById("files-path").textContent = path;
-    const rows = entries.map(e => `
+    renderFileRows(entries);
+    const search = document.getElementById("files-search");
+    if (search) search.oninput = () => renderFileRows(entries);
+  } catch (e) { list.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
+}
+function renderFileRows(entries) {
+  const list = document.getElementById("files-list");
+  const q = (document.getElementById("files-search").value || "").toLowerCase().trim();
+  const filtered = q ? entries.filter(e => e.name.toLowerCase().includes(q)) : entries;
+  const rows = filtered.map(e => `
       <div class="file-row ${e.is_dir ? "is-dir" : ""}" data-path="${escapeHtml(e.path)}" data-dir="${e.is_dir}">
         <span class="file-ico">${e.is_dir ? icon("folder") : icon("file")}</span>
         <span class="file-name">${escapeHtml(e.name)}</span>
         <span class="file-size">${e.is_dir ? "" : (e.size + " B")}</span>
         <span class="file-acts">
           ${e.is_dir ? "" : `<button class="btn btn-ghost btn-icon-xs" data-edit-file="${escapeHtml(e.path)}" title="Edit file">${icon("edit")}</button>`}
+          ${e.is_dir ? "" : `<button class="btn btn-ghost btn-icon-xs" data-down-file="${escapeHtml(e.path)}" title="Download">${icon("download")}</button>`}
           <button class="btn btn-danger btn-icon-xs" data-del-file="${escapeHtml(e.path)}" title="Delete">${icon("trash")}</button>
         </span>
       </div>`).join("");
-    list.innerHTML = rows || "<p class='muted'>Empty folder.</p>";
-    list.querySelectorAll(".file-row").forEach(r => {
-      r.onclick = (ev) => {
-        if (ev.target.closest("[data-del-file]") || ev.target.closest("[data-edit-file]")) return;
-        if (r.dataset.dir === "true") listFiles(r.dataset.path);
-      };
-    });
-    list.querySelectorAll("[data-edit-file]").forEach(b => b.onclick = () => openFileEditor(b.dataset.editFile));
-    list.querySelectorAll("[data-del-file]").forEach(b => b.onclick = async () => {
-      if (!confirm("Delete " + b.dataset.delFile + "?")) return;
-      await api(`/api/files/${filesCurrent.deviceId}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: b.dataset.delFile }) });
+  list.innerHTML = rows || "<p class='muted'>No matching files.</p>";
+  list.querySelectorAll(".file-row").forEach(r => {
+    r.onclick = (ev) => {
+      if (ev.target.closest("[data-del-file]") || ev.target.closest("[data-edit-file]")) return;
+      if (r.dataset.dir === "true") listFiles(r.dataset.path);
+    };
+    const ef = r.querySelector("[data-edit-file]"); if (ef) ef.onclick = () => openFileEditor(ef.dataset.editFile);
+    const df = r.querySelector("[data-down-file]"); if (df) df.onclick = async () => {
+      try {
+        const dev = currentFilesDevice();
+        if (dev && dev.has_agent) {
+          const r2 = await fsOp("read_b64", df.dataset.downFile);
+          const bin = atob(r2.content);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          const blob = new Blob([bytes]);
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = df.dataset.downFile.split("/").pop() || "download";
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(a.href);
+        } else {
+          const url = `${API}/api/files/${filesCurrent.deviceId}/download?path=${encodeURIComponent(df.dataset.downFile)}`;
+          const res = await fetch(url, { headers: authHeaders() });
+          if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.detail || res.statusText); }
+          const blob = await res.blob();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = df.dataset.downFile.split("/").pop() || "download";
+          document.body.appendChild(a); a.click(); a.remove();
+          URL.revokeObjectURL(a.href);
+        }
+      } catch (e) { showToast("Download failed: " + e.message, "error"); }
+    };
+    const dl = r.querySelector("[data-del-file]"); if (dl) dl.onclick = async () => {
+      if (!confirm("Delete " + dl.dataset.delFile + "?")) return;
+      const dev = currentFilesDevice();
+      if (dev && dev.has_agent) await fsOp("delete", dl.dataset.delFile);
+      else await api(`/api/files/${filesCurrent.deviceId}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: dl.dataset.delFile }) });
       listFiles(filesCurrent.path);
-    });
-  } catch (e) { list.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
+    };
+  });
 }
 document.getElementById("files-up").onclick = () => {
   const p = filesCurrent.path.replace(/\/$/, "");
@@ -487,28 +545,69 @@ document.getElementById("files-mkdir").onclick = async () => {
   const name = prompt("Folder name:");
   if (!name) return;
   const path = (filesCurrent.path.replace(/\/$/, "") + "/" + name);
-  await api(`/api/files/${filesCurrent.deviceId}/mkdir`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+  const dev = currentFilesDevice();
+  if (dev && dev.has_agent) await fsOp("mkdir", path);
+  else await api(`/api/files/${filesCurrent.deviceId}/mkdir`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
   listFiles(filesCurrent.path);
 };
 document.getElementById("files-newfile").onclick = () => openFileEditor(null);
 document.getElementById("files-upload").onclick = () => document.getElementById("files-upload-input").click();
-document.getElementById("files-upload-input").onchange = async (e) => {
-  const files = [...e.target.files];
-  if (!files.length) return;
-  if (!filesCurrent.deviceId) { showToast("Select a device first", "error"); e.target.value = ""; return; }
+async function uploadFiles(files) {
+  if (!files || !files.length) return;
+  if (!filesCurrent.deviceId) { showToast("Select a device first", "error"); return; }
+  const dev = currentFilesDevice();
+  const base = filesCurrent.path.replace(/\/$/, "");
   for (const f of files) {
     try {
-      const fd = new FormData();
-      fd.append("file", f);
-      fd.append("path", filesCurrent.path);
-      await api(`/api/files/${filesCurrent.deviceId}/upload`, { method: "POST", body: fd });
+      if (dev && dev.has_agent) {
+        const buf = await f.arrayBuffer();
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
+        const dest = (base ? base + "/" : "/") + f.name;
+        await fsOp("write_b64", dest, b64);
+      } else {
+        const fd = new FormData();
+        fd.append("file", f);
+        fd.append("path", filesCurrent.path);
+        await api(`/api/files/${filesCurrent.deviceId}/upload`, { method: "POST", body: fd });
+      }
       showToast(`Uploaded ${f.name}`, "ok");
     } catch (err) {
       showToast(`Upload failed: ${f.name} — ${err.message}`, "error");
     }
   }
-  e.target.value = "";
   listFiles(filesCurrent.path);
+}
+document.getElementById("files-upload-input").onchange = async (e) => {
+  const files = [...e.target.files];
+  e.target.value = "";
+  await uploadFiles(files);
+};
+// Drag & drop upload onto the file list.
+(function setupDragDrop() {
+  const list = document.getElementById("files-list");
+  if (!list) return;
+  let depth = 0;
+  list.addEventListener("dragenter", (e) => { e.preventDefault(); depth++; list.classList.add("drag-over"); });
+  list.addEventListener("dragover", (e) => { e.preventDefault(); });
+  list.addEventListener("dragleave", (e) => { depth--; if (depth <= 0) { depth = 0; list.classList.remove("drag-over"); } });
+  list.addEventListener("drop", (e) => {
+    e.preventDefault(); depth = 0; list.classList.remove("drag-over");
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) uploadFiles([...files]);
+  });
+})();
+document.getElementById("files-upload-link").onclick = async () => {
+  if (!filesCurrent.deviceId) { showToast("Select a device first", "error"); return; }
+  const url = prompt("Download file from URL and upload to this device:\n(Paste direct file link)");
+  if (!url) return;
+  try {
+    const fd = new FormData();
+    fd.append("url", url);
+    fd.append("path", filesCurrent.path);
+    await api(`/api/files/${filesCurrent.deviceId}/upload-link`, { method: "POST", body: fd });
+    showToast("Uploaded from URL", "ok");
+    listFiles(filesCurrent.path);
+  } catch (err) { showToast("Upload-link failed: " + err.message, "error"); }
 };
 async function openFileEditor(path) {
   const box = document.getElementById("file-editor");
@@ -517,7 +616,10 @@ async function openFileEditor(path) {
   document.getElementById("file-editor-content").value = "";
   if (path) {
     try {
-      const data = await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+      const dev = currentFilesDevice();
+      const data = dev && dev.has_agent
+        ? await fsOp("read", path)
+        : await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
       document.getElementById("file-editor-content").value = data.content;
     } catch (e) { showToast(e.message, "error"); }
   }
@@ -525,7 +627,9 @@ async function openFileEditor(path) {
     const content = document.getElementById("file-editor-content").value;
     const target = path || (filesCurrent.path.replace(/\/$/, "") + "/" + prompt("New file name:"));
     if (!target) return;
-    await api(`/api/files/${filesCurrent.deviceId}/write`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target, content }) });
+    const dev = currentFilesDevice();
+    if (dev && dev.has_agent) await fsOp("write", target, content);
+    else await api(`/api/files/${filesCurrent.deviceId}/write`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target, content }) });
     box.classList.add("hidden");
     listFiles(filesCurrent.path);
     showToast("Saved", "ok");
@@ -933,6 +1037,13 @@ function renderTabBar() {
   add.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
   add.onclick = (e) => { e.stopPropagation(); showDevicePicker(add); };
   bar.appendChild(add);
+
+  const splitBtn = document.createElement("div");
+  splitBtn.className = "tab tab-split";
+  splitBtn.title = "Split current terminal";
+  splitBtn.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>';
+  splitBtn.onclick = (e) => { e.stopPropagation(); splitActivePane(); };
+  bar.appendChild(splitBtn);
 }
 
 function activateTab(id) {
@@ -946,24 +1057,13 @@ function activateTab(id) {
   try { t.term.focus(); } catch (_) {}
 }
 
-function openTerminal(deviceId, title, initialCommand, isClone) {
-  if (!isClone && tabs.size >= MAX_TABS) {
-    showToast(`Max ${MAX_TABS} tabs open. Close one first.`, "error");
-    return;
-  }
-  if (tabs.size >= MAX_TABS) {
-    showToast(`Max ${MAX_TABS} tabs open. Close one first.`, "error");
-    return;
-  }
-  switchTab("terminal");
-  const id = "tab" + (++tabSeq);
-  const pane = document.createElement("div");
-  pane.className = "terminal-pane";
-  pane.id = id;
+// Create one terminal column (xterm + websocket) inside a tab's pane element.
+function createPane(tabEl, deviceId, initialCommand) {
+  const col = document.createElement("div");
+  col.className = "terminal-col";
   const termEl = document.createElement("div");
   termEl.className = "terminal";
-  pane.appendChild(termEl);
-  document.getElementById("terminals").appendChild(pane);
+  col.appendChild(termEl);
 
   const term = new Terminal({ cursorBlink: true, theme: { background: "#000000" } });
   const fit = new FitAddon.FitAddon();
@@ -985,27 +1085,116 @@ function openTerminal(deviceId, title, initialCommand, isClone) {
 
   const onResize = () => { try { fit.fit(); } catch (_) {} };
   window.addEventListener("resize", onResize);
+  const rec = { deviceId, term, fit, ws, el: col, onResize };
+  term._paneRec = rec;
+  col._paneRec = rec;
+  tabEl.appendChild(col);
+  return rec;
+}
 
-  const rec = { id, deviceId, term, fit, ws, el: pane, onResize, deviceName: title, title: (title || ("#" + deviceId)) + (tabs.size ? "" : "") };
-  // Label: device name (+ host) for the first tab; clones get a numeric suffix.
+function layoutSplits(tab) {
+  const pane = tab.el;
+  // Remove existing split wrappers/columns.
+  [...pane.querySelectorAll(".terminal-split, .terminal-col")].forEach(n => n.remove());
+  if (tab.splits.length === 1) {
+    pane.appendChild(tab.splits[0].el);
+  } else {
+    const wrap = document.createElement("div");
+    wrap.className = "terminal-split";
+    for (const sp of tab.splits) {
+      const close = document.createElement("button");
+      close.className = "btn btn-ghost btn-icon-xs split-close";
+      close.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      close.onclick = () => closeActiveSplit(tab.id, sp);
+      sp.el.appendChild(close);
+      wrap.appendChild(sp.el);
+    }
+    pane.appendChild(wrap);
+  }
+}
+
+function fitTab(tab) {
+  for (const sp of tab.splits) { try { sp.fit.fit(); } catch (_) {} }
+}
+
+function openTerminal(deviceId, title, initialCommand, isClone) {
+  if (!isClone && tabs.size >= MAX_TABS) {
+    showToast(`Max ${MAX_TABS} tabs open. Close one first.`, "error");
+    return;
+  }
+  if (tabs.size >= MAX_TABS) {
+    showToast(`Max ${MAX_TABS} tabs open. Close one first.`, "error");
+    return;
+  }
+  switchTab("terminal");
+  const id = "tab" + (++tabSeq);
+  const pane = document.createElement("div");
+  pane.className = "terminal-pane";
+  pane.id = id;
+  document.getElementById("terminals").appendChild(pane);
+
   const baseTitle = title || ("Device #" + deviceId);
   const countForDevice = [...tabs.values()].filter(x => x.deviceId === deviceId).length;
-  rec.title = countForDevice ? `${baseTitle} (${countForDevice + 1})` : baseTitle;
+  const label = countForDevice ? `${baseTitle} (${countForDevice + 1})` : baseTitle;
+
+  const rec = { id, deviceId, splits: [], el: pane, activeSplit: 0, title: label, deviceName: title };
+  const paneRec = createPane(pane, deviceId, initialCommand);
+  rec.splits.push(paneRec);
+  layoutSplits(rec);
+
   tabs.set(id, rec);
-  for (const x of tabs.values()) x.el.classList.remove("active");
-  pane.classList.add("active");
   activeTabId = id;
   renderTabBar();
   showTerminalNav(true);
-  term.focus();
+  try { paneRec.term.focus(); } catch (_) {}
+  saveTabs();
+}
+
+function splitActivePane() {
+  const tab = tabs.get(activeTabId);
+  if (!tab) return;
+  if (tab.splits.length >= 4) { showToast("Max 4 splits per tab", "error"); return; }
+  const paneRec = createPane(tab.el, tab.deviceId, "");
+  tab.splits.push(paneRec);
+  layoutSplits(tab);
+  fitTab(tab);
+  try { paneRec.term.focus(); } catch (_) {}
+  saveTabs();
+}
+
+function closeActiveSplit(tabId, sp) {
+  const tab = tabs.get(tabId);
+  if (!tab) return;
+  const idx = tab.splits.indexOf(sp);
+  if (idx === -1) return;
+  try { sp.ws.close(); } catch (_) {}
+  try { sp.term.dispose(); } catch (_) {}
+  window.removeEventListener("resize", sp.onResize);
+  tab.splits.splice(idx, 1);
+  if (tab.splits.length === 0) { closeTab(tabId); return; }
+  layoutSplits(tab);
+  fitTab(tab);
+  saveTabs();
+}
+
+function activateTab(id) {
+  const t = tabs.get(id);
+  if (!t) return;
+  activeTabId = id;
+  for (const x of tabs.values()) x.el.classList.toggle("active", x.id === id);
+  renderTabBar();
+  fitTab(t);
+  try { t.splits[t.activeSplit || 0].term.focus(); } catch (_) {}
 }
 
 function closeTab(id) {
   const t = tabs.get(id);
   if (!t) return;
-  try { t.ws.close(); } catch (_) {}
-  try { t.term.dispose(); } catch (_) {}
-  window.removeEventListener("resize", t.onResize);
+  for (const sp of t.splits) {
+    try { sp.ws.close(); } catch (_) {}
+    try { sp.term.dispose(); } catch (_) {}
+    window.removeEventListener("resize", sp.onResize);
+  }
   t.el.remove();
   tabs.delete(id);
   if (activeTabId === id) {
@@ -1017,13 +1206,43 @@ function closeTab(id) {
     }
   }
   renderTabBar();
-  if (tabs.size === 0) { switchTab("devices"); showTerminalNav(false); }
+  if (tabs.size === 0) { switchTab("devices"); showTerminalNav(false); clearSavedTabs(); }
+  else saveTabs();
 }
 
 // Show/hide the "Terminal" sidebar entry (only meaningful when tabs exist).
 function showTerminalNav(show) {
   const el = document.getElementById("side-terminal");
   if (el) el.style.display = show ? "" : "none";
+}
+
+// ---- Tab persistence across reload (device + label survive; shell reconnects) ----
+const TABS_LS = "shelldeck_tabs_v1";
+function saveTabs() {
+  try {
+    const data = [...tabs.values()].map(t => ({
+      deviceId: t.deviceId,
+      title: t.title,
+      splits: t.splits.length,
+    }));
+    localStorage.setItem(TABS_LS, JSON.stringify(data));
+  } catch (_) {}
+}
+function clearSavedTabs() { try { localStorage.removeItem(TABS_LS); } catch (_) {} }
+function restoreTabs() {
+  let saved;
+  try { saved = JSON.parse(localStorage.getItem(TABS_LS) || "[]"); } catch (_) { saved = []; }
+  if (!Array.isArray(saved) || !saved.length) return;
+  const valid = saved.filter(s => (currentDevices || []).some(d => d.id === s.deviceId));
+  if (!valid.length) { clearSavedTabs(); return; }
+  for (const s of valid) {
+    openTerminal(s.deviceId, s.title, "", true);
+    // Re-create extra splits if the saved tab had more than one.
+    const tab = tabs.get(activeTabId);
+    if (tab && s.splits > 1) {
+      for (let i = 1; i < s.splits; i++) splitActivePane();
+    }
+  }
 }
 
 // Device picker shown when the user clicks the "+" tab: choose any device
@@ -1344,6 +1563,7 @@ document.getElementById("files-device").onchange = loadFiles;
   await loadStatus();
   refreshFilesDeviceSelect();
   refreshDockerDeviceSelect();
+  restoreTabs();
   // Show Users menu only for admins.
   if (currentUser && currentUser.role === "admin") {
     const su = document.getElementById("side-users");

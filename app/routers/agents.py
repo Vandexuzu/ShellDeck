@@ -42,6 +42,8 @@ _LIVE: dict[str, asyncio.Queue] = {}
 _LIVE_WS: dict[str, WebSocket] = {}
 # Active relay sessions: conn_id -> {"browser": WebSocket, "device_id": int, "token": str}
 _SESSIONS: dict[int, dict] = {}
+# Pending file-system relay requests: cid -> asyncio.Future
+_FS_WAIT: dict[int, asyncio.Future] = {}
 _NEXT_CID = 1
 
 
@@ -155,6 +157,11 @@ async def _route_agent_frame(raw: str) -> None:
     if t == "hb":
         # Heartbeat — update last_seen lazily (cheap: skip DB write every time).
         return
+    if t == "fs":
+        fut = _FS_WAIT.pop(cid, None)
+        if fut is not None and not fut.done():
+            fut.set_result(msg)
+        return
     if sess is None or sess.get("browser") is None:
         return
     try:
@@ -201,6 +208,57 @@ async def agent_end_session(cid: int) -> None:
         q = _LIVE.get(sess["token"])
         if q:
             await q.put(json.dumps({"t": "kill", "cid": cid}))
+
+
+# ------------------------------- File-system relay (REST) -------------------
+class FsRequest(BaseModel):
+    op: str                                   # list | read | write | mkdir | delete | stat
+    path: str = "/"
+    data: str | None = None
+
+
+async def agent_fs_relay(device_id: int, req: FsRequest, db: Session) -> dict:
+    """Relay a file-system operation to the device's connected agent and wait
+    for the result. Raises HTTPException on agent error or timeout."""
+    token = device_agent_token(db, device_id)
+    if token is None:
+        raise HTTPException(status_code=503, detail="Device agent not connected")
+    q = _LIVE.get(token)
+    if q is None:
+        raise HTTPException(status_code=503, detail="Device agent not connected")
+    global _NEXT_CID
+    cid = _NEXT_CID
+    _NEXT_CID += 1
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+    _FS_WAIT[cid] = fut
+    frame = {"t": "fs", "cid": cid, "op": req.op, "path": req.path}
+    if req.data is not None:
+        frame["data"] = req.data
+    await q.put(json.dumps(frame))
+    try:
+        resp = await asyncio.wait_for(fut, timeout=30)
+    except asyncio.TimeoutError:
+        _FS_WAIT.pop(cid, None)
+        raise HTTPException(status_code=504, detail="Agent file operation timed out")
+    if not resp.get("ok"):
+        raise HTTPException(status_code=502, detail="Agent FS error: " + resp.get("err", "unknown"))
+    return resp.get("result")
+
+
+@router.post("/fs/{device_id}")
+async def agent_fs(device_id: int, req: FsRequest, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status_code=404, detail="Device not found")
+    if not (user.role == "admin" or device.owner_id == user.id):
+        raise HTTPException(status_code=403, detail="Forbidden")
+    try:
+        return await agent_fs_relay(device_id, req, db)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=500, detail=f"FS relay error: {type(exc).__name__}: {exc}")
 
 
 # ------------------------------- Terminal over agent (browser side) ---------

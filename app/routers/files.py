@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncssh
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -76,6 +76,27 @@ async def read_file(device_id: int, body: FilePath, db: Session = Depends(get_db
                 return {"path": body.path, "content": data}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Read failed: {type(exc).__name__}: {exc}")
+
+
+@router.get("/{device_id}/download")
+async def download_file(device_id: int, path: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    from fastapi.responses import Response
+    device = db.get(Device, device_id)
+    if device is None or not _can_access(db, device, user):
+        raise HTTPException(status_code=404, detail="Device not found")
+    try:
+        async with asyncssh.connect(**_connect_opts(device)) as conn:
+            async with conn.start_sftp_client() as sftp:
+                name = path.rsplit("/", 1)[-1] or "download"
+                async with sftp.open(path, "rb") as f:
+                    data = await f.read()
+                return Response(
+                    content=data,
+                    media_type="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"'},
+                )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Download failed: {type(exc).__name__}: {exc}")
 
 
 @router.post("/{device_id}/write")
@@ -156,3 +177,46 @@ async def upload_file(
                 return {"path": dest, "uploaded": len(data)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Upload failed: {type(exc).__name__}: {exc}")
+
+
+import httpx
+
+@router.post("/{device_id}/upload-link")
+async def upload_link(
+    device_id: int,
+    url: str = Form(...),
+    path: str = Form("/"),
+    filename: str = Form(""),
+    db: Session = Depends(get_db),
+    user: User = Depends(operator_only),
+) -> dict:
+    device = db.get(Device, device_id)
+    if device is None or not _can_access(db, device, user):
+        raise HTTPException(status_code=404, detail="Device not found")
+    if not url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="Invalid URL")
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+            async with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                name = filename or url.rsplit("/", 1)[-1].split("?")[0] or "download"
+                if not name or name == "download" and "." not in name:
+                    name = "download"
+                target_dir = path.rstrip("/") or "/"
+                dest = f"{target_dir}/{name}" if target_dir != "/" else f"/{name}"
+                total = 0
+                async with asyncssh.connect(**_connect_opts(device)) as conn:
+                    async with conn.start_sftp_client() as sftp:
+                        try:
+                            await sftp.stat(target_dir)
+                        except Exception:
+                            await sftp.makedirs(target_dir)
+                        async with sftp.open(dest, "wb") as f:
+                            async for chunk in resp.aiter_bytes(65536):
+                                await f.write(chunk)
+                                total += len(chunk)
+                return {"path": dest, "uploaded": total}
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Upload-link failed: {type(exc).__name__}: {exc}")
