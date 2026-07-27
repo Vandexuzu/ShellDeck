@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ShellDeck — Login</title>
   <link rel="manifest" href="/static/manifest.webmanifest" />
-  <link rel="icon" type="image/png" href="/static/icon-192.png" />
+  <link rel="icon" type="image/svg+xml" href="/static/logo-icon.svg" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/static/icon-192.png" />
+  <link rel="apple-touch-icon" href="/static/icon-192.png" />
   <script>
     (function () {
       try {
         var t = localStorage.getItem("shelldeck_theme");
-        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+        if (t === "light" || t === "dark" || t === "premium") document.documentElement.setAttribute("data-theme", t);
       } catch (_) {}
     })();
   </script>
@@ -18,7 +20,7 @@
 </head>
 <body class="auth-body">
   <div class="auth-card">
-    <div class="auth-brand">⚡ ShellDeck</div>
+    <div class="auth-brand"><img src="/static/logo-dark.svg" alt="ShellDeck" id="brand-logo" style="width:170px;height:26px;display:block;margin:0 auto" /></div>
     <div class="auth-tabs">
       <button id="tab-login" class="auth-tab active" type="button">Login</button>
       <button id="tab-register" class="auth-tab" type="button">Register</button>
@@ -35,6 +37,16 @@
     </form>
     <p class="auth-hint" id="auth-hint">Don't have an account? Switch to Register.</p>
   </div>
+  <script>
+    // Pick the wordmark logo variant that matches the saved theme on load.
+    (function () {
+      try {
+        var t = localStorage.getItem("shelldeck_theme") || "dark";
+        var el = document.getElementById("brand-logo");
+        if (el) el.src = (t === "light") ? "/static/logo-light.svg" : "/static/logo-dark.svg";
+      } catch (_) {}
+    })();
+  </script>
   <script src="/static/login.js?v=2"></script>
 </body>
 </html>

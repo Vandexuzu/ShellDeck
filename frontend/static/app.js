@@ -28,10 +28,11 @@ function showToast(msg, kind = "") {
 }
 
 async function api(path, opts = {}) {
-  const res = await fetch(API + path, {
-    ...opts,
-    headers: { ...authHeaders(), ...(opts.headers || {}) },
-  });
+  const headers = { ...authHeaders() };
+  // When sending FormData (file uploads) let the browser set the multipart
+  // Content-Type with its boundary instead of forcing application/json.
+  if (!(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
+  const res = await fetch(API + path, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
   if (res.status === 401) { logout(); throw new Error("Unauthorized"); }
   if (!res.ok) {
     let detail = res.statusText;
@@ -122,6 +123,12 @@ function switchTab(name) {
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
   if (name === "settings") loadSettings();
+  if (name === "terminal") {
+    // The terminal view was just shown (or re-shown) — re-fit the active
+    // xterm pane so it picks up the correct dimensions after being hidden.
+    const t = tabs.get(activeTabId);
+    if (t) { try { t.fit.fit(); } catch (_) {} try { t.term.focus(); } catch (_) {} }
+  }
 }
 
 // ----------------------------- Devices -------------------------------------
@@ -484,6 +491,25 @@ document.getElementById("files-mkdir").onclick = async () => {
   listFiles(filesCurrent.path);
 };
 document.getElementById("files-newfile").onclick = () => openFileEditor(null);
+document.getElementById("files-upload").onclick = () => document.getElementById("files-upload-input").click();
+document.getElementById("files-upload-input").onchange = async (e) => {
+  const files = [...e.target.files];
+  if (!files.length) return;
+  if (!filesCurrent.deviceId) { showToast("Select a device first", "error"); e.target.value = ""; return; }
+  for (const f of files) {
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      fd.append("path", filesCurrent.path);
+      await api(`/api/files/${filesCurrent.deviceId}/upload`, { method: "POST", body: fd });
+      showToast(`Uploaded ${f.name}`, "ok");
+    } catch (err) {
+      showToast(`Upload failed: ${f.name} — ${err.message}`, "error");
+    }
+  }
+  e.target.value = "";
+  listFiles(filesCurrent.path);
+};
 async function openFileEditor(path) {
   const box = document.getElementById("file-editor");
   box.classList.remove("hidden");
@@ -871,39 +897,181 @@ document.getElementById("agent-save").onclick = async () => {
   } catch (e) { showToast(e.message, "error"); }
 };
 
-// ----------------------------- Terminal ------------------------------------
-let term = null, fitAddon = null, ws = null;
-function openTerminal(deviceId, title, initialCommand) {
+// ----------------------------- Terminal (multi-tab) -------------------------
+let tabSeq = 0;
+const tabs = new Map();          // id -> { id, deviceId, term, fit, ws, el, onResize }
+let activeTabId = null;
+const MAX_TABS = 8;
+
+function ensureTerminalView() {
+  if (!document.getElementById("tab-bar")) return;
+}
+
+// Render the tab bar from the live tabs map + the active highlight.
+function renderTabBar() {
+  const bar = document.getElementById("tab-bar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  for (const t of tabs.values()) {
+    const tab = document.createElement("div");
+    tab.className = "tab" + (t.id === activeTabId ? " active" : "");
+    tab.onclick = () => activateTab(t.id);
+    const title = document.createElement("span");
+    title.className = "tab-title";
+    title.textContent = t.title;
+    const close = document.createElement("span");
+    close.className = "tab-close btn-icon-xs";
+    close.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+    close.onclick = (e) => { e.stopPropagation(); closeTab(t.id); };
+    tab.appendChild(title);
+    tab.appendChild(close);
+    bar.appendChild(tab);
+  }
+  const add = document.createElement("div");
+  add.className = "tab tab-add";
+  add.title = "New tab on same device";
+  add.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+  add.onclick = (e) => { e.stopPropagation(); showDevicePicker(add); };
+  bar.appendChild(add);
+}
+
+function activateTab(id) {
+  const t = tabs.get(id);
+  if (!t) return;
+  activeTabId = id;
+  for (const x of tabs.values()) x.el.classList.toggle("active", x.id === id);
+  renderTabBar();
+  // xterm must re-fit after becoming visible.
+  try { t.fit.fit(); } catch (_) {}
+  try { t.term.focus(); } catch (_) {}
+}
+
+function openTerminal(deviceId, title, initialCommand, isClone) {
+  if (!isClone && tabs.size >= MAX_TABS) {
+    showToast(`Max ${MAX_TABS} tabs open. Close one first.`, "error");
+    return;
+  }
+  if (tabs.size >= MAX_TABS) {
+    showToast(`Max ${MAX_TABS} tabs open. Close one first.`, "error");
+    return;
+  }
   switchTab("terminal");
-  document.getElementById("terminal-title").textContent = `Shell — ${title}`;
-  const termEl = document.getElementById("terminal");
-  termEl.innerHTML = "";
-  term = new Terminal({ cursorBlink: true, theme: { background: "#000000" } });
-  fitAddon = new FitAddon.FitAddon();
-  term.loadAddon(fitAddon);
+  const id = "tab" + (++tabSeq);
+  const pane = document.createElement("div");
+  pane.className = "terminal-pane";
+  pane.id = id;
+  const termEl = document.createElement("div");
+  termEl.className = "terminal";
+  pane.appendChild(termEl);
+  document.getElementById("terminals").appendChild(pane);
+
+  const term = new Terminal({ cursorBlink: true, theme: { background: "#000000" } });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
   term.open(termEl);
-  fitAddon.fit();
+  fit.fit();
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  // Route through the agent relay if this device is reached via a live agent.
   const dev = (currentDevices || []).find(d => d.id === deviceId);
   const wsPath = (dev && dev.has_agent) ? `/api/agents/terminal/${deviceId}` : `/api/terminal/${deviceId}`;
-  ws = new WebSocket(`${proto}://${location.host}${wsPath}?token=${token}`);
+  const ws = new WebSocket(`${proto}://${location.host}${wsPath}?token=${token}`);
   ws.onmessage = (e) => term.write(e.data);
-  ws.onclose = () => { term.write("\r\n\x1b[31m[session closed]\x1b[0m\r\n"); };
+  ws.onclose = () => term.write("\r\n\x1b[31m[session closed]\x1b[0m\r\n");
   ws.onopen = () => { if (initialCommand) ws.send(initialCommand + "\r"); };
   term.onData((d) => ws.readyState === WebSocket.OPEN && ws.send(d));
   term.onResize(({ cols, rows }) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(`\x00resize\x00${cols}\x00${rows}`);
   });
 
-  const onResize = () => fitAddon.fit();
+  const onResize = () => { try { fit.fit(); } catch (_) {} };
   window.addEventListener("resize", onResize);
-  document.getElementById("close-terminal").onclick = () => {
-    ws.close(); term.dispose(); window.removeEventListener("resize", onResize);
-    switchTab("devices");
-  };
+
+  const rec = { id, deviceId, term, fit, ws, el: pane, onResize, deviceName: title, title: (title || ("#" + deviceId)) + (tabs.size ? "" : "") };
+  // Label: device name (+ host) for the first tab; clones get a numeric suffix.
+  const baseTitle = title || ("Device #" + deviceId);
+  const countForDevice = [...tabs.values()].filter(x => x.deviceId === deviceId).length;
+  rec.title = countForDevice ? `${baseTitle} (${countForDevice + 1})` : baseTitle;
+  tabs.set(id, rec);
+  for (const x of tabs.values()) x.el.classList.remove("active");
+  pane.classList.add("active");
+  activeTabId = id;
+  renderTabBar();
+  showTerminalNav(true);
+  term.focus();
 }
+
+function closeTab(id) {
+  const t = tabs.get(id);
+  if (!t) return;
+  try { t.ws.close(); } catch (_) {}
+  try { t.term.dispose(); } catch (_) {}
+  window.removeEventListener("resize", t.onResize);
+  t.el.remove();
+  tabs.delete(id);
+  if (activeTabId === id) {
+    const next = tabs.values().next();
+    if (next.done) {
+      activeTabId = null;
+    } else {
+      activateTab(next.value.id);
+    }
+  }
+  renderTabBar();
+  if (tabs.size === 0) { switchTab("devices"); showTerminalNav(false); }
+}
+
+// Show/hide the "Terminal" sidebar entry (only meaningful when tabs exist).
+function showTerminalNav(show) {
+  const el = document.getElementById("side-terminal");
+  if (el) el.style.display = show ? "" : "none";
+}
+
+// Device picker shown when the user clicks the "+" tab: choose any device
+// (including the one already open, which creates a second shell on it).
+let pickerEl = null;
+function showDevicePicker(anchor) {
+  if (pickerEl) { pickerEl.remove(); pickerEl = null; return; }
+  const devices = (currentDevices || []);
+  if (!devices.length) { showToast("No devices yet", "error"); return; }
+  const openIds = new Set([...tabs.values()].map(t => t.deviceId));
+  const picker = document.createElement("div");
+  picker.className = "tab-picker";
+  const list = document.createElement("div");
+  list.className = "tab-picker-list";
+  for (const d of devices) {
+    const item = document.createElement("div");
+    item.className = "tab-picker-item";
+    item.innerHTML = `<span class="tab-picker-name">${escapeHtml(d.name)}</span><span class="muted">${escapeHtml(d.host)}</span>` +
+      (openIds.has(d.id) ? '<span class="tag" style="margin-left:auto">open</span>' : '');
+    item.onclick = () => {
+      openTerminal(d.id, d.name, null, true);
+      picker.remove(); pickerEl = null;
+    };
+    list.appendChild(item);
+  }
+  picker.appendChild(list);
+  // Position under the tab bar (top bar of terminal view).
+  const bar = document.getElementById("tab-bar");
+  const rect = bar.getBoundingClientRect();
+  picker.style.top = (rect.bottom + 4) + "px";
+  picker.style.left = Math.min(rect.left, window.innerWidth - 260) + "px";
+  picker.onclick = (e) => { if (e.target === picker) { picker.remove(); pickerEl = null; } };
+  document.body.appendChild(picker);
+  pickerEl = picker;
+}
+// Close picker when clicking elsewhere.
+document.addEventListener("click", (e) => {
+  if (pickerEl && !pickerEl.contains(e.target) && !e.target.closest(".tab-add")) {
+    pickerEl.remove(); pickerEl = null;
+  }
+});
+
+document.getElementById("close-terminal").onclick = () => {
+  // Close the active tab; if it was the last, leave the tab bar/terminal view.
+  if (activeTabId) { closeTab(activeTabId); return; }
+  for (const id of [...tabs.keys()]) closeTab(id);
+  switchTab("devices");
+};
 
 // ----------------------------- Scheduled tasks -----------------------------
 async function loadScheduled() {
@@ -1011,7 +1179,8 @@ async function loadSettings() {
     if (themeSel) {
       let saved = "dark";
       try { saved = localStorage.getItem("shelldeck_theme") || "dark"; } catch (_) {}
-      themeSel.value = saved === "light" ? "light" : "dark";
+      themeSel.value = ["dark", "light", "premium"].includes(saved) ? saved : "dark";
+      applyBrandLogo(themeSel.value);
     }
     // Profile: show who is logged in.
     const uEl = document.getElementById("set-username");
@@ -1084,20 +1253,30 @@ document.getElementById("set-tg-getid").onclick = async () => {
   }
 };
 document.getElementById("set-theme").onchange = () => {
-  const t = document.getElementById("set-theme").value === "light" ? "light" : "dark";
+  const t = document.getElementById("set-theme").value;
   document.documentElement.setAttribute("data-theme", t);
   try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
+  applyBrandLogo(t);
   showToast("Theme: " + t, "ok");
 };
-// Quick theme toggle in the header.
+// Quick theme toggle in the header: dark -> light -> premium -> dark (cycle).
 document.getElementById("theme-toggle").onclick = () => {
-  const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
-  const t = cur === "light" ? "dark" : "light";
+  const cur = document.documentElement.getAttribute("data-theme") || "dark";
+  const order = ["dark", "light", "premium"];
+  const t = order[(order.indexOf(cur) + 1) % order.length];
   document.documentElement.setAttribute("data-theme", t);
   try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
   const sel = document.getElementById("set-theme");
   if (sel) sel.value = t;
+  applyBrandLogo(t);
+  showToast("Theme: " + t, "ok");
 };
+// Swap the wordmark logo to match the active theme (light = dark text, others = white text).
+function applyBrandLogo(theme) {
+  const el = document.getElementById("brand-logo");
+  if (!el) return;
+  el.src = theme === "light" ? "/static/logo-light.svg" : "/static/logo-dark.svg";
+}
 document.getElementById("pw-change").onclick = async () => {
   const oldP = document.getElementById("pw-old").value;
   const newP = document.getElementById("pw-new").value;

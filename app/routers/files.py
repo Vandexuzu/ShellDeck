@@ -122,3 +122,37 @@ async def delete_file(device_id: int, body: FilePath, db: Session = Depends(get_
                 return {"path": body.path, "deleted": True}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Delete failed: {type(exc).__name__}: {exc}")
+
+
+from fastapi import UploadFile, File, Form
+
+MAX_UPLOAD = 50 * 1024 * 1024  # 50 MB safety cap
+
+@router.post("/{device_id}/upload")
+async def upload_file(
+    device_id: int,
+    path: str = Form("/"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(operator_only),
+) -> dict:
+    device = db.get(Device, device_id)
+    if device is None or not _can_access(db, device, user):
+        raise HTTPException(status_code=404, detail="Device not found")
+    if file.size and file.size > MAX_UPLOAD:
+        raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
+    target_dir = path.rstrip("/") or "/"
+    dest = f"{target_dir}/{file.filename}" if target_dir != "/" else f"/{file.filename}"
+    try:
+        async with asyncssh.connect(**_connect_opts(device)) as conn:
+            async with conn.start_sftp_client() as sftp:
+                try:
+                    await sftp.stat(target_dir)
+                except Exception:
+                    await sftp.makedirs(target_dir)
+                data = await file.read()
+                async with sftp.open(dest, "wb") as f:
+                    await f.write(data)
+                return {"path": dest, "uploaded": len(data)}
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Upload failed: {type(exc).__name__}: {exc}")

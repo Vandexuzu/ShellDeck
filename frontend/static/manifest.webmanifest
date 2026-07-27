@@ -4,9 +4,15 @@
   "description": "Self-hosted web control panel to manage, monitor, and remotely shell into your devices.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f1117",
-  "theme_color": "#4f8cff",
+  "background_color": "#070B14",
+  "theme_color": "#3882F6",
   "icons": [
+    {
+      "src": "/static/logo-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
     {
       "src": "/static/icon-192.png",
       "sizes": "192x192",
