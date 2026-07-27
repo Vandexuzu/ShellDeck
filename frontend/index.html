@@ -233,79 +233,93 @@
         </div>
       </div>
 
-      <!-- Settings view (notifications) -->
+      <!-- Settings view -->
       <div id="view-settings" class="hidden">
         <div class="content-head"><h1>Settings</h1></div>
-        <div class="settings-box">
-          <h3>Notifications</h3>
-          <label class="switch-row"><span>Enable alerts</span><input type="checkbox" id="set-notify" /></label>
-          <label>Telegram bot token <input id="set-tg-token" class="input" type="password" placeholder="123456:ABC-DEF…" /></label>
-          <label>Telegram chat id <input id="set-tg-chat" class="input" placeholder="123456789" /> <button id="set-tg-getid" type="button" class="btn btn-ghost btn-xs">Get chat ID</button></label>
-          <label>Discord webhook URL <input id="set-discord" class="input" placeholder="https://discord.com/api/webhooks/…" /></label>
-          <label>ntfy URL <input id="set-ntfy" class="input" placeholder="https://ntfy.sh/topic" /></label>
-          <label>Gotify URL <input id="set-gotify" class="input" placeholder="https://gotify.example.com/message?token=…" /></label>
-          <label>Slack webhook <input id="set-slack" class="input" placeholder="https://hooks.slack.com/services/…" /></label>
-          <label>Custom webhook (POST JSON) <input id="set-webhook" class="input" placeholder="https://example.com/hook" /></label>
-          <label>Email (SMTP) — to <input id="set-email-to" class="input" placeholder="alerts@example.com" /></label>
-          <label>SMTP host / port / user / password
-            <div style="display:flex;gap:6px;flex-wrap:wrap">
-              <input id="set-email-host" class="input" style="flex:2;min-width:120px" placeholder="smtp.example.com" />
-              <input id="set-email-port" class="input" type="number" style="width:70px" placeholder="587" />
-              <input id="set-email-user" class="input" style="flex:2;min-width:120px" placeholder="user@ex.com" />
-              <input id="set-email-pass" class="input" type="password" style="flex:2;min-width:120px" placeholder="password" />
-            </div>
-          </label>
-          <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10" max="3600" /></label>
-          <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank" style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
-          <label class="switch-row"><span>Enable OIDC single sign-on (SSO login via your IdP)</span><input type="checkbox" id="set-oidc" /></label>
-          <p class="muted" style="font-size:12px">OIDC also requires server env vars: <code>OIDC_DISCOVERY_URL</code>, <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code>. The SSO button appears on the login page once enabled and configured.</p>
-          <div class="modal-actions">
-            <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Send test</span></button>
-            <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
-          </div>
-        </div>
 
-        <div class="settings-box" style="margin-top:24px">
-          <h3>Two-Factor Authentication (TOTP)</h3>
-          <p class="muted" id="totp-status-text">Checking…</p>
-          <div id="totp-setup" class="hidden">
-            <p>Scan this QR code with Google Authenticator / FreeOTP, then enter the 6-digit code to enable:</p>
-            <img id="totp-qr" alt="2FA QR code" style="width:200px;height:200px;background:#fff;border-radius:8px;padding:6px;display:none" />
-            <p class="muted" style="font-size:12px;word-break:break-all" id="totp-secret-text"></p>
-            <label>6-digit code <input id="totp-code" class="input" inputmode="numeric" placeholder="123456" /></label>
+        <details class="settings-acc" open>
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Account &amp; Security</span></summary>
+          <div class="settings-box">
+            <h3>Profile</h3>
+            <p class="muted">Logged in as <b id="set-username">—</b></p>
+            <label>Current password <input id="pw-old" class="input" type="password" autocomplete="current-password" /></label>
+            <label>New password <input id="pw-new" class="input" type="password" autocomplete="new-password" placeholder="min 6 characters" /></label>
+            <label>Confirm new password <input id="pw-conf" class="input" type="password" autocomplete="new-password" /></label>
             <div class="modal-actions">
-              <button id="totp-confirm" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Enable 2FA</span></button>
+              <button id="pw-change" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Change password</span></button>
             </div>
           </div>
-          <div id="totp-enabled-actions">
-            <button id="totp-disable" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Disable 2FA</span></button>
+          <div class="settings-box">
+            <h3>Two-Factor Authentication (TOTP)</h3>
+            <p class="muted" id="totp-status-text">Checking…</p>
+            <div id="totp-setup" class="hidden">
+              <p>Scan this QR code with Google Authenticator / FreeOTP, then enter the 6-digit code to enable:</p>
+              <img id="totp-qr" alt="2FA QR code" style="width:200px;height:200px;background:#fff;border-radius:8px;padding:6px;display:none" />
+              <p class="muted" style="font-size:12px;word-break:break-all" id="totp-secret-text"></p>
+              <label>6-digit code <input id="totp-code" class="input" inputmode="numeric" placeholder="123456" /></label>
+              <div class="modal-actions">
+                <button id="totp-confirm" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Enable 2FA</span></button>
+              </div>
+            </div>
+            <div id="totp-enabled-actions">
+              <button id="totp-disable" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Disable 2FA</span></button>
+            </div>
+            <div id="totp-disabled-actions">
+              <button id="totp-start" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Enable 2FA</span></button>
+            </div>
           </div>
-          <div id="totp-disabled-actions">
-            <button id="totp-start" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Enable 2FA</span></button>
+          <div class="settings-box">
+            <h3>Single Sign-On (OIDC)</h3>
+            <label class="switch-row"><span>Enable OIDC SSO (login via your IdP)</span><input type="checkbox" id="set-oidc" /></label>
+            <p class="muted" style="font-size:12px">OIDC also requires server env vars: <code>OIDC_DISCOVERY_URL</code>, <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code>. The SSO button appears on the login page once enabled and configured.</p>
           </div>
-        </div>
+        </details>
 
-        <div class="settings-box" style="margin-top:24px">
-          <h3>Appearance</h3>
-          <label class="switch-row"><span>Theme</span>
-            <select id="set-theme" class="input" style="max-width:160px">
-              <option value="dark">Dark</option>
-              <option value="light">Light</option>
-              <option value="premium">Premium</option>
-            </select>
-          </label>
-          <p class="muted">Theme is saved on this device only.</p>
-        </div>
+        <details class="settings-acc">
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span>Notifications &amp; Alerts</span></summary>
+          <div class="settings-box">
+            <label class="switch-row"><span>Enable alerts</span><input type="checkbox" id="set-notify" /></label>
+            <label>Telegram bot token <input id="set-tg-token" class="input" type="password" placeholder="123456:ABC-DEF…" /></label>
+            <label>Telegram chat id <input id="set-tg-chat" class="input" placeholder="123456789" /> <button id="set-tg-getid" type="button" class="btn btn-ghost btn-xs">Get chat ID</button></label>
+            <label>Discord webhook URL <input id="set-discord" class="input" placeholder="https://discord.com/api/webhooks/…" /></label>
+            <label>ntfy URL <input id="set-ntfy" class="input" placeholder="https://ntfy.sh/topic" /></label>
+            <label>Gotify URL <input id="set-gotify" class="input" placeholder="https://gotify.example.com/message?token=…" /></label>
+            <label>Slack webhook <input id="set-slack" class="input" placeholder="https://hooks.slack.com/services/…" /></label>
+            <label>Custom webhook (POST JSON) <input id="set-webhook" class="input" placeholder="https://example.com/hook" /></label>
+            <label>Email (SMTP) — to <input id="set-email-to" class="input" placeholder="alerts@example.com" /></label>
+            <label>SMTP host / port / user / password
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <input id="set-email-host" class="input" style="flex:2;min-width:120px" placeholder="smtp.example.com" />
+                <input id="set-email-port" class="input" type="number" style="width:70px" placeholder="587" />
+                <input id="set-email-user" class="input" style="flex:2;min-width:120px" placeholder="user@ex.com" />
+                <input id="set-email-pass" class="input" type="password" style="flex:2;min-width:120px" placeholder="password" />
+              </div>
+            </label>
+            <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10" max="3600" /></label>
+            <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank" style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
+            <div class="modal-actions">
+              <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Send test</span></button>
+            </div>
+          </div>
+        </details>
 
-        <!-- Profile / change password -->
-        <div class="settings-box" style="margin-top:24px">
-          <h3>Profile</h3>
-          <p class="muted">Logged in as <b id="set-username">—</b></p>
-          <label>Current password <input id="pw-old" class="input" type="password" autocomplete="current-password" /></label>
-          <label>New password <input id="pw-new" class="input" type="password" autocomplete="new-password" placeholder="min 6 characters" /></label>
-          <label>Confirm new password <input id="pw-conf" class="input" type="password" autocomplete="new-password" /></label>
+        <details class="settings-acc">
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><span>Appearance</span></summary>
+          <div class="settings-box">
+            <label class="switch-row"><span>Theme</span>
+              <select id="set-theme" class="input" style="max-width:160px">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+            <p class="muted">Theme is saved on this device only.</p>
+          </div>
+        </details>
+
+        <div class="settings-box" style="margin-top:8px">
           <div class="modal-actions">
-            <button id="pw-change" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Change password</span></button>
+            <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save all settings</span></button>
           </div>
         </div>
       </div>
@@ -478,6 +492,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=65"></script>
+  <script src="/static/app.js?v=66"></script>
 </body>
 </html>
