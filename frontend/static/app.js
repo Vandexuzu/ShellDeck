@@ -110,7 +110,7 @@ async function ensureAuth() {
 // ----------------------------- Tabs ----------------------------------------
 function switchTab(name) {
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal"].forEach(v => {
+  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal"].forEach(v => {
     const el = document.getElementById("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
   });
@@ -123,6 +123,7 @@ function switchTab(name) {
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
   if (name === "settings") { loadSettings(); refreshTotpStatus(); }
+  if (name === "home") loadHome();
   if (name === "terminal") {
     // The terminal view was just shown (or re-shown) — re-fit the active
     // xterm pane so it picks up the correct dimensions after being hidden.
@@ -1688,6 +1689,83 @@ document.getElementById("sp-restart").onclick = () => {
 };
 document.getElementById("sp-speed").onchange = (e) => { spSpeed = parseFloat(e.target.value) || 1; };
 
+// ----------------------------- Home dashboard -----------------------------
+function fmtAgo(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso), s = (Date.now() - d.getTime()) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return Math.floor(s / 60) + "m ago";
+  if (s < 86400) return Math.floor(s / 3600) + "h ago";
+  return Math.floor(s / 86400) + "d ago";
+}
+function fmtDur(sec) {
+  if (sec == null) return "—";
+  if (sec < 60) return sec + "s";
+  if (sec < 3600) return Math.floor(sec / 60) + "m";
+  return Math.floor(sec / 3600) + "h " + Math.floor((sec % 3600) / 60) + "m";
+}
+async function loadHome() {
+  const box = document.getElementById("home-stats");
+  if (box) box.innerHTML = "<p class='muted'>Loading dashboard…</p>";
+  try {
+    const d = await api("/api/home/summary");
+    // A: stat cards
+    const s = d.stats;
+    const cards = [
+      { v: s.devices_total, l: "Devices", c: "" },
+      { v: `${s.online}/${s.devices_total}`, l: "Online", c: s.online === s.devices_total && s.devices_total ? "ok" : (s.online ? "warn" : "danger") },
+      { v: s.agents_connected, l: "Agents Connected", c: "" },
+      { v: s.sessions_today, l: "Sessions Today", c: "" },
+      { v: s.alerts_enabled ? "On" : "Off", l: `Alerts (${s.alert_channels})`, c: s.alerts_enabled ? "ok" : "warn" },
+    ];
+    document.getElementById("home-stats").innerHTML = cards.map(c =>
+      `<div class="stat-card ${c.c}"><div class="stat-val">${c.v}</div><div class="stat-label">${c.l}</div></div>`
+    ).join("");
+    document.getElementById("home-sub").textContent =
+      `2FA: ${d.security.twofa_users} user(s) · OIDC: ${d.security.oidc_enabled ? "on" : "off"} · Public: ${d.security.public_dashboard ? "on" : "off"}`;
+
+    // B: device health
+    const hb = document.getElementById("home-health");
+    if (!d.device_health.length) hb.innerHTML = `<p class="home-empty">No devices.</p>`;
+    else hb.innerHTML = d.device_health.map(h => `
+      <div class="health-row" onclick="switchTab('devices')">
+        <span><span class="dot ${h.reachable ? "up" : "down"}"></span>${escapeHtml(h.name)}</span>
+        <span class="metrics">CPU ${h.cpu_load != null ? h.cpu_load.toFixed(1) : "—"}</span>
+        <span class="metrics">MEM ${h.mem_used_pct != null ? h.mem_used_pct + "%" : "—"}</span>
+        <span class="metrics">DSK ${h.disk_used_pct != null ? h.disk_used_pct + "%" : "—"}</span>
+      </div>`).join("");
+
+    // C: recent activity
+    const rb = document.getElementById("home-recent");
+    if (!d.recent_sessions.length) rb.innerHTML = `<p class="home-empty">No sessions yet.</p>`;
+    else rb.innerHTML = d.recent_sessions.map(r => `
+      <div class="home-row" ${r.has_recording ? `onclick="openPlayback(${r.id})"` : ""}>
+        <span><b>${escapeHtml(r.device)}</b> <span class="sub">${fmtAgo(r.started_at)}</span></span>
+        <span class="sub">${fmtDur(r.duration)}${r.has_recording ? ' <span class="badge">rec</span>' : ""}</span>
+      </div>`).join("");
+
+    // D: scheduled
+    const sb = document.getElementById("home-scheduled");
+    if (!d.scheduled.length) sb.innerHTML = `<p class="home-empty">No scheduled tasks.</p>`;
+    else sb.innerHTML = d.scheduled.map(t => `
+      <div class="home-row" onclick="switchTab('scheduled')">
+        <span><b>${escapeHtml(t.name)}</b></span>
+        <span class="badge ${t.enabled ? "" : "off"}">${t.enabled ? (t.next_run ? fmtAgo(t.next_run) : "on") : "off"}</span>
+      </div>`).join("");
+
+    // G: docker
+    const dbx = document.getElementById("home-docker");
+    if (!d.docker.length) dbx.innerHTML = `<p class="home-empty">No reachable hosts.</p>`;
+    else dbx.innerHTML = d.docker.map(x => `
+      <div class="home-row" onclick="switchTab('docker')">
+        <span><b>${escapeHtml(x.name)}</b></span>
+        <span class="sub">${x.available ? `${x.running}/${x.total} up` : "n/a"}</span>
+      </div>`).join("");
+  } catch (e) { if (box) box.innerHTML = `<p class="home-empty">Failed to load: ${e.message}</p>`; }
+}
+// Quick actions
+document.querySelectorAll(".qa").forEach(b => b.onclick = () => switchTab(b.dataset.go));
+
 // ----------------------------- Boot ----------------------------------------
 document.querySelectorAll(".side-nav-item").forEach(t => t.onclick = () => switchTab(t.dataset.tab));
 document.getElementById("session-cmds-close").onclick = () => document.getElementById("session-cmds").classList.add("hidden");
@@ -1703,7 +1781,7 @@ document.getElementById("files-device").onchange = loadFiles;
   refreshFilesDeviceSelect();
   refreshDockerDeviceSelect();
   restoreTabs();
-  // Show Users menu only for admins.
+  switchTab("home");
   if (currentUser && currentUser.role === "admin") {
     const su = document.getElementById("side-users");
     if (su) su.style.display = "";

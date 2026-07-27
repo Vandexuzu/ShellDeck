@@ -373,8 +373,36 @@ body {
 .settings-acc > summary:hover { background: var(--surface-2, #11161d); }
 .settings-acc > .settings-box { border: none; border-top: 1px solid var(--border, #2a3038); border-radius: 0; max-width: none; }
 
+/* Home dashboard */
+.home-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.stat-card .stat-val { font-size: 26px; font-weight: 700; line-height: 1.1; }
+.stat-card .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.stat-card.ok .stat-val { color: #36d399; }
+.stat-card.warn .stat-val { color: #fbbd23; }
+.stat-card.danger .stat-val { color: #f87272; }
+.home-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.qa { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600; transition: border-color .15s, background .15s; }
+.qa:hover { border-color: var(--primary); background: var(--surface-2); }
+.qa .ic { width: 22px; height: 22px; color: var(--primary); }
+.home-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.home-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.home-card h3 { margin: 0 0 12px; font-size: 14px; }
+.home-health { display: flex; flex-direction: column; gap: 8px; }
+.health-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; align-items: center; font-size: 12px; padding: 8px; border-radius: 8px; background: var(--surface-2); cursor: pointer; }
+.health-row:hover { border: 1px solid var(--primary); }
+.health-row .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.dot.up { background: #36d399; } .dot.down { background: #f87272; }
+.health-row .metrics { color: var(--muted); font-variant-numeric: tabular-nums; }
+.home-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow: auto; }
+.home-row { display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: 12px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); cursor: pointer; }
+.home-row:hover { border: 1px solid var(--primary); }
+.home-row .sub { color: var(--muted); }
+.home-row .badge { font-size: 10px; padding: 2px 6px; border-radius: 6px; background: var(--primary); color: #fff; }
+.home-row .badge.off { background: var(--muted); }
+.home-empty { color: var(--muted); font-size: 12px; padding: 8px; }
 
-.sched-list { padding: 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+
 .sched-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .sched-card .sc-name { font-weight: 600; margin-bottom: 6px; }
 .sched-card .sc-cmd { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 12px; white-space: pre-wrap; margin: 0 0 8px; }

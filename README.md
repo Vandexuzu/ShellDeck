@@ -143,6 +143,7 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Audit search (filter session history by device/host/command)
 - [x] Two-factor auth (TOTP / 2FA, RFC 6238, no external dependency)
 - [x] OIDC single sign-on (Google / GitHub / corporate) — server + login flow + Settings toggle (env-gated client config)
+- [x] Home dashboard (stat cards, device health, recent activity, scheduled tasks, docker overview, quick actions)
 
 ## 🤝 Contributing
 
