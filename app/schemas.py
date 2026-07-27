@@ -89,6 +89,7 @@ class DeviceOut(BaseModel):
     tailscale: bool = False
     last_seen: datetime | None
     created_at: datetime
+    has_agent: bool = False
 
 
 class SessionOut(BaseModel):
@@ -100,6 +101,7 @@ class SessionOut(BaseModel):
     ended_at: str | None
     duration_s: int | None
     commands: str | None = ""
+    transcript: str | None = ""
 
 
 class DeviceStatus(BaseModel):
@@ -224,6 +226,7 @@ class ScheduledTaskCreate(BaseModel):
     command: str = Field(min_length=1)
     device_ids: list[int] = Field(default_factory=list)
     interval_minutes: int = Field(default=60, ge=1, le=10080)
+    cron: str | None = None  # optional 5-field cron expression
     enabled: bool = True
     run_once: bool = False  # if True, run a single time then disable
     run_at: datetime | None = None  # for run_once: schedule the single run at this time; if None, run immediately
@@ -234,6 +237,7 @@ class ScheduledTaskUpdate(BaseModel):
     command: str | None = None
     device_ids: list[int] | None = None
     interval_minutes: int | None = Field(default=None, ge=1, le=10080)
+    cron: str | None = None
     enabled: bool | None = None
 
 
@@ -244,6 +248,7 @@ class ScheduledTaskOut(BaseModel):
     command: str
     device_ids: list[int]
     interval_minutes: int
+    cron: str | None = None
     enabled: bool
     run_once: bool = False
     run_at: datetime | None = None

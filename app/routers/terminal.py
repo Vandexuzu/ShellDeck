@@ -87,6 +87,8 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
         cmd_buf = ""
 
         # Read from SSH -> browser.
+        transcript_buf = []
+
         async def ssh_to_ws() -> None:
             try:
                 while not shell.stdout.at_eof():
@@ -94,6 +96,7 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                     if not data:
                         break
                     await websocket.send_text(data)
+                    transcript_buf.append(data)
             except asyncio.CancelledError:
                 pass
             except Exception:  # noqa: BLE001
@@ -114,6 +117,11 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                             pass
                     else:
                         shell.stdin.write(msg)
+                        transcript_buf.append(msg)
+                        # Accumulate typed characters so a command is captured even
+                        # when the browser streams one keystroke per WebSocket frame.
+                        if "\x1b" not in msg and msg not in ("\r", "\n"):
+                            cmd_buf += msg
                         # Record typed command lines (on Enter) for the audit trail.
                         if "\r" in msg or "\n" in msg:
                             cmd_buf += msg.replace("\r", "\n")
@@ -124,6 +132,8 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                                     entry = (log.commands + "\n" + line) if log.commands else line
                                     log.commands = entry
                                     db.commit()
+                                    # Echo the typed command into the playback transcript.
+                                    transcript_buf.append("$ " + line + "\n")
             except WebSocketDisconnect:
                 pass
             except Exception:  # noqa: BLE001
@@ -145,6 +155,10 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
             except Exception:  # noqa: BLE001
                 pass
             log.ended_at = datetime.now(timezone.utc)
+            # Persist the full TTY transcript (audit / playback).
+            full = "".join(transcript_buf)
+            if full:
+                log.transcript = (log.transcript + full) if log.transcript else full
             db.commit()
     finally:
         db.close()

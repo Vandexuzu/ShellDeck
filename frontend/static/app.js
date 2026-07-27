@@ -109,14 +109,16 @@ async function ensureAuth() {
 // ----------------------------- Tabs ----------------------------------------
 function switchTab(name) {
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "terminal"].forEach(v => {
-    document.getElementById("view-" + v).classList.toggle("hidden", v !== name);
+  ["devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal"].forEach(v => {
+    const el = document.getElementById("view-" + v);
+    if (el) el.classList.toggle("hidden", v !== name);
   });
   if (name === "files") loadFiles();
   if (name === "bulk") renderBulkDevices();
   if (name === "snippets") loadSnippets();
   if (name === "docker") loadDocker();
   if (name === "users") loadUsers();
+  if (name === "agents") loadAgents();
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
   if (name === "settings") loadSettings();
@@ -750,9 +752,12 @@ async function loadUsers() {
   box.innerHTML = "<p class='muted'>Loading users…</p>";
   try {
     const users = await api("/api/users");
+    const q = (document.getElementById("user-search")?.value || "").trim().toLowerCase();
+    const filtered = q ? users.filter(u => u.username.toLowerCase().includes(q) || u.role.toLowerCase().includes(q)) : users;
+    if (!filtered.length) { box.innerHTML = "<p class='muted'>No users found.</p>"; return; }
     box.innerHTML = `<table class="user-table"><thead><tr>
       <th>ID</th><th>Username</th><th>Role</th><th>Created</th><th>Actions</th>
-      </tr></thead><tbody>${users.map(u => `
+      </tr></thead><tbody>${filtered.map(u => `
       <tr>
         <td data-label="ID">${u.id}</td>
         <td data-label="Username">${escapeHtml(u.username)}</td>
@@ -783,6 +788,7 @@ async function loadUsers() {
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
+document.getElementById("user-search")?.addEventListener("input", loadUsers);
 document.getElementById("user-add").onclick = () => document.getElementById("user-form").classList.toggle("hidden");
 document.getElementById("user-cancel").onclick = () => document.getElementById("user-form").classList.add("hidden");
 document.getElementById("user-save").onclick = async () => {
@@ -821,6 +827,50 @@ document.getElementById("edit-user-save").onclick = async () => {
   } catch (e) { showToast(e.message, "error"); }
 };
 
+// ----------------------------- Agents --------------------------------------
+async function loadAgents() {
+  if (!currentUser || !["admin", "operator"].includes(currentUser.role)) return;
+  const box = document.getElementById("agent-list");
+  box.innerHTML = "<p class='muted'>Loading…</p>";
+  try {
+    const agents = await api("/api/agents");
+    if (!agents.length) { box.innerHTML = "<p class='muted'>No agents yet. Create one to connect NAT-traversed devices.</p>"; return; }
+    box.innerHTML = agents.map(a => `
+      <div class="sched-card">
+        <div class="sc-name">${escapeHtml(a.name)} ${a.connected ? '<span style="color:var(--ok)">● online</span>' : '<span class="muted">○ offline</span>'}</div>
+        <div class="muted" style="font-size:12px">Token: <code>${escapeHtml(a.token)}</code> · ${a.device_id ? "linked to device #" + a.device_id : "unlinked"}</div>
+        <div class="muted" style="font-size:12px">Last seen: ${a.last_seen ? new Date(a.last_seen).toLocaleString() : "-"}</div>
+        <div class="di-actions">
+          <button class="btn btn-danger btn-icon" data-del-agent="${a.id}" title="Delete agent">${icon("trash")}</button>
+        </div>
+      </div>`).join("");
+    box.querySelectorAll("[data-del-agent]").forEach(b => b.onclick = async () => {
+      if (!confirm("Delete this agent?")) return;
+      await api(`/api/agents/${b.dataset.delAgent}`, { method: "DELETE" });
+      loadAgents();
+    });
+  } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
+}
+document.getElementById("agent-add").onclick = () => {
+  const sel = document.getElementById("agent-device");
+  if (currentDevices && currentDevices.length) {
+    sel.innerHTML = '<option value="">— none —</option>' + currentDevices.map(d => `<option value="${d.id}">${escapeHtml(d.name)} #${d.id}</option>`).join("");
+  }
+  document.getElementById("agent-form").classList.remove("hidden");
+};
+document.getElementById("agent-cancel").onclick = () => document.getElementById("agent-form").classList.add("hidden");
+document.getElementById("agent-save").onclick = async () => {
+  const name = document.getElementById("agent-name").value.trim();
+  const device_id = document.getElementById("agent-device").value || null;
+  if (!name) { showToast("Name required", "error"); return; }
+  try {
+    await api("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, device_id: device_id ? parseInt(device_id, 10) : null }) });
+    document.getElementById("agent-form").classList.add("hidden");
+    loadAgents();
+    showToast("Agent created — copy the token to the device script", "ok");
+  } catch (e) { showToast(e.message, "error"); }
+};
+
 // ----------------------------- Terminal ------------------------------------
 let term = null, fitAddon = null, ws = null;
 function openTerminal(deviceId, title, initialCommand) {
@@ -835,7 +885,10 @@ function openTerminal(deviceId, title, initialCommand) {
   fitAddon.fit();
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  ws = new WebSocket(`${proto}://${location.host}/api/terminal/${deviceId}?token=${token}`);
+  // Route through the agent relay if this device is reached via a live agent.
+  const dev = (currentDevices || []).find(d => d.id === deviceId);
+  const wsPath = (dev && dev.has_agent) ? `/api/agents/terminal/${deviceId}` : `/api/terminal/${deviceId}`;
+  ws = new WebSocket(`${proto}://${location.host}${wsPath}?token=${token}`);
   ws.onmessage = (e) => term.write(e.data);
   ws.onclose = () => { term.write("\r\n\x1b[31m[session closed]\x1b[0m\r\n"); };
   ws.onopen = () => { if (initialCommand) ws.send(initialCommand + "\r"); };
@@ -858,8 +911,10 @@ async function loadScheduled() {
   box.innerHTML = "<p class='muted'>Loading…</p>";
   try {
     const tasks = await api("/api/scheduled");
-    if (!tasks.length) { box.innerHTML = "<p class='muted'>No scheduled tasks yet.</p>"; return; }
-    box.innerHTML = tasks.map(t => `
+    const q = (document.getElementById("sched-search")?.value || "").trim().toLowerCase();
+    const filtered = q ? tasks.filter(t => t.name.toLowerCase().includes(q) || t.command.toLowerCase().includes(q)) : tasks;
+    if (!filtered.length) { box.innerHTML = "<p class='muted'>No scheduled tasks yet.</p>"; return; }
+    box.innerHTML = filtered.map(t => `
       <div class="sched-card">
         <div class="sc-name">${escapeHtml(t.name)} ${t.enabled ? "" : "<span class='muted'>(paused)</span>"} ${t.run_once ? "<span class='muted'>· run once</span>" : ""}</div>
         <pre class="sc-cmd">${escapeHtml(t.command)}</pre>
@@ -881,6 +936,7 @@ async function loadScheduled() {
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
+document.getElementById("sched-search")?.addEventListener("input", loadScheduled);
 document.getElementById("sched-add").onclick = () => {
   const box = document.getElementById("sched-devices");
   if (!currentDevices || !currentDevices.length) { box.innerHTML = "<span class='muted'>No devices yet</span>"; }
@@ -1033,6 +1089,15 @@ document.getElementById("set-theme").onchange = () => {
   try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
   showToast("Theme: " + t, "ok");
 };
+// Quick theme toggle in the header.
+document.getElementById("theme-toggle").onclick = () => {
+  const cur = document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+  const t = cur === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-theme", t);
+  try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
+  const sel = document.getElementById("set-theme");
+  if (sel) sel.value = t;
+};
 document.getElementById("pw-change").onclick = async () => {
   const oldP = document.getElementById("pw-old").value;
   const newP = document.getElementById("pw-new").value;
@@ -1065,7 +1130,7 @@ async function loadSessions() {
         <td data-label="Started">${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
         <td data-label="Ended">${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
-        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button></td>
+        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play")}</button></td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll("[data-cmds]").forEach(b => b.onclick = () => {
       const r = rows.find(x => String(x.id) === b.dataset.cmds);
@@ -1074,6 +1139,14 @@ async function loadSessions() {
       out.classList.remove("hidden");
       document.getElementById("session-cmds-title").textContent = `Commands — ${r.device_name}`;
       document.getElementById("session-cmds-body").textContent = cmds.length ? cmds.map(c => "$ " + c).join("\n") : "(no commands recorded)";
+    });
+    box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => {
+      const r = rows.find(x => String(x.id) === b.dataset.play);
+      const out = document.getElementById("session-cmds");
+      out.classList.remove("hidden");
+      document.getElementById("session-cmds-title").textContent = `Playback — ${r.device_name} (${r.started_at ? new Date(r.started_at).toLocaleString() : "-"})`;
+      const tr = (r.transcript || "").replace(/\x1b\[[0-9;]*m/g, "");
+      document.getElementById("session-cmds-body").textContent = tr || "(no recording captured)";
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
@@ -1092,12 +1165,15 @@ document.getElementById("files-device").onchange = loadFiles;
   await loadStatus();
   refreshFilesDeviceSelect();
   refreshDockerDeviceSelect();
-  // Read-only roles (viewer) cannot create/modify anything — hide write buttons.
-  if (currentUser && currentUser.role === "viewer") {
-    ["add-device", "import-devices", "export-devices", "discover-tailscale", "inv-ansible", "inv-terraform"].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = "none";
-    });
+  // Show Users menu only for admins.
+  if (currentUser && currentUser.role === "admin") {
+    const su = document.getElementById("side-users");
+    if (su) su.style.display = "";
+  }
+  // Show Agents menu for admin or operator.
+  if (currentUser && ["admin", "operator"].includes(currentUser.role)) {
+    const sa = document.getElementById("side-agents");
+    if (sa) sa.style.display = "";
   }
   // Register service worker for PWA installability.
   if ("serviceWorker" in navigator) {

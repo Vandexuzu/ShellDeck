@@ -28,6 +28,7 @@ def _serialize(task: ScheduledTask) -> dict:
         "command": task.command,
         "device_ids": json.loads(task.device_ids or "[]"),
         "interval_minutes": task.interval_minutes,
+        "cron": task.cron,
         "enabled": task.enabled,
         "run_once": task.run_once,
         "run_at": task.run_at,
@@ -36,6 +37,25 @@ def _serialize(task: ScheduledTask) -> dict:
         "next_run": task.next_run,
         "created_at": task.created_at,
     }
+
+
+def _next_run_for(task: ScheduledTask, now: datetime) -> datetime | None:
+    """Compute the next scheduled run time for a recurring (non-run_once) task."""
+    if task.cron:
+        from app.cron import next_fire
+        return next_fire(task.cron, now)
+    if task.interval_minutes and task.interval_minutes > 0:
+        return now + timedelta(minutes=task.interval_minutes)
+    return None
+
+
+def _validate_cron(cron: str | None) -> str | None:
+    if not cron:
+        return None
+    from app.cron import parse_cron
+    if parse_cron(cron) is None:
+        raise HTTPException(status_code=400, detail=f"Invalid cron expression: {cron}")
+    return cron
 
 
 @router.get("", response_model=list[ScheduledTaskOut])
@@ -49,17 +69,22 @@ def create_task(
     payload: ScheduledTaskCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)
 ) -> dict:
     now = datetime.now()
+    cron = _validate_cron(payload.cron)
+    if cron and payload.run_once:
+        raise HTTPException(status_code=400, detail="Cron cannot be used with run_once")
     task = ScheduledTask(
         owner_id=user.id,
         name=payload.name,
         command=payload.command,
         device_ids=json.dumps(payload.device_ids),
         interval_minutes=payload.interval_minutes,
+        cron=cron,
         enabled=payload.enabled and not (payload.run_once and not payload.run_at),
         run_once=payload.run_once,
         run_at=payload.run_at,
-        next_run=(None if payload.run_once else now + timedelta(minutes=payload.interval_minutes))
-                    if not (payload.run_once and payload.run_at) else payload.run_at,
+        next_run=(None if payload.run_once else _next_run_for(
+            ScheduledTask(interval_minutes=payload.interval_minutes, cron=cron), now))
+            if not (payload.run_once and payload.run_at) else payload.run_at,
     )
     db.add(task)
     db.commit()
@@ -100,17 +125,20 @@ def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_d
     created = 0
     for item in payload:
         now = datetime.now()
+        cron = _validate_cron(item.cron)
         db.add(ScheduledTask(
             owner_id=user.id,
             name=item.name,
             command=item.command,
             device_ids=json.dumps(item.device_ids),
             interval_minutes=item.interval_minutes,
+            cron=cron,
             enabled=item.enabled and not (item.run_once and not item.run_at),
             run_once=item.run_once,
             run_at=item.run_at,
-            next_run=(None if item.run_once else now + timedelta(minutes=item.interval_minutes))
-                        if not (item.run_once and item.run_at) else item.run_at,
+            next_run=(None if item.run_once else _next_run_for(
+                ScheduledTask(interval_minutes=item.interval_minutes, cron=cron), now))
+                if not (item.run_once and item.run_at) else item.run_at,
         ))
         created += 1
     db.commit()
@@ -140,7 +168,7 @@ async def run_task(task: ScheduledTask, db: Session) -> None:
         task.enabled = False
         task.next_run = None
     else:
-        task.next_run = task.last_run + timedelta(minutes=task.interval_minutes)
+        task.next_run = _next_run_for(task, task.last_run)
     db.commit()
 
 

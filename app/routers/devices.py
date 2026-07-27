@@ -75,8 +75,18 @@ def _owned(db: Session, device_id: int, user: User) -> Device:
     raise HTTPException(status_code=404, detail="Device not found")
 
 
-def _to_out(device: Device) -> DeviceOut:
-    return DeviceOut.model_validate(device)
+def _to_out(device: Device, db: Session | None = None) -> DeviceOut:
+    out = DeviceOut.model_validate(device)
+    # Mark whether a live agent is linked to this device (for agent-terminal UI).
+    if db is not None:
+        from app.models import Agent
+        from app.routers.agents import _LIVE
+        try:
+            agent = db.scalar(select(Agent).where(Agent.device_id == device.id))
+            out.has_agent = bool(agent and agent.token in _LIVE)
+        except Exception:
+            out.has_agent = False
+    return out
 
 
 @router.get("", response_model=list[DeviceOut])
@@ -106,7 +116,7 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
     db.add(device)
     db.commit()
     db.refresh(device)
-    return _to_out(device)
+    return _to_out(device, db)
 
 
 @router.get("/generate-key")
@@ -323,13 +333,14 @@ def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_curren
             "ended_at": r.ended_at.isoformat() if r.ended_at else None,
             "duration_s": int((r.ended_at - r.started_at).total_seconds()) if r.ended_at and r.started_at else None,
             "commands": r.commands or "",
+            "transcript": r.transcript or "",
         })
     return out
 
 
 @router.get("/{device_id}", response_model=DeviceOut)
 def get_device(device_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> Device:
-    return _to_out(_owned(db, device_id, user))
+    return _to_out(_owned(db, device_id, user), db)
 
 
 @router.put("/{device_id}", response_model=DeviceOut)
@@ -346,7 +357,7 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
             setattr(device, field, value)
     db.commit()
     db.refresh(device)
-    return _to_out(device)
+    return _to_out(device, db)
 
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)

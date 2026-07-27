@@ -8,6 +8,7 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
 [![Self-hosted](https://img.shields.io/badge/self--hosted-✓-green.svg)](https://github.com/Vandexuzu/ShellDeck)
 [![PWA](https://img.shields.io/badge/PWA-installable-purple.svg)](https://github.com/Vandexuzu/ShellDeck)
+[![CI](https://github.com/Vandexuzu/ShellDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Vandexuzu/ShellDeck/actions/workflows/ci.yml)
 
 > 💸 **No cloud. No agents. No per-seat pricing.** One Compose file + a SQLite file and you're done.
 > 🔒 Credentials encrypted at rest (Fernet). Every shell session is audit-logged.
@@ -128,14 +129,19 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 
 ## 🗺 Roadmap
 
+- [x] Cron-expression schedules
+- [x] WebSocket agents (reverse tunnel for NAT devices)
 - [ ] Session recording playback (asciinema-style)
 - [ ] 2FA / OIDC
-- [ ] Cron-expression schedules
 - [ ] Prometheus metrics export
 
 ## 🤝 Contributing
 
-Keep it **$0, agentless, self-hosted**. Run `pytest` before opening a PR.
+Keep it **$0, agentless, self-hosted**. Run `pytest` before opening a pull request on ShellDeck.
+
+## 👤 Author
+
+Built by [@vandikampw](https://instagram.com/vandikampw) · ⚡ ShellDeck
 
 ## 📄 License
 

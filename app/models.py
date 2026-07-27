@@ -127,6 +127,9 @@ class ScheduledTask(Base):
     # JSON list of device ids this task runs against.
     device_ids: Mapped[str] = mapped_column(Text, default="[]")
     interval_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    # Optional cron expression (5-field: "m h dom mon dow"). If set, overrides
+    # interval_minutes for scheduling. Only used when run_once is False.
+    cron: Mapped[str | None] = mapped_column(String(64), nullable=True)
     enabled: Mapped[bool] = mapped_column(default=True)
     run_once: Mapped[bool] = mapped_column(default=False)
     run_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -134,6 +137,28 @@ class ScheduledTask(Base):
     next_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     # Captured stdout/stderr from the most recent run (audit / visibility).
     last_output: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    owner: Mapped["User"] = relationship()
+
+
+class Agent(Base):
+    """A reverse-tunnel agent connected from a NAT-traversed device.
+
+    Agents connect outward from the device to ShellDeck over WebSocket, so no
+    inbound port is needed on the device. ShellDeck can then relay commands to
+    the device through the live tunnel. Each agent has a shared secret token.
+    """
+
+    __tablename__ = "agents"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    token: Mapped[str] = mapped_column(String(64), unique=True, index=True)  # shared secret
+    device_id: Mapped[int | None] = mapped_column(ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    connected: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     owner: Mapped["User"] = relationship()
