@@ -9,6 +9,8 @@ Security notes:
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from datetime import datetime, timezone
 
 import asyncssh
@@ -88,6 +90,20 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
 
         # Read from SSH -> browser.
         transcript_buf = []
+        # Asciinema-style event stream for full TTY playback.
+        rec_events = []
+        rec_start = None
+        rec_t0 = None
+
+        def _rec(typ: str, data: str) -> None:
+            nonlocal rec_start, rec_t0
+            now = time.monotonic()
+            if rec_start is None:
+                rec_start = now
+                rec_t0 = now
+            delay = now - rec_t0
+            rec_t0 = now
+            rec_events.append([round(delay, 3), typ, data])
 
         async def ssh_to_ws() -> None:
             try:
@@ -97,6 +113,7 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                         break
                     await websocket.send_text(data)
                     transcript_buf.append(data)
+                    _rec("o", data)
             except asyncio.CancelledError:
                 pass
             except Exception:  # noqa: BLE001
@@ -118,6 +135,7 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                     else:
                         shell.stdin.write(msg)
                         transcript_buf.append(msg)
+                        _rec("i", msg)
                         # Accumulate typed characters so a command is captured even
                         # when the browser streams one keystroke per WebSocket frame.
                         if "\x1b" not in msg and msg not in ("\r", "\n"):
@@ -159,6 +177,14 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
             full = "".join(transcript_buf)
             if full:
                 log.transcript = (log.transcript + full) if log.transcript else full
+            # Persist the full TTY recording (asciinema-style event stream).
+            if rec_events:
+                try:
+                    rec = {"version": 2, "width": cols, "height": rows,
+                           "events": rec_events}
+                    log.recording = json.dumps(rec)
+                except Exception:  # noqa: BLE001
+                    pass
             db.commit()
     finally:
         db.close()

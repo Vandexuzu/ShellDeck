@@ -1533,21 +1533,80 @@ async function loadSessions() {
     box.querySelectorAll("[data-cmds]").forEach(b => b.onclick = () => {
       const r = rows.find(x => String(x.id) === b.dataset.cmds);
       const cmds = (r.commands || "").split("\n").filter(Boolean);
-      const out = document.getElementById("session-cmds");
-      out.classList.remove("hidden");
-      document.getElementById("session-cmds-title").textContent = `Commands — ${r.device_name}`;
-      document.getElementById("session-cmds-body").textContent = cmds.length ? cmds.map(c => "$ " + c).join("\n") : "(no commands recorded)";
+      openSessionModal(r, "cmds", cmds.map(c => "$ " + c).join("\n") || "(no commands recorded)");
     });
     box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => {
       const r = rows.find(x => String(x.id) === b.dataset.play);
-      const out = document.getElementById("session-cmds");
-      out.classList.remove("hidden");
-      document.getElementById("session-cmds-title").textContent = `Playback — ${r.device_name} (${r.started_at ? new Date(r.started_at).toLocaleString() : "-"})`;
-      const tr = (r.transcript || "").replace(/\x1b\[[0-9;]*m/g, "");
-      document.getElementById("session-cmds-body").textContent = tr || "(no recording captured)";
+      openSessionModal(r, "player", r.transcript || "");
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
+
+// ---- Session playback (asciinema-style) using a replaying xterm ----
+let spPlayer = null, spTerm = null, spTimer = null, spEvents = [], spIdx = 0, spPlaying = false, spSpeed = 1;
+function openSessionModal(r, tab, rawText) {
+  const out = document.getElementById("session-cmds");
+  out.classList.remove("hidden");
+  document.getElementById("session-cmds-title").textContent =
+    `${tab === "player" && r.has_recording ? "Playback" : "Session"} — ${r.device_name} (${r.started_at ? new Date(r.started_at).toLocaleString() : "-"})`;
+  const body = document.getElementById("session-cmds-body");
+  const wrap = document.getElementById("session-cmds-player-wrap");
+  // Tabs
+  document.querySelectorAll("#session-cmds-tabs .seg").forEach(s => {
+    s.onclick = () => {
+      document.querySelectorAll("#session-cmds-tabs .seg").forEach(x => x.classList.remove("active"));
+      s.classList.add("active");
+      const t = s.dataset.tab;
+      if (t === "player") { wrap.style.display = ""; body.style.display = "none"; startPlayback(r); }
+      else { wrap.style.display = "none"; body.style.display = ""; body.textContent = t === "cmds" ? (r.commands || "").split("\n").filter(Boolean).map(c => "$ " + c).join("\n") || "(no commands recorded)" : (r.transcript || "(no recording captured)"); }
+    };
+  });
+  if (tab === "player" && r.has_recording) {
+    wrap.style.display = ""; body.style.display = "none";
+    startPlayback(r);
+  } else {
+    wrap.style.display = "none"; body.style.display = "";
+    body.textContent = rawText;
+  }
+}
+function startPlayback(r) {
+  try { if (spPlayer) { spPlayer.pause(); spPlayer = null; } } catch (_) {}
+  if (!spTerm) {
+    spTerm = new Terminal({ cursorBlink: false, theme: { background: "#000000" } });
+    const fit = new FitAddon.FitAddon();
+    spTerm.loadAddon(fit);
+    spTerm.open(document.getElementById("session-player"));
+    fit.fit();
+  }
+  spTerm.reset();
+  fetchRecording(r.id).then(rec => {
+    spEvents = (rec && rec.events) || [];
+    spIdx = 0; spPlaying = false;
+    spTerm.clear();
+    if (!spEvents.length) { spTerm.write("\x1b[33m(no recording captured for this session)\x1b[0m"); return; }
+    spPlaying = true; playStep();
+  }).catch((err) => { spTerm.write("\x1b[31m[failed to load recording: " + (err && err.message) + "]\x1b[0m"); });
+}
+async function fetchRecording(id) {
+  return await api(`/api/devices/sessions/${id}/recording`);
+}
+function playStep() {
+  if (!spPlaying || spIdx >= spEvents.length) { spPlaying = false; return; }
+  const [delay, type, data] = spEvents[spIdx++];
+  if (type === "o") spTerm.write(data);
+  const d = Math.max(0, (delay || 0) / (spSpeed || 1)) * 1000;
+  spTimer = setTimeout(playStep, d);
+}
+document.getElementById("sp-play").onclick = () => {
+  if (spIdx >= spEvents.length) { spIdx = 0; spTerm.reset(); }
+  spPlaying = !spPlaying;
+  if (spPlaying) playStep();
+  else if (spTimer) clearTimeout(spTimer);
+};
+document.getElementById("sp-restart").onclick = () => {
+  spIdx = 0; spTerm.reset(); spPlaying = true; playStep();
+};
+document.getElementById("sp-speed").onchange = (e) => { spSpeed = parseFloat(e.target.value) || 1; };
 
 // ----------------------------- Boot ----------------------------------------
 document.querySelectorAll(".side-nav-item").forEach(t => t.onclick = () => switchTab(t.dataset.tab));

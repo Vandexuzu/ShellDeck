@@ -334,8 +334,27 @@ def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_curren
             "duration_s": int((r.ended_at - r.started_at).total_seconds()) if r.ended_at and r.started_at else None,
             "commands": r.commands or "",
             "transcript": r.transcript or "",
+            "has_recording": bool(r.recording),
         })
     return out
+
+
+@router.get("/sessions/{session_id}/recording")
+def get_session_recording(session_id: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """Return the asciinema-style TTY recording for a session (if captured)."""
+    from app.models import SessionLog as _SL
+    vis = _visible_devices(db, user)
+    visible_ids = {d.id for d in db.scalars(vis).all()}
+    log = db.get(_SL, session_id)
+    if log is None or log.device_id not in visible_ids:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not log.recording:
+        return {"events": [], "width": 80, "height": 24}
+    try:
+        rec = json.loads(log.recording)
+    except Exception:
+        return {"events": [], "width": 80, "height": 24}
+    return {"events": rec.get("events", []), "width": rec.get("width", 80), "height": rec.get("height", 24)}
 
 
 @router.get("/{device_id}", response_model=DeviceOut)

@@ -74,6 +74,10 @@ class SessionLog(Base):
     transcript: Mapped[str] = mapped_column(Text, default="")
     # Newline-separated list of commands typed by the user during the session.
     commands: Mapped[str] = mapped_column(Text, default="")
+    # Full TTY recording in asciinema-style event stream (JSON) for playback.
+    # Format: {"version":2,"width":W,"height":H,"events":[[delay,type,data],...]}
+    #   type "o" = output (device->user), "i" = input (user->device)
+    recording: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     device: Mapped["Device"] = relationship(back_populates="sessions")
 

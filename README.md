@@ -138,7 +138,7 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Split terminal panes
 - [x] Tab persistence across reload
 - [x] File manager over agent relay (NAT devices)
-- [ ] Session recording playback (asciinema-style)
+- [x] Session recording playback (asciinema-style TTY replay)
 - [ ] 2FA / OIDC
 - [ ] Prometheus metrics export
 

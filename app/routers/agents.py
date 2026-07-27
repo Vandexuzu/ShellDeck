@@ -29,9 +29,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSock
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
+import time
 
 from app.db import get_db
-from app.models import Agent, Device, User
+from app.models import Agent, Device, SessionLog, User
 from app.security import get_user_from_token_raw, operator_only
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -44,6 +46,8 @@ _LIVE_WS: dict[str, WebSocket] = {}
 _SESSIONS: dict[int, dict] = {}
 # Pending file-system relay requests: cid -> asyncio.Future
 _FS_WAIT: dict[int, asyncio.Future] = {}
+# Active recording buffers: cid -> list of [delay, type, data]
+_REC: dict[int, list] = {}
 _NEXT_CID = 1
 
 
@@ -166,7 +170,11 @@ async def _route_agent_frame(raw: str) -> None:
         return
     try:
         if t == "data":
-            await sess["browser"].send_text(msg.get("data", ""))
+            data = msg.get("data", "")
+            buf = _REC.get(cid)
+            if buf is not None:
+                buf.append([round(time.monotonic() - buf[0], 3) if isinstance(buf[0], float) else 0.0, "o", data])
+            await sess["browser"].send_text(data)
         elif t == "exit":
             # Shell exited — forward nothing; the browser WS will be closed
             # by the agent-terminal endpoint when its session ends.
@@ -290,12 +298,20 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
         cid = _NEXT_CID
         _NEXT_CID += 1
         _SESSIONS[cid] = {"browser": websocket, "device_id": device_id, "token": agent_token}
+        # Recording buffer: [start_mono, ...events]. First element is the t0 marker.
+        _REC[cid] = [time.monotonic()]
+
+        # Audit log entry.
+        log = SessionLog(device_id=device.id, user_id=user.id)
+        db.add(log)
+        db.commit()
 
         # Start an interactive shell on the agent.
         q = _LIVE.get(agent_token)
         if q is None:
             await websocket.close(code=status.WS_1013_TRY_AGAIN_LATER)
             _SESSIONS.pop(cid, None)
+            _REC.pop(cid, None)
             return
         await q.put(json.dumps({"t": "exec", "cid": cid, "cols": 80, "rows": 24, "data": ""}))
 
@@ -307,6 +323,9 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
                         _, cols_s, rows_s = msg.split("\x00")[1:4]
                         await agent_relay_resize(cid, int(cols_s), int(rows_s))
                     else:
+                        buf = _REC.get(cid)
+                        if buf is not None:
+                            buf.append([round(time.monotonic() - buf[0], 3), "i", msg])
                         await agent_relay_stdin(cid, msg)
             except WebSocketDisconnect:
                 pass
@@ -316,6 +335,18 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
         # The agent->browser direction is handled by _route_agent_frame (pump
         # in agent_ws) which sends frames straight to this websocket. We just
         # keep this coroutine alive until the browser disconnects.
-        await browser_to_agent()
+        try:
+            await browser_to_agent()
+        finally:
+            buf = _REC.pop(cid, None)
+            log.ended_at = datetime.now(timezone.utc)
+            if buf and len(buf) > 1:
+                try:
+                    events = buf[1:]
+                    rec = {"version": 2, "width": 80, "height": 24, "events": events}
+                    log.recording = json.dumps(rec)
+                    db.commit()
+                except Exception:  # noqa: BLE001
+                    pass
     finally:
         db.close()
