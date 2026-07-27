@@ -47,7 +47,7 @@ form.onsubmit = async (e) => {
     if (mode === "login") {
       const body = new URLSearchParams({ username, password });
       const totp = document.getElementById("a-totp").value.trim();
-      if (totp) body.set("scope", totp); // 2FA code rides in OAuth2 `scope`
+      if (totp) body.set("totp", totp); // 2FA code in dedicated `totp` field
       res = await fetch(API + endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

@@ -29,9 +29,10 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 | ⏰ **Scheduler** | Recurring or run-once jobs per device |
 | 🔔 **Alerts** | Telegram · Discord · ntfy · Gotify · Slack · Email · webhook |
 | 🕸 **Agent relay** | Reach devices behind NAT/firewall — full shell **and** file manager over an outbound WebSocket |
-| 🌐 **Public dashboard** | Read-only status page at `/public` (no login) |
+| 🌐 **Public dashboard** | Read-only status page at `/public` (no login) — host IPs are masked (e.g. `10.0.0.x`) |
 | 🪜 **Bastion** | Tunnel SSH through a jump host automatically |
 | 📲 **PWA** | Install to phone home screen; mobile UI (cards + bottom nav) |
+| 🔐 **2FA** | TOTP / 2FA (RFC 6238, no external dependency); OIDC SSO (Google / GitHub / corporate) |
 
 ---
 
@@ -76,6 +77,23 @@ location / {
 
 ---
 
+## 🔒 Security
+
+ShellDeck is built for self-hosting, but treat it like the keys to your fleet:
+
+- **Credentials encrypted at rest** (Fernet, key derived from `SECRET_KEY`). Every device password / SSH key is stored encrypted.
+- **Password hashing** uses PBKDF2-HMAC-SHA256 (200k iterations) with a per-user salt; token comparison is constant-time.
+- **Two-factor auth (TOTP)** — RFC 6238, no external service. The 2FA code is submitted in a dedicated `totp` form field (not OAuth2 `scope`).
+- **Login rate-limiting** — failed logins are throttled per client IP (10 failures / 15 min → temporary 429 lockout).
+- **OIDC auto-provisioning is OFF by default** — SSO users must already have a ShellDeck account; unknown IdP identities are rejected (no silent account creation).
+- **Public dashboard IP masking** — host addresses on `/public` are anonymised (`10.0.0.42` → `10.0.0.x`).
+- **SSRF protection** — the *upload-from-URL* feature rejects URLs that resolve to private / loopback / link-local addresses.
+- **Session audit logging** — every shell session is recorded (and, when enabled, replayable as a TTY cast).
+
+> ⚠️ **Front it with TLS.** ShellDeck serves plain HTTP; expose it through Nginx/Caddy/Traefik with HTTPS so credentials and 2FA codes aren't sent in clear text.
+
+---
+
 ## 🧱 Architecture
 
 ```text
@@ -107,6 +125,9 @@ SQLite  (users · devices · snippets · scheduled_tasks · session_logs · sett
 | `DATABASE_URL` | `sqlite:///./shelldeck.db` | DB connection |
 | `HOST` / `PORT` | `0.0.0.0` / `8000` | Bind (Docker) |
 | `SSH_IGNORE_KNOWN_HOSTS` | `true` | Homelab-friendly; set `false` for stricter security |
+| `OIDC_AUTO_PROVISION` | `false` | When `true`, first SSO login auto-creates a viewer account. Leave `false` so only pre-existing users can sign in via OIDC. |
+
+> **Brute-force protection:** failed logins are throttled per client IP — 10 failures within 15 minutes triggers a temporary lockout (HTTP 429). Tune in `app/main.py` (`_LOGIN_WINDOW` / `_LOGIN_MAX_FAILS`).
 
 ### Alerts (Settings → Notifications)
 Enable alerts, set the monitor interval, then wire up any channel — **Telegram** (bot token + chat id), **Discord**, **ntfy**, **Gotify**, **Slack**, **Email (SMTP)**, or a **custom webhook**. Hit **Send test** to verify.

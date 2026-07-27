@@ -9,6 +9,7 @@ with fresh IDs.
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, Response
@@ -82,14 +83,20 @@ def import_all(payload: dict, db: Session = Depends(get_db), _: object = Depends
             run_at=t.get("run_at"),
         ))
         created["tasks"] += 1
-    # Users (no password — caller must set via UI; default viewer).
+    # Users (no password in export — generate a strong one and surface it to
+    # the importing admin so they can hand it over; the new user should change
+    # it on first login). We no longer use a fixed default like "changeme123".
     from app.security import hash_password
+
+    created_users_pw: dict[str, str] = {}
     for u in payload.get("users", []):
         if db.scalars(select(User).where(User.username == u["username"])).first():
             continue
         role = u.get("role", "viewer")
-        db.add(User(username=u["username"], password_hash=hash_password("changeme123"),
+        temp_pw = secrets.token_urlsafe(16)
+        db.add(User(username=u["username"], password_hash=hash_password(temp_pw),
                     role=role, is_admin=(role == "admin")))
+        created_users_pw[u["username"]] = temp_pw
         created["users"] += 1
     db.commit()
-    return {"imported": created}
+    return {"imported": created, "user_temp_passwords": created_users_pw}

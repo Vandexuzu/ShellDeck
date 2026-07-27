@@ -1,7 +1,7 @@
 """Authentication endpoints: register, login, current user."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -67,15 +67,23 @@ def change_password(
 
 
 @router.post("/login", response_model=Token)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)) -> Token:
+async def login(
+    request: Request,
+    form: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+) -> Token:
     user = db.scalar(select(User).where(User.username == form.username))
     if user is None or not verify_password(form.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    # If 2FA is enabled, the TOTP code must be supplied in the `scope` field
-    # (OAuth2PasswordRequestForm exposes it as `scopes`, a list of strings).
+    # If 2FA is enabled, the TOTP code must be supplied. We read it from a
+    # dedicated `totp` form field (preferred); fall back to the OAuth2 `scope`
+    # field for backwards compatibility with older clients.
     if user.totp_secret:
-        raw = form.scopes or []
-        code = (raw[0] if isinstance(raw, list) and raw else "").strip()
+        posted = await request.form()
+        raw_totp = posted.get("totp")
+        code = (raw_totp.strip() if isinstance(raw_totp, str) else "") or (
+            (form.scopes[0] if isinstance(form.scopes, list) and form.scopes else "").strip()
+        )
         if not verify_totp(user.totp_secret, code):
             raise HTTPException(
                 status_code=401,

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import asyncssh
+import ipaddress
+import socket
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -181,6 +183,43 @@ async def upload_file(
 
 import httpx
 
+def _is_safe_fetch_url(url: str) -> bool:
+    """Reject URLs that resolve to private/loopback/link-local addresses
+    (SSRF protection for the server-side fetch in upload-link)."""
+    from urllib.parse import urlparse
+
+    p = urlparse(url)
+    host = (p.hostname or "").strip().lower()
+    if not host:
+        return False
+    # Block literal IPs in private ranges; also resolve hostnames and check.
+    try:
+        ips = {ipaddress.ip_address(host)}
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(host, None)
+            ips = set()
+            for info in infos:
+                addr = info[4]
+                ip_str = addr[0] if isinstance(addr, (tuple, list)) else str(addr)
+                try:
+                    ips.add(ipaddress.ip_address(ip_str))
+                except ValueError:
+                    continue
+        except (socket.gaierror, UnicodeError):
+            return False
+    for ip in ips:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            return False
+    return True
+
+
 @router.post("/{device_id}/upload-link")
 async def upload_link(
     device_id: int,
@@ -190,6 +229,8 @@ async def upload_link(
     db: Session = Depends(get_db),
     user: User = Depends(operator_only),
 ) -> dict:
+    if not _is_safe_fetch_url(url):
+        raise HTTPException(status_code=400, detail="URL blocked: only public hosts are allowed")
     device = db.get(Device, device_id)
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")

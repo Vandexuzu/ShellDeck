@@ -58,4 +58,13 @@ async def public_status(db: Session = Depends(get_db)) -> dict:
     devices = db.scalars(select(Device)).all()
     results = await asyncio.gather(*[_collect(d, db) for d in devices])
     up = sum(1 for r in results if r["reachable"])
+    # Mask the last host octet on the public feed so internal IPs aren't
+    # leaked to anonymous viewers (e.g. 10.0.0.42 -> 10.0.0.x).
+    for r in results:
+        h = r.get("host") or ""
+        if h.count(".") == 3:  # IPv4
+            prefix, _ = h.rsplit(".", 1)
+            r["host"] = f"{prefix}.x"
+        elif ":" in h:  # IPv6 — keep only the /64 prefix
+            r["host"] = h.split(":")[0] + ":…"
     return {"total": len(results), "up": up, "down": len(results) - up, "devices": list(results)}
