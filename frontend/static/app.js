@@ -1807,4 +1807,7 @@ document.getElementById("files-device").onchange = loadFiles;
       }, 300);
     });
   }
+  // Hide boot loading overlay once the app is ready.
+  const bl = document.getElementById("boot-loading");
+  if (bl) bl.classList.add("hidden");
 })();

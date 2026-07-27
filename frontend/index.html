@@ -52,7 +52,7 @@
     <!-- Content -->
     <section class="content">
       <!-- Devices / Monitoring view -->
-      <div id="view-devices">
+      <div id="view-devices" class="hidden">
         <div class="content-head">
           <h1>Remote Devices</h1>
           <div>
@@ -531,9 +531,10 @@
   </div>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="boot-loading" class="boot-loading"><div class="spinner"></div><span>Loading ShellDeck…</span></div>
 
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
-  <script src="/static/app.js?v=69"></script>
+  <script src="/static/app.js?v=71"></script>
 </body>
 </html>
