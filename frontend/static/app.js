@@ -1698,6 +1698,15 @@ function fmtAgo(iso) {
   if (s < 86400) return Math.floor(s / 3600) + "h ago";
   return Math.floor(s / 86400) + "d ago";
 }
+function fmtUntil(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso), s = (d.getTime() - Date.now()) / 1000;
+  if (s < 0) return "due";
+  if (s < 60) return "in <1m";
+  if (s < 3600) return "in " + Math.floor(s / 60) + "m";
+  if (s < 86400) return "in " + Math.floor(s / 3600) + "h";
+  return "in " + Math.floor(s / 86400) + "d";
+}
 function fmtDur(sec) {
   if (sec == null) return "—";
   if (sec < 60) return sec + "s";
@@ -1750,7 +1759,7 @@ async function loadHome() {
     else sb.innerHTML = d.scheduled.map(t => `
       <div class="home-row" onclick="switchTab('scheduled')">
         <span><b>${escapeHtml(t.name)}</b></span>
-        <span class="badge ${t.enabled ? "" : "off"}">${t.enabled ? (t.next_run ? fmtAgo(t.next_run) : "on") : "off"}</span>
+        <span class="badge ${t.enabled ? "" : "off"}">${t.enabled ? (t.next_run ? fmtUntil(t.next_run) : "on") : "off"}</span>
       </div>`).join("");
 
     // G: docker

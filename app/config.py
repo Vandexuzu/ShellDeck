@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     oidc_client_secret: str = ""
     oidc_discovery_url: str = ""   # e.g. https://accounts.google.com/.well-known/openid-configuration
     oidc_scopes: str = "openid email profile"
+    # Auto-create a viewer account on first OIDC login. When False (default),
+    # the IdP email must already map to an existing ShellDeck user, otherwise
+    # login is rejected — prevents unknown IdP users from gaining access.
+    oidc_auto_provision: bool = False
 
 
 settings = Settings()

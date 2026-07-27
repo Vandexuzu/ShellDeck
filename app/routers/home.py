@@ -21,6 +21,51 @@ from app.security import get_current_user
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
+# --- Cheap in-memory cache for device reachability / docker counts ---------
+# Home is loaded often; probing every device over SSH on each load is
+# expensive (N+1 connections). Cache each device's status for a short TTL so
+# repeated dashboard loads don't re-open SSH sessions. Single-instance only.
+import time as _time
+
+_STATUS_TTL = 30  # seconds
+_status_cache: dict[object, tuple[float, object]] = {}
+
+
+async def _cached_collect(device: Device, db: Session):
+    now = _time.monotonic()
+    cached = _status_cache.get(device.id)
+    if cached is not None and now - cached[0] < _STATUS_TTL:
+        return cached[1]
+    result = await _collect(device, db)
+    _status_cache[device.id] = (now, result)
+    return result
+
+
+async def _cached_docker_count(d: Device, db: Session) -> dict:
+    # The docker probe is the most expensive part (SSH + `docker ps`).
+    # Reuse the same short-TTL cache keyed by device id.
+    now = _time.monotonic()
+    cached = _status_cache.get(("docker", d.id))
+    if cached is not None and now - cached[0] < _STATUS_TTL:
+        return cached[1]
+    out, _, code = await _run_docker_safe(d, db)
+    result = {"id": d.id, "name": d.name, "available": code == 0, "running": 0, "total": 0}
+    if code == 0:
+        states = [ln.strip() for ln in out.splitlines() if ln.strip()]
+        result["running"] = sum(1 for st in states if st.lower().startswith("up"))
+        result["total"] = len(states)
+    _status_cache[("docker", d.id)] = (now, result)
+    return result
+
+
+async def _run_docker_safe(d: Device, db: Session) -> tuple[str, str, int]:
+    from app.routers.docker import _run
+
+    try:
+        return await _run(d, "docker ps -a --format '{{.State}}'", db, timeout=8)
+    except Exception:
+        return "", "", 1
+
 
 @router.get("/summary")
 async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
@@ -30,10 +75,10 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
     # --- A: stat cards ---------------------------------------------------
     total = len(devices)
     # Lightweight reachability: probe ALL visible devices in parallel (reuse
-    # monitor collector). No artificial 10-device cap — every device counts
-    # toward the online stat and the health list.
+    # monitor collector). Results are cached briefly (see _status_cache) so the
+    # dashboard doesn't open a fresh SSH connection on every page load.
     if devices:
-        statuses = await asyncio.gather(*[_collect(d, db) for d in devices])
+        statuses = await asyncio.gather(*[_cached_collect(d, db) for d in devices])
     else:
         statuses = []
     online = sum(1 for s in statuses if s.reachable)
@@ -122,18 +167,7 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
     docker = []
     reachable = [d for d in devices if d.id in {s.id for s in statuses if s.reachable}][:6]
     if reachable:
-        async def _docker_count(d: Device) -> dict:
-            try:
-                from app.routers.docker import _run
-                out, _, code = await _run(d, "docker ps -a --format '{{.State}}'", db, timeout=8)
-                if code != 0:
-                    return {"id": d.id, "name": d.name, "available": False, "running": 0, "total": 0}
-                states = [ln.strip() for ln in out.splitlines() if ln.strip()]
-                running = sum(1 for st in states if st.lower().startswith("up"))
-                return {"id": d.id, "name": d.name, "available": True, "running": running, "total": len(states)}
-            except Exception:
-                return {"id": d.id, "name": d.name, "available": False, "running": 0, "total": 0}
-        docker = await asyncio.gather(*[_docker_count(d) for d in reachable])
+        docker = await asyncio.gather(*[_cached_docker_count(d, db) for d in reachable])
 
     return {
         "stats": {

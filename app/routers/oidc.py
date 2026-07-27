@@ -125,6 +125,11 @@ async def oidc_callback(
     # Map to a local account (reuse existing username, else create viewer).
     user = db.scalar(select(User).where(User.username == username))
     if user is None:
+        if not settings.oidc_auto_provision:
+            raise HTTPException(
+                status_code=403,
+                detail="No matching account for this SSO identity. Ask an admin to create your user first.",
+            )
         user = User(
             username=username,
             password_hash=hash_password(secrets.token_urlsafe(16)),
