@@ -91,15 +91,26 @@ def totp_status(current_user: User = Depends(get_current_user)) -> dict:
     return {"enabled": bool(current_user.totp_secret)}
 
 
-@router.get("/2fa/setup")
-def totp_setup_begin(current_user: User = Depends(get_current_user)) -> dict:
-    """Generate a new TOTP secret + otpauth URI for the user to scan into their app."""
+@router.get("/2fa/qr")
+def totp_qr(current_user: User = Depends(get_current_user), fmt: str = "svg") -> dict:
+    """Generate a fresh TOTP secret + a QR code (PNG data URL) for enrollment.
+
+    The client shows the QR, then confirms with a valid TOTP code
+    (POST /2fa/setup) before the secret is stored.
+    """
     from app.config import settings
+    import base64
+    import io
+
+    import qrcode
 
     secret = generate_totp_secret()
     label = f"{current_user.username}@{settings.app_name}"
     uri = f"otpauth://totp/{label}?secret={secret}&issuer={settings.app_name}&algorithm=SHA1&digits=6&period=30"
-    return {"secret": secret, "otpauth_uri": uri}
+    buf = io.BytesIO()
+    qrcode.make(uri).save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return {"secret": secret, "otpauth_uri": uri, "qr_png": f"data:image/png;base64,{b64}"}
 
 
 @router.post("/2fa/setup")

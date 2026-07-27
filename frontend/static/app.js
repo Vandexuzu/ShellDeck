@@ -1527,19 +1527,24 @@ async function refreshTotpStatus() {
 }
 document.getElementById("totp-start").onclick = async () => {
   try {
-    const d = await api("/api/auth/2fa/setup", { method: "GET" });
-    document.getElementById("totp-uri").textContent = d.otpauth_uri;
+    const d = await api("/api/auth/2fa/qr", { method: "GET" });
+    window._totpSecret = d.secret;
+    document.getElementById("totp-qr").src = d.qr_png;
+    document.getElementById("totp-qr").style.display = "";
+    document.getElementById("totp-secret-text").textContent = "Manual key: " + d.secret;
     document.getElementById("totp-setup").classList.remove("hidden");
     document.getElementById("totp-disabled-actions").style.display = "none";
+    showToast("Scan the QR code with your authenticator app", "ok");
   } catch (e) { showToast("2FA setup failed: " + e.message, "error"); }
 };
 document.getElementById("totp-confirm").onclick = async () => {
-  const secret = (document.getElementById("totp-uri").textContent.match(/secret=([^&]+)/) || [])[1];
+  const secret = window._totpSecret;
   const code = document.getElementById("totp-code").value.trim();
   if (!secret || !code) { showToast("Enter the 6-digit code", "error"); return; }
   try {
     await api("/api/auth/2fa/setup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret, code }) });
     showToast("2FA enabled", "ok");
+    window._totpSecret = null;
     await refreshTotpStatus();
   } catch (e) { showToast("Invalid code: " + e.message, "error"); }
 };
