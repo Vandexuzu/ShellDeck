@@ -1775,11 +1775,12 @@ async function loadSessions() {
     const rows = await api("/api/devices/sessions" + (q ? "?q=" + encodeURIComponent(q) : ""));
     if (!rows.length) { box.innerHTML = "<p class='muted'>No shell sessions recorded yet.</p>"; return; }
     box.innerHTML = `<table class="session-table"><thead><tr>
-      <th>Device</th><th>Host</th><th>Started</th><th>Ended</th><th>Duration</th><th>Commands</th>
+      <th>Device</th><th>Host</th><th>User</th><th>Started</th><th>Ended</th><th>Duration</th><th>Commands</th>
     </tr></thead><tbody>${rows.map(r => `
       <tr>
         <td data-label="Device">${escapeHtml(r.device_name)}</td>
         <td data-label="Host" class="muted">${escapeHtml(r.device_host)}</td>
+        <td data-label="User">${escapeHtml(r.username || "-")}</td>
         <td data-label="Started">${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
         <td data-label="Ended">${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>

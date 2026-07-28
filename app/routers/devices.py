@@ -335,15 +335,20 @@ def list_sessions(db: Session = Depends(get_db), user: User = Depends(get_curren
             dev_cache[r.device_id] = dev
         dev_name = dev.name if dev else "(deleted)"
         dev_host = dev.host if dev else ""
+        uname = None
+        if r.user_id:
+            u = db.get(User, r.user_id)
+            uname = u.username if u else None
         if q:
             needle = q.strip().lower()
-            if needle not in (dev_name + " " + dev_host + " " + (r.commands or "") + " " + (r.transcript or "")).lower():
+            if needle not in (dev_name + " " + dev_host + " " + (r.commands or "") + " " + (r.transcript or "") + " " + (uname or "")).lower():
                 continue
         out.append({
             "id": r.id,
             "device_id": r.device_id,
             "device_name": dev_name,
             "device_host": dev_host,
+            "username": uname,
             "started_at": r.started_at.isoformat() if r.started_at else None,
             "ended_at": r.ended_at.isoformat() if r.ended_at else None,
             "duration_s": int((r.ended_at - r.started_at).total_seconds()) if r.ended_at and r.started_at else None,
