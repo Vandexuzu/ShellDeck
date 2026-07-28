@@ -1105,6 +1105,8 @@ function createPane(tabEl, deviceId, initialCommand) {
   const term = new Terminal({ cursorBlink: true, theme: { background: "#000000" } });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
+  let searchAddon = null;
+  try { if (window.SearchAddon) { searchAddon = new SearchAddon.SearchAddon(); term.loadAddon(searchAddon); } } catch (_) {}
   term.open(termEl);
   fit.fit();
   // Re-fit on the next frame: if the pane was created while its tab/view was
@@ -1121,13 +1123,23 @@ function createPane(tabEl, deviceId, initialCommand) {
   ws.onclose = () => term.write("\r\n\x1b[31m[session closed]\x1b[0m\r\n");
   ws.onopen = () => { if (initialCommand) ws.send(initialCommand + "\r"); };
   term.onData((d) => ws.readyState === WebSocket.OPEN && ws.send(d));
+  // Ctrl+F (or Cmd+F) opens an in-terminal search using the SearchAddon.
+  term.attachCustomKeyEventHandler((e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
+      e.preventDefault();
+      const q = prompt("Search in terminal:");
+      if (q && searchAddon) { searchAddon.findNext(q, { incremental: false }); }
+      return false; // swallow so it isn't sent to the shell
+    }
+    return true;
+  });
   term.onResize(({ cols, rows }) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(`\x00resize\x00${cols}\x00${rows}`);
   });
 
   const onResize = () => { try { fit.fit(); } catch (_) {} };
   window.addEventListener("resize", onResize);
-  const rec = { deviceId, term, fit, ws, el: col, onResize };
+  const rec = { deviceId, term, fit, ws, searchAddon, el: col, onResize };
   term._paneRec = rec;
   col._paneRec = rec;
   tabEl.appendChild(col);
