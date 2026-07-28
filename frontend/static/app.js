@@ -559,25 +559,49 @@ async function uploadFiles(files) {
   if (!files || !files.length) return;
   if (!filesCurrent.deviceId) { showToast("Select a device first", "error"); return; }
   const dev = currentFilesDevice();
-  const base = filesCurrent.path.replace(/\/$/, "");
+  const up = document.getElementById("upload-progress");
+  const fill = document.getElementById("up-fill");
+  const label = document.getElementById("up-label");
   for (const f of files) {
     try {
       if (dev && dev.has_agent) {
         const buf = await f.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
-        const dest = (base ? base + "/" : "/") + f.name;
+        label.textContent = `Uploading ${f.name} (agent)…`;
+        up.classList.remove("hidden");
+        fill.style.width = "0%";
+        // Agent writes in one call; show an indeterminate-ish ramp.
+        const dest = (filesCurrent.path.replace(/\/$/, "") || "/") + "/" + f.name;
         await fsOp("write_b64", dest, b64);
+        fill.style.width = "100%";
       } else {
-        const fd = new FormData();
-        fd.append("file", f);
-        fd.append("path", filesCurrent.path);
-        await api(`/api/files/${filesCurrent.deviceId}/upload`, { method: "POST", body: fd });
+        label.textContent = `Uploading ${f.name}…`;
+        up.classList.remove("hidden");
+        fill.style.width = "0%";
+        await new Promise((resolve, reject) => {
+          const fd = new FormData();
+          fd.append("file", f);
+          fd.append("path", filesCurrent.path);
+          const xhr = new XMLHttpRequest();
+          xhr.open("POST", `${API}/api/files/${filesCurrent.deviceId}/upload`);
+          xhr.setRequestHeader("Authorization", "Bearer " + token);
+          xhr.upload.onprogress = (e) => {
+            if (e.lengthComputable) fill.style.width = Math.round((e.loaded / e.total) * 100) + "%";
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) resolve();
+            else { try { reject(new Error(JSON.parse(xhr.responseText).detail)); } catch { reject(new Error("Upload failed: " + xhr.status)); } }
+          };
+          xhr.onerror = () => reject(new Error("Network error"));
+          xhr.send(fd);
+        });
       }
       showToast(`Uploaded ${f.name}`, "ok");
     } catch (err) {
       showToast(`Upload failed: ${f.name} — ${err.message}`, "error");
     }
   }
+  up.classList.add("hidden");
   listFiles(filesCurrent.path);
 }
 document.getElementById("files-upload-input").onchange = async (e) => {
