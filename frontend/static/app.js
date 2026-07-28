@@ -1661,16 +1661,22 @@ async function loadSessions() {
         <td data-label="Started">${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
         <td data-label="Ended">${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
-        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play")}</button></td>
+        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play")}</button> <button class="btn btn-ghost btn-icon-xs" data-rerun="${r.id}" title="Re-run commands on device">${icon("restart")}</button></td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll("[data-cmds]").forEach(b => b.onclick = () => {
       const r = rows.find(x => String(x.id) === b.dataset.cmds);
       const cmds = (r.commands || "").split("\n").filter(Boolean);
       openSessionModal(r, "cmds", cmds.map(c => "$ " + c).join("\n") || "(no commands recorded)");
     });
-    box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => {
-      const r = rows.find(x => String(x.id) === b.dataset.play);
-      openSessionModal(r, "player", r.transcript || "");
+    box.querySelectorAll("[data-rerun]").forEach(b => b.onclick = () => {
+      const r = rows.find(x => String(x.id) === b.dataset.rerun);
+      const cmds = (r.commands || "").split("\n").filter(Boolean);
+      if (!cmds.length) { showToast("No commands to re-run", "error"); return; }
+      if (!confirm(`Re-run ${cmds.length} command(s) on ${r.device_name}?`)) return;
+      // Join commands and send as the terminal's initial input so they run
+      // in order as soon as the shell is ready.
+      openTerminal(r.device_id, r.device_name, cmds.join("\n"));
+      showToast(`Re-running ${cmds.length} command(s) on ${r.device_name}`, "ok");
     });
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
