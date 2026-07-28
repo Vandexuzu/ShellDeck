@@ -49,6 +49,11 @@ def register(payload: UserCreate, db: Session = Depends(get_db)) -> Token:
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Seed starter snippets for the very first account so a fresh install
+    # already has useful commands (no manual setup needed).
+    from app.db import _seed_default_snippets
+
+    _seed_default_snippets()
     return Token(access_token=create_access_token(user.id))
 
 

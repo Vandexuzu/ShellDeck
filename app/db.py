@@ -28,6 +28,40 @@ def init_db() -> None:
     # added in later releases (e.g. users.totp_secret) must be added explicitly
     # or existing installs break / silently lose data.
     _migrate_columns()
+    # Seed a few useful starter snippets for the first user (only if the
+    # snippets table is empty) so a fresh install isn't a blank slate.
+    _seed_default_snippets()
+
+
+# Popular starter snippets seeded on first run (owner = first user, id 1).
+_DEFAULT_SNIPPETS = [
+    ("Disk usage", "df -h"),
+    ("Memory usage", "free -m"),
+    ("System uptime", "uptime"),
+    ("Update package lists", "sudo apt update"),
+    ("Upgrade packages", "sudo apt upgrade -y"),
+    ("Service status", "systemctl status"),
+    ("Listening ports", "ss -tulpn"),
+    ("Recent log lines", "journalctl -n 50 --no-pager"),
+    ("Reboot", "sudo reboot"),
+    ("Show IP addresses", "ip -br addr"),
+]
+
+
+def _seed_default_snippets() -> None:
+    from sqlalchemy import select
+
+    from app.models import Snippet, User
+
+    with SessionLocal() as db:
+        if db.scalar(select(Snippet).limit(1)) is not None:
+            return  # already seeded
+        owner = db.get(User, 1) or db.scalar(select(User).order_by(User.id))
+        if owner is None:
+            return  # no users yet; seeded on first registration instead
+        for name, command in _DEFAULT_SNIPPETS:
+            db.add(Snippet(owner_id=owner.id, name=name, command=command))
+        db.commit()
 
 
 def _migrate_columns() -> None:

@@ -125,10 +125,12 @@ function switchTab(name) {
   if (name === "settings") { loadSettings(); refreshTotpStatus(); }
   if (name === "home") loadHome();
   if (name === "terminal") {
-    // The terminal view was just shown (or re-shown) — re-fit the active
-    // xterm pane so it picks up the correct dimensions after being hidden.
+    // The terminal view was just shown — re-fit every open pane so terminals
+    // restored while the view was hidden (e.g. from localStorage at boot) pick
+    // up correct dimensions. Fitting only the active tab left restored tabs blank.
+    tabs.forEach(t => fitTab(t));
     const t = tabs.get(activeTabId);
-    if (t) { fitTab(t); try { t.splits[t.activeSplit || 0].term.focus(); } catch (_) {} }
+    if (t) { try { t.splits[t.activeSplit || 0].term.focus(); } catch (_) {} }
   }
 }
 
@@ -714,11 +716,13 @@ async function loadSnippets() {
         <pre class="sc-cmd">${escapeHtml(s.command)}</pre>
         <div class="di-actions">
           <button class="btn btn-primary btn-icon-text" data-run="${s.id}" title="Run on a device">${icon("play")}<span>Run</span></button>
+          <button class="btn btn-ghost btn-icon-text" data-bulk="${s.id}" title="Run on all devices">${icon("broadcast")}<span>Bulk</span></button>
           <button class="btn btn-ghost btn-icon" data-edit-snip="${s.id}" title="Edit snippet">${icon("edit")}</button>
           <button class="btn btn-danger btn-icon" data-del-snip="${s.id}" title="Delete snippet">${icon("trash")}</button>
         </div>
       </div>`).join("");
     list.querySelectorAll("[data-run]").forEach(b => b.onclick = () => runSnippetOnDevice(+b.dataset.run, snips));
+    list.querySelectorAll("[data-bulk]").forEach(b => b.onclick = () => runSnippetBulk(+b.dataset.bulk, snips));
     list.querySelectorAll("[data-edit-snip]").forEach(b => b.onclick = () => openSnippetModal(+b.dataset.editSnip, snips));
     list.querySelectorAll("[data-del-snip]").forEach(b => b.onclick = async () => {
       if (!confirm("Delete snippet?")) return;
@@ -732,9 +736,41 @@ function runSnippetOnDevice(snipId, snips) {
   if (!currentDevices.length) { showToast("No devices", "error"); return; }
   const devId = +prompt("Run on device id:\n" + currentDevices.map(d => `${d.id}=${d.name}`).join("\n"), currentDevices[0].id);
   if (!devId) return;
-  openTerminal(devId, s.name);
-  // Send the command once the shell is ready (best-effort small delay).
-  setTimeout(() => { if (ws && ws.readyState === WebSocket.OPEN) ws.send(s.command + "\n"); }, 1500);
+  // openTerminal accepts an initialCommand that is sent once the shell is ready,
+  // so we don't touch the internal `ws` (which is scoped inside openTerminal).
+  openTerminal(devId, s.name, s.command);
+}
+
+// Run a snippet across every visible device at once via the bulk runner
+// (no need to open a terminal per device — results come back as text).
+async function runSnippetBulk(snipId, snips) {
+  const s = snips.find(x => x.id === snipId);
+  if (!currentDevices.length) { showToast("No devices", "error"); return; }
+  if (!confirm(`Run "${s.name}" on ALL ${currentDevices.length} devices?`)) return;
+  try {
+    const res = await api("/api/bulk/run", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ device_ids: currentDevices.map(d => d.id), command: s.command }),
+    });
+    const lines = res.map(r => `■ ${r.name} (${r.reachable ? "ok" : "FAIL"})\n${r.reachable ? r.output : r.error}`).join("\n\n");
+    showToast(`Ran "${s.name}" on ${res.length} devices`, "ok");
+    // Surface full output in a modal so it isn't lost in a toast.
+    openTextModal(`Bulk run — ${s.name}`, lines || "(no output)");
+  } catch (e) {
+    showToast(e.message, "error");
+  }
+}
+
+// Lightweight text modal (reuses the session-cmds modal shell).
+function openTextModal(title, text) {
+  const out = document.getElementById("session-cmds");
+  document.getElementById("session-cmds-title").textContent = title;
+  document.getElementById("session-cmds-player-wrap").style.display = "none";
+  const body = document.getElementById("session-cmds-body");
+  body.style.display = "";
+  body.textContent = text;
+  out.classList.remove("hidden");
 }
 function openSnippetModal(id = null, snips = []) {
   const modal = document.getElementById("snippet-modal");
@@ -1071,6 +1107,11 @@ function createPane(tabEl, deviceId, initialCommand) {
   term.loadAddon(fit);
   term.open(termEl);
   fit.fit();
+  // Re-fit on the next frame: if the pane was created while its tab/view was
+  // still hidden (e.g. restored from storage during boot), the first fit can
+  // measure a zero-size element and the terminal never appears until a manual
+  // re-click. A rAF fit after layout settles fixes that.
+  requestAnimationFrame(() => { try { fit.fit(); } catch (_) {} });
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const dev = (currentDevices || []).find(d => d.id === deviceId);
@@ -1144,10 +1185,9 @@ function openTerminal(deviceId, title, initialCommand, isClone) {
   layoutSplits(rec);
 
   tabs.set(id, rec);
-  activeTabId = id;
-  renderTabBar();
+  activateTab(id);   // toggles .active on the pane + fits it (was missing →
+                      // restored tabs stayed display:none until a manual click)
   showTerminalNav(true);
-  try { paneRec.term.focus(); } catch (_) {}
   saveTabs();
 }
 
@@ -1819,4 +1859,24 @@ document.getElementById("files-device").onchange = loadFiles;
   // Hide boot loading overlay once the app is ready.
   const bl = document.getElementById("boot-loading");
   if (bl) bl.classList.add("hidden");
+  // Populate footer identity (name + version + author) from /api/about.
+  try {
+    const about = await fetch(API + "/api/home/about").then(r => r.ok ? r.json() : null);
+    if (about) {
+      const fa = document.getElementById("footer-app");
+      if (fa) fa.textContent = `${about.name} v${about.version}`;
+      const fab = document.getElementById("footer-author");
+      if (fab && about.repo_url) { fab.href = about.repo_url; fab.textContent = `by ${about.author}`; }
+      const tv = document.getElementById("topbar-version");
+      if (tv) { tv.textContent = `v${about.version}`; tv.title = `${about.name} by ${about.author}`; }
+      const an = document.getElementById("about-name");
+      if (an) an.textContent = about.name;
+      const av = document.getElementById("about-version");
+      if (av) av.textContent = `v${about.version}`;
+      const aa = document.getElementById("about-author");
+      if (aa && about.repo_url) { aa.href = about.repo_url; aa.textContent = about.author; }
+      const ar = document.getElementById("about-repo");
+      if (ar && about.repo_url) { ar.href = about.repo_url; ar.textContent = about.repo_url.replace("https://", ""); }
+    }
+  } catch (_) {}
 })();

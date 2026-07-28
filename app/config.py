@@ -7,11 +7,16 @@ import hashlib
 from cryptography.fernet import Fernet
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pathlib import Path
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "ShellDeck"
+    version: str = "0.1.0"
+    author: str = "Vandexuzu"
+    repo_url: str = "https://github.com/Vandexuzu/ShellDeck"
     secret_key: str = "change-me-to-a-long-random-string"
     access_token_expire_minutes: int = 1440
 
@@ -37,6 +42,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Read the version from the VERSION file at the repo root (falls back to the
+# default above if the file is missing, e.g. in some deploy layouts).
+try:
+    _version_file = Path(__file__).resolve().parent.parent / "VERSION"
+    if _version_file.exists():
+        settings.version = _version_file.read_text(encoding="utf-8").strip() or settings.version
+except Exception:
+    pass
 
 # Derive a stable 32-byte url-safe Fernet key from the app secret.
 _FERNET_KEY = base64.urlsafe_b64encode(hashlib.sha256(settings.secret_key.encode()).digest())

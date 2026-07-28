@@ -18,6 +18,7 @@ from app.models import Agent, Device, ScheduledTask, SessionLog, SettingsRow, Us
 from app.routers.devices import _visible_devices
 from app.routers.monitoring import _collect
 from app.security import get_current_user
+from app.config import settings
 
 router = APIRouter(prefix="/api/home", tags=["home"])
 
@@ -65,6 +66,17 @@ async def _run_docker_safe(d: Device, db: Session) -> tuple[str, str, int]:
         return await _run(d, "docker ps -a --format '{{.State}}'", db, timeout=8)
     except Exception:
         return "", "", 1
+
+
+@router.get("/about")
+def about() -> dict:
+    """Public app identity: name, version, author, source repo."""
+    return {
+        "name": settings.app_name,
+        "version": settings.version,
+        "author": settings.author,
+        "repo_url": settings.repo_url,
+    }
 
 
 @router.get("/summary")
