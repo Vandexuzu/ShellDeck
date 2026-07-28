@@ -151,10 +151,15 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
             dur = None
             if r.ended_at:
                 dur = int((r.ended_at - r.started_at).total_seconds())
+            uname = None
+            if r.user_id:
+                u = db.get(User, r.user_id)
+                uname = u.username if u else None
             recent.append({
                 "id": r.id,
                 "device": dev_names.get(r.device_id, f"#{r.device_id}"),
                 "user_id": r.user_id,
+                "username": uname,
                 "started_at": r.started_at.isoformat() if r.started_at else None,
                 "duration": dur,
                 "has_recording": bool(r.recording),

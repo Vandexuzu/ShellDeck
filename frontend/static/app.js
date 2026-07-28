@@ -1053,6 +1053,28 @@ async function loadUsers() {
         loadUsers();
       } catch (e) { showToast(e.message, "error"); }
     });
+    // Audit log (admin only)
+    try {
+      const audit = await api("/api/audit?limit=50");
+      const sec = document.getElementById("audit-log-section");
+      const al = document.getElementById("audit-log");
+      if (audit && audit.length) {
+        al.innerHTML = `<table class="user-table"><thead><tr>
+          <th>Time</th><th>User</th><th>Action</th><th>Detail</th><th>IP</th>
+          </tr></thead><tbody>${audit.map(a => `
+          <tr class="${a.action === 'login_failed' ? 'down' : ''}">
+            <td data-label="Time" class="muted">${a.created_at ? new Date(a.created_at).toLocaleString() : '-'}</td>
+            <td data-label="User">${escapeHtml(a.username || '-')}</td>
+            <td data-label="Action"><span class="badge ${a.action === 'login_failed' ? 'off' : ''}">${escapeHtml(a.action)}</span></td>
+            <td data-label="Detail" class="muted">${escapeHtml(a.detail || '-')}</td>
+            <td data-label="IP" class="muted">${escapeHtml(a.ip || '-')}</td>
+          </tr>`).join("")}</tbody></table>`;
+        sec.classList.remove("hidden");
+      } else {
+        al.innerHTML = "<p class='muted'>No audit entries yet.</p>";
+        sec.classList.remove("hidden");
+      }
+    } catch (_) { /* non-admin silently skips */ }
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
 document.getElementById("user-search")?.addEventListener("input", loadUsers);
@@ -1907,7 +1929,7 @@ async function loadHome() {
     if (!d.recent_sessions.length) rb.innerHTML = `<p class="home-empty">No sessions yet.</p>`;
     else rb.innerHTML = d.recent_sessions.map(r => `
       <div class="home-row" ${r.has_recording ? `onclick="openPlayback(${r.id})"` : ""}>
-        <span><b>${escapeHtml(r.device)}</b> <span class="sub">${fmtAgo(r.started_at)}</span></span>
+        <span><b>${escapeHtml(r.device)}</b> <span class="sub">${fmtAgo(r.started_at)}</span>${r.username ? ` <span class="sub">· ${escapeHtml(r.username)}</span>` : ""}</span>
         <span class="sub">${fmtDur(r.duration)}${r.has_recording ? ' <span class="badge">rec</span>' : ""}</span>
       </div>`).join("");
 

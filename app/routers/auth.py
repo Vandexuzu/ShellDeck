@@ -7,9 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import User
+from app.models import AuditLog, User
 from app.schemas import ChangePassword, Token, TotpSetup, UserCreate, UserOut
 from app.security import (
+    admin_only,
     create_access_token,
     generate_totp_secret,
     get_current_user,
@@ -17,6 +18,29 @@ from app.security import (
     verify_password,
     verify_totp,
 )
+
+
+def _client_ip(request: Request) -> str | None:
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+def log_audit(db: Session, request: Request, action: str, user: User | None = None, detail: str | None = None) -> None:
+    """Best-effort append to the audit trail. Failures are swallowed so auth
+    never breaks because of a logging issue."""
+    try:
+        db.add(AuditLog(
+            user_id=user.id if user else None,
+            username=user.username if user else None,
+            action=action,
+            detail=detail,
+            ip=_client_ip(request),
+        ))
+        db.commit()
+    except Exception:
+        db.rollback()
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -79,6 +103,7 @@ async def login(
 ) -> Token:
     user = db.scalar(select(User).where(User.username == form.username))
     if user is None or not verify_password(form.password, user.password_hash):
+        log_audit(db, request, "login_failed", user=user, detail=f"user={form.username}")
         raise HTTPException(status_code=401, detail="Incorrect username or password")
     # If 2FA is enabled, the TOTP code must be supplied. We read it from a
     # dedicated `totp` form field (preferred); fall back to the OAuth2 `scope`
@@ -90,11 +115,13 @@ async def login(
             (form.scopes[0] if isinstance(form.scopes, list) and form.scopes else "").strip()
         )
         if not verify_totp(user.totp_secret, code):
+            log_audit(db, request, "login_failed", user=user, detail="2FA code rejected")
             raise HTTPException(
                 status_code=401,
                 detail="2FA code required",
                 headers={"X-ShellDeck-Need-Totp": "1"},
             )
+    log_audit(db, request, "login", user=user)
     return Token(access_token=create_access_token(user.id))
 
 
@@ -102,6 +129,33 @@ async def login(
 def totp_status(current_user: User = Depends(get_current_user)) -> dict:
     """Whether the current user has 2FA enabled."""
     return {"enabled": bool(current_user.totp_secret)}
+
+
+@router.get("/audit")
+def list_audit(
+    limit: int = 50,
+    action: str | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(admin_only),
+) -> list[dict]:
+    """Admin-only: recent audit log entries (logins, failures, actions)."""
+    q = select(AuditLog).order_by(AuditLog.created_at.desc())
+    if action:
+        q = q.where(AuditLog.action == action)
+    q = q.limit(max(1, min(limit, 500)))
+    rows = db.scalars(q).all()
+    return [
+        {
+            "id": r.id,
+            "user_id": r.user_id,
+            "username": r.username,
+            "action": r.action,
+            "detail": r.detail,
+            "ip": r.ip,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        }
+        for r in rows
+    ]
 
 
 @router.get("/2fa/qr")

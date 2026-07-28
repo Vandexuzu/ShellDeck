@@ -170,3 +170,19 @@ class Agent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     owner: Mapped["User"] = relationship()
+
+
+class AuditLog(Base):
+    """Security/activity audit trail: logins (success + failure), key actions."""
+
+    __tablename__ = "audit_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    username: Mapped[str | None] = mapped_column(String(64), nullable=True)  # snapshot, survives user deletion
+    action: Mapped[str] = mapped_column(String(48), index=True)  # "login", "login_failed", "logout", etc.
+    detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+
+    user: Mapped["User"] = relationship()
