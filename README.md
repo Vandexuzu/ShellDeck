@@ -22,9 +22,12 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 | 🖥 **Devices** | Add hosts (password / SSH-key), tag them, filter by tag, Tailscale auto-discover |
 | 📊 **Live monitor** | CPU / memory / disk / uptime over SSH; cards go red when down |
 | 💻 **In-browser shell** | Real PTY terminal (xterm.js ⇄ asyncssh over WebSocket); multi-tab, split panes, survives reload |
-| 📁 **SFTP manager** | Browse / upload / download / edit / delete remote files; filter; drag-and-drop; upload-from-URL |
+| 🔍 **Terminal search** | In-terminal find via `Ctrl/Cmd+F` (xterm SearchAddon) |
+| 🔁 **Command re-run** | Replay any recorded session's commands on its device straight from Session History |
+| ⌨️ **Command palette** | `Ctrl/Cmd+K` quick-navigate to any view, device terminal, or action |
+| 📁 **SFTP manager** | Browse / upload (with live **progress bar**) / download / edit / delete; drag-and-drop; upload-from-URL |
 | ⚡ **Bulk runner** | Run one command on many devices; bulk-edit or bulk-delete |
-| 📝 **Snippets** | Save reusable commands, run on any device |
+| 📝 **Snippets** | Save reusable commands, **organise by category**, run on one device or bulk to all |
 | 🐳 **Docker** | Start / stop / restart / logs / exec into containers |
 | ⏰ **Scheduler** | Recurring or run-once jobs per device |
 | 🔔 **Alerts** | Telegram · Discord · ntfy · Gotify · Slack · Email · webhook |
@@ -112,7 +115,7 @@ SQLite  (users · devices · snippets · scheduled_tasks · session_logs · sett
 ```
 
 - **Backend:** FastAPI · asyncssh · SQLAlchemy · SQLite
-- **Frontend:** vanilla JS · xterm.js · hand-written CSS (no build step, offline-friendly, inline SVG icons — no CDN)
+- **Frontend:** vanilla JS · xterm.js (via CDN) · hand-written CSS (no build step, offline-friendly, inline SVG icons)
 
 ---
 
@@ -153,18 +156,34 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 
 ## 🗺 Roadmap
 
+**Shipped recently**
+- [x] Terminal in-terminal search (`Ctrl/Cmd+F`)
+- [x] Session command re-run (replay recorded commands on device)
+- [x] Command palette (`Ctrl/Cmd+K`) for quick navigation
+- [x] Upload progress bar (SFTP)
+- [x] Snippet categories + filter
+- [x] Starter snippet templates seeded on first install
+- [x] App identity (version, author, GitHub link in UI)
+
+**Earlier milestones**
 - [x] Cron-expression schedules
 - [x] WebSocket agents (reverse tunnel for NAT devices)
 - [x] Multi-tab terminal with device picker
-- [x] Split terminal panes
-- [x] Tab persistence across reload
-- [x] File manager over agent relay (NAT devices)
+- [x] Split terminal panes · tab persistence across reload
 - [x] Session recording playback (asciinema-style TTY replay)
-- [x] Terminal broadcast (send a command to all open terminals)
+- [x] Terminal broadcast
 - [x] Audit search (filter session history by device/host/command)
-- [x] Two-factor auth (TOTP / 2FA, RFC 6238, no external dependency)
-- [x] OIDC single sign-on (Google / GitHub / corporate) — server + login flow + Settings toggle (env-gated client config)
-- [x] Home dashboard (stat cards, device health, recent activity, scheduled tasks, docker overview, quick actions)
+- [x] Two-factor auth (TOTP) + OIDC SSO
+- [x] Home dashboard (stat cards, device health, recent activity)
+
+**Planned**
+- [ ] Resource history graphs (CPU/mem over time)
+- [ ] Per-device public share links
+- [ ] API bot tokens (non-user)
+- [ ] Password reset flow
+- [ ] Mobile terminal touch optimisations
+
+See the [issue tracker](https://github.com/Vandexuzu/ShellDeck/issues) for more.
 
 ## 🤝 Contributing
 
@@ -172,7 +191,7 @@ Keep it **$0, agentless, self-hosted**. Run `pytest` before opening a pull reque
 
 ## 👤 Author
 
-Built by [@vandikampw](https://instagram.com/vandikampw) · ⚡ ShellDeck
+Built by **Vandexuzu** · ⚡ ShellDeck — [github.com/Vandexuzu/ShellDeck](https://github.com/Vandexuzu/ShellDeck)
 
 ## 📄 License
 
