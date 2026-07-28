@@ -2,12 +2,14 @@
 const API = "";
 let token = localStorage.getItem("shelldeck_token") || "";
 let currentDevices = [];
-// Whether the current user may act on (shell / sftp / docker / edit) a device.
+// Whether the current user may *see / view* a device (status, docker read, etc.).
+// Writes (shell, sftp, docker actions) are still enforced server-side by
+// operator_only, so viewers are view-only everywhere despite returning true here.
 function canAccessDevice(d) {
   if (!currentUser) return false;
   if (currentUser.role === "admin") return true;
   if (currentUser.role === "operator") return d.owner_id === currentUser.id;
-  return false; // viewers: view-only
+  return true; // viewer: read-only view of all devices (server blocks writes)
 }
 let currentUser = null;  // { id, username, role, is_admin }
 
