@@ -225,6 +225,10 @@ body {
   border-radius: 8px; padding: 6px 8px; margin-top: 8px; margin-bottom: 0;
 }
 #session-cmds-player-wrap .terminal-toolbar .input-sm { margin-left: 4px; }
+/* Command palette items */
+.cp-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--text); }
+.cp-item:hover, .cp-item.active { background: var(--panel-2, #161b22); color: var(--primary); }
+.cp-item .ic { width: 18px; height: 18px; flex: none; }
 /* The xterm viewport is position:absolute, so the player box must be a
    positioning context AND clip overflow — otherwise the terminal escapes
    the 320px box (it was rendering at its natural 514px height). */

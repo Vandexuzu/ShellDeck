@@ -545,6 +545,14 @@
     <span id="footer-app">ShellDeck</span> · <a id="footer-author" href="https://github.com/Vandexuzu/ShellDeck" target="_blank" rel="noopener">by Vandexuzu</a>
   </footer>
 
+  <!-- Command palette (Ctrl/Cmd+K) -->
+  <div id="cmd-palette" class="modal hidden">
+    <div class="modal-card" style="max-width:520px;padding:14px">
+      <input id="cp-input" class="input" style="width:100%" placeholder="Go to… (devices, snippets, actions)" autocomplete="off" />
+      <div id="cp-results" style="margin-top:10px;max-height:50vh;overflow:auto"></div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-search@0.8.0/lib/xterm-addon-search.js"></script>

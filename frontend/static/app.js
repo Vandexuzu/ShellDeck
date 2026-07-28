@@ -772,6 +772,61 @@ function openTextModal(title, text) {
   body.textContent = text;
   out.classList.remove("hidden");
 }
+
+// ---- Command palette (Ctrl/Cmd+K) ----
+let cpItems = [];
+function buildPaletteItems() {
+  const items = [
+    { label: "Home", icon: "home", run: () => switchTab("home") },
+    { label: "Devices", icon: "drive", run: () => switchTab("devices") },
+    { label: "Files", icon: "folder", run: () => switchTab("files") },
+    { label: "Bulk Run", icon: "zap", run: () => switchTab("bulk") },
+    { label: "Docker", icon: "box", run: () => switchTab("docker") },
+    { label: "Snippets", icon: "bookmark", run: () => switchTab("snippets") },
+    { label: "Scheduled", icon: "clock", run: () => switchTab("scheduled") },
+    { label: "Sessions", icon: "activity", run: () => switchTab("sessions") },
+    { label: "Terminal", icon: "terminal", run: () => switchTab("terminal") },
+    { label: "Settings", icon: "settings", run: () => switchTab("settings") },
+    { label: "Users", icon: "users", run: () => switchTab("users") },
+    { label: "Agents", icon: "users", run: () => switchTab("agents") },
+  ];
+  for (const d of (currentDevices || [])) {
+    items.push({ label: `Open terminal: ${d.name}`, icon: "terminal", run: () => openTerminal(d.id, d.name, null, true) });
+  }
+  return items;
+}
+function showPalette() {
+  cpItems = buildPaletteItems();
+  const box = document.getElementById("cmd-palette");
+  const input = document.getElementById("cp-input");
+  const res = document.getElementById("cp-results");
+  box.classList.remove("hidden");
+  input.value = "";
+  renderPalette("");
+  setTimeout(() => input.focus(), 0);
+}
+function renderPalette(q) {
+  const res = document.getElementById("cp-results");
+  const ql = (q || "").toLowerCase();
+  const list = cpItems.filter(i => i.label.toLowerCase().includes(ql)).slice(0, 30);
+  res.innerHTML = list.map((i, idx) => `<div class="cp-item" data-idx="${idx}">${icon(i.icon)}<span>${escapeHtml(i.label)}</span></div>`).join("") || `<p class="muted">No matches</p>`;
+  res.querySelectorAll(".cp-item").forEach(el => {
+    el.onclick = () => { document.getElementById("cmd-palette").classList.add("hidden"); cpItems[+el.dataset.idx].run(); };
+  });
+}
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+    e.preventDefault();
+    const open = !document.getElementById("cmd-palette").classList.contains("hidden");
+    if (open) document.getElementById("cmd-palette").classList.add("hidden");
+    else showPalette();
+  }
+  if (!document.getElementById("cmd-palette").classList.contains("hidden") && e.key === "Escape") {
+    document.getElementById("cmd-palette").classList.add("hidden");
+  }
+});
+document.getElementById("cp-input").addEventListener("input", (e) => renderPalette(e.target.value));
+document.getElementById("cmd-palette").addEventListener("click", (e) => { if (e.target === document.getElementById("cmd-palette")) document.getElementById("cmd-palette").classList.add("hidden"); });
 function openSnippetModal(id = null, snips = []) {
   const modal = document.getElementById("snippet-modal");
   modal.classList.remove("hidden");
