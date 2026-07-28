@@ -126,6 +126,7 @@ class DeviceStatus(BaseModel):
 class SnippetCreate(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     command: str = Field(min_length=1)
+    category: str | None = None
 
 
 class SnippetOut(BaseModel):
@@ -133,6 +134,7 @@ class SnippetOut(BaseModel):
     id: int
     name: str
     command: str
+    category: str | None = None
     created_at: datetime
 
 

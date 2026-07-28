@@ -732,11 +732,21 @@ document.getElementById("bulk-delete").onclick = async () => {
 async function loadSnippets() {
   const list = document.getElementById("snippet-list");
   try {
-    const snips = await api("/api/snippets");
+    const filter = document.getElementById("snippet-filter");
+    const cat = (filter && filter.value) || "";
+    const snips = await api("/api/snippets" + (cat ? "?category=" + encodeURIComponent(cat) : ""));
+    // Populate category filter options (union of all categories).
+    if (filter) {
+      const all = await api("/api/snippets");
+      const cats = [...new Set(all.map(s => s.category).filter(Boolean))].sort();
+      const cur = filter.value;
+      filter.innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join("");
+      filter.value = cur;
+    }
     if (!snips.length) { list.innerHTML = "<p class='muted'>No snippets yet. Add one to reuse commands quickly.</p>"; return; }
     list.innerHTML = snips.map(s => `
       <div class="snippet-card">
-        <div class="sc-name">${escapeHtml(s.name)}</div>
+        <div class="sc-name">${escapeHtml(s.name)}${s.category ? ` <span class="tag">${escapeHtml(s.category)}</span>` : ""}</div>
         <pre class="sc-cmd">${escapeHtml(s.command)}</pre>
         <div class="di-actions">
           <button class="btn btn-primary btn-icon-text" data-run="${s.id}" title="Run on a device">${icon("play")}<span>Run</span></button>
@@ -860,6 +870,7 @@ function openSnippetModal(id = null, snips = []) {
     const s = snips.find(x => x.id === id);
     document.getElementById("s-name").value = s.name;
     document.getElementById("s-command").value = s.command;
+    document.getElementById("s-category").value = s.category || "";
   } else {
     document.getElementById("snippet-form").reset();
   }
@@ -886,11 +897,12 @@ document.getElementById("snip-import").onclick = () => {
       .catch(e => showToast(e.message, "error"));
   } catch (e) { showToast("Invalid JSON", "error"); }
 };
+document.getElementById("snippet-filter").onchange = () => loadSnippets();
 document.getElementById("snippet-cancel").onclick = () => document.getElementById("snippet-modal").classList.add("hidden");
 document.getElementById("snippet-form").onsubmit = async (e) => {
   e.preventDefault();
   const id = document.getElementById("snippet-id").value;
-  const payload = { name: document.getElementById("s-name").value, command: document.getElementById("s-command").value };
+  const payload = { name: document.getElementById("s-name").value, command: document.getElementById("s-command").value, category: document.getElementById("s-category").value.trim() || null };
   try {
     if (id) await api(`/api/snippets/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     else await api("/api/snippets", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });

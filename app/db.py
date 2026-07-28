@@ -72,6 +72,7 @@ def _migrate_columns() -> None:
         # (table, column, DDL) — only added if missing.
         expected = [
             ("users", "totp_secret", "VARCHAR(64)"),
+            ("snippets", "category", "VARCHAR(64)"),
         ]
         for table, col, ddl in expected:
             if table not in insp.get_table_names():

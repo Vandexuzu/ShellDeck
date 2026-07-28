@@ -14,13 +14,16 @@ router = APIRouter(prefix="/api/snippets", tags=["snippets"])
 
 
 @router.get("", response_model=list[SnippetOut])
-def list_snippets(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Snippet]:
-    return list(db.scalars(select(Snippet).where(Snippet.owner_id == user.id).order_by(Snippet.name)))
+def list_snippets(category: str | None = None, db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Snippet]:
+    q = select(Snippet).where(Snippet.owner_id == user.id)
+    if category:
+        q = q.where(Snippet.category == category)
+    return list(db.scalars(q.order_by(Snippet.name)))
 
 
 @router.post("", response_model=SnippetOut, status_code=status.HTTP_201_CREATED)
 def create_snippet(payload: SnippetCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Snippet:
-    snippet = Snippet(owner_id=user.id, name=payload.name, command=payload.command)
+    snippet = Snippet(owner_id=user.id, name=payload.name, command=payload.command, category=payload.category)
     db.add(snippet)
     db.commit()
     db.refresh(snippet)
