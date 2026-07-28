@@ -926,6 +926,12 @@ function refreshDockerDeviceSelect() {
 }
 async function loadDocker() {
   const deviceId = +document.getElementById("docker-device").value;
+  // Viewers get a read-only Docker view: hide the Stats button and the
+  // free-form "run" box, and never render action/exec buttons in the table.
+  const isViewer = currentUser && currentUser.role === "viewer";
+  document.getElementById("docker-stats").style.display = isViewer ? "none" : "";
+  const runBox = document.querySelector(".docker-run");
+  if (runBox) runBox.style.display = isViewer ? "none" : "";
   const box = document.getElementById("docker-list");
   if (!deviceId) { box.innerHTML = "<p class='muted'>Select a device with Docker.</p>"; return; }
   box.innerHTML = "<p class='muted'>Loading containers…</p>";
@@ -943,6 +949,7 @@ async function loadDocker() {
         <td data-label="Ports" class="muted">${escapeHtml(c.ports || '-')}</td>
         <td data-label="Actions" class="di-actions">
           <button class="btn btn-ghost btn-icon-xs" data-logs="${escapeHtml(c.id)}" title="Logs">${icon("logs")}</button>
+          ${isViewer ? "" : `
           ${c.state === 'running'
             ? `<button class="btn btn-ghost btn-icon-xs" data-act="stop" data-cid="${escapeHtml(c.id)}" title="Stop">${icon("stop")}</button>
                <button class="btn btn-ghost btn-icon-xs" data-act="pause" data-cid="${escapeHtml(c.id)}" title="Pause">${icon("pause")}</button>
@@ -950,19 +957,19 @@ async function loadDocker() {
             : `<button class="btn btn-ghost btn-icon-xs" data-act="start" data-cid="${escapeHtml(c.id)}" title="Start">${icon("play")}</button>`}
           <button class="btn btn-ghost btn-icon-xs" data-act="restart" data-cid="${escapeHtml(c.id)}" title="Restart">${icon("restart")}</button>
           <button class="btn btn-ghost btn-icon-xs danger" data-act="remove" data-cid="${escapeHtml(c.id)}" title="Remove">${icon("trash")}</button>
-          <button class="btn btn-primary btn-icon-xs" data-exec="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}" title="Exec (interactive shell)">${icon("terminal")}</button>
+          <button class="btn btn-primary btn-icon-xs" data-exec="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}" title="Exec (interactive shell)">${icon("terminal")}</button>`}
         </td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll("[data-logs]").forEach(b => b.onclick = () => showDockerLogs(deviceId, b.dataset.logs));
-    box.querySelectorAll("[data-act]").forEach(b => b.onclick = async () => {
-      await api(`/api/docker/${deviceId}/action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ container_id: b.dataset.cid, action: b.dataset.act }) });
-      loadDocker();
-    });
-    box.querySelectorAll("[data-exec]").forEach(b => b.onclick = () => {
-      // Use `sh` by default: alpine/minimal images (incl. portainer) ship only `sh`,
-      // not `bash`. For containers that do have bash, use the free-form Run box.
-      openTerminal(deviceId, `docker exec ${b.dataset.name}`, `docker exec -it ${b.dataset.exec} sh`);
-    });
+    if (!isViewer) {
+      box.querySelectorAll("[data-act]").forEach(b => b.onclick = async () => {
+        await api(`/api/docker/${deviceId}/action`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ container_id: b.dataset.cid, action: b.dataset.act }) });
+        loadDocker();
+      });
+      box.querySelectorAll("[data-exec]").forEach(b => b.onclick = () => {
+        openTerminal(deviceId, `docker exec ${b.dataset.name}`, `docker exec -it ${b.dataset.exec} sh`);
+      });
+    }
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
 async function showDockerLogs(deviceId, cid) {
