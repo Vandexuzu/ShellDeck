@@ -191,7 +191,7 @@ Keep it **$0, agentless, self-hosted**. Run `pytest` before opening a pull reque
 
 ## 👤 Author
 
-Built by **Vandexuzu** · ⚡ ShellDeck — [github.com/Vandexuzu/ShellDeck](https://github.com/Vandexuzu/ShellDeck)
+Built by **Vandexuzu** ·  ShellDeck — [github.com/Vandexuzu/ShellDeck](https://github.com/Vandexuzu/ShellDeck)
 
 ## 📄 License
 
