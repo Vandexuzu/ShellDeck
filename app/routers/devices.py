@@ -232,9 +232,10 @@ def inventory_export(fmt: str, db: Session = Depends(get_db), user: User = Depen
 
 
 @router.post("/import")
-def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     """Import devices from an export. Secrets must be supplied in each entry.
-    Admins import into the shared fleet; operators own their imports."""
+    Admins import into the shared fleet; operators own their imports.
+    (viewer is blocked — only admin/operator may import devices.)"""
     admin = _admin_user(db)
     owner_id = admin.id if (admin and user.role == "admin") else user.id
     created = 0

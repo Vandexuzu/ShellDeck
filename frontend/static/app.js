@@ -138,6 +138,12 @@ function switchTab(name) {
 
 // ----------------------------- Devices -------------------------------------
 async function loadDevices() {
+  // Viewers are read-only: hide the Add and Import buttons (write actions).
+  const isViewer = currentUser && currentUser.role === "viewer";
+  const addBtn = document.getElementById("add-device");
+  const importBtn = document.getElementById("import-devices");
+  if (addBtn) addBtn.style.display = isViewer ? "none" : "";
+  if (importBtn) importBtn.style.display = isViewer ? "none" : "";
   currentDevices = await api("/api/devices");
   // Build the tag filter dropdown from all device tags.
   const tagSel = document.getElementById("device-tag-filter");
