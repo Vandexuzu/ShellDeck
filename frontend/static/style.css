@@ -411,25 +411,43 @@ body {
 /* settings */
 .settings-box { padding: 22px; max-width: 480px; display: flex; flex-direction: column; gap: 14px; }
 
-/* Give the Settings view some breathing room so boxes don't hug the edges
-   (especially on mobile). Scoped to #view-settings to avoid touching other views. */
-#view-settings.content { padding: 20px 18px 40px; }
+/* Give the Settings view breathing room so boxes don't hug the edges
+   and content is never hidden behind the fixed footer. Scoped to
+   #view-settings so other views are untouched. */
+#view-settings.content { padding: 20px 18px 80px; }
 @media (max-width: 640px) {
-  #view-settings.content { padding: 16px 14px 32px; }
+  #view-settings.content { padding: 16px 14px 64px; }
 }
 .settings-box h3 { margin: 0 0 4px; }
 .settings-box label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .switch-row { flex-direction: row !important; align-items: center; justify-content: space-between; }
 
 /* Settings accordion */
-.settings-acc { border: 1px solid var(--border, #2a3038); border-radius: 12px; background: var(--surface, #0f141a); margin-bottom: 12px; overflow: hidden; }
-.settings-acc > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-weight: 600; font-size: 14px; user-select: none; }
+.settings-acc {
+  border: 1px solid var(--border, #2a3038);
+  border-radius: 12px;
+  background: var(--panel, #1a2030);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.settings-acc > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  user-select: none;
+  background: var(--surface, #0f141a);
+}
 .settings-acc > summary::-webkit-details-marker { display: none; }
 .settings-acc > summary .ic { width: 18px; height: 18px; color: var(--primary, #4f9cf9); flex: 0 0 auto; }
 .settings-acc > summary::after { content: ""; margin-left: auto; width: 9px; height: 9px; border-right: 2px solid var(--muted, #8b97a7); border-bottom: 2px solid var(--muted, #8b97a7); transform: rotate(45deg); transition: transform .15s ease; }
 .settings-acc[open] > summary::after { transform: rotate(-135deg); }
 .settings-acc > summary:hover { background: var(--surface-2, #11161d); }
-.settings-acc > .settings-box { border: none; border-top: 1px solid var(--border, #2a3038); border-radius: 0; max-width: none; }
+.settings-acc > .settings-box { border: none; border-top: 1px solid var(--border, #2a3038); border-radius: 0; max-width: none; background: var(--panel, #1a2030); }
 
 /* Home dashboard */
 .home-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
