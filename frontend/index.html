@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,12 +15,13 @@
       try {
         var t = localStorage.getItem("shelldeck_theme");
         if (t === "light" || t === "dark" || t === "premium") document.documentElement.setAttribute("data-theme", t);
-      } catch (_) {}
+      } catch (_) { }
     })();
   </script>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </head>
+
 <body>
   <header class="topbar">
     <div class="brand">
@@ -28,8 +30,18 @@
     </div>
     <div class="topbar-right">
       <span id="username"></span>
-      <button id="theme-toggle" class="btn btn-ghost btn-icon" title="Toggle theme"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg></button>
-      <button id="logout" class="btn btn-ghost btn-icon" title="Logout"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+      <button id="theme-toggle" class="btn btn-ghost btn-icon" title="Toggle theme"><svg class="ic" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="4" />
+          <path
+            d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+        </svg></button>
+      <button id="logout" class="btn btn-ghost btn-icon" title="Logout"><svg class="ic" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg></button>
     </div>
   </header>
 
@@ -37,18 +49,76 @@
     <!-- Sidebar: vertical navigation -->
     <aside class="sidebar">
       <nav class="side-nav">
-        <button class="side-nav-item" data-tab="home"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg> Home</button>
-        <button class="side-nav-item active" data-tab="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg> Devices</button>
-        <button class="side-nav-item" data-tab="files"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/></svg> Files</button>
-        <button class="side-nav-item" data-tab="bulk"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg> Bulk Run</button>
-        <button class="side-nav-item" data-tab="docker"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="12" x2="2" y2="12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/><line x1="6" y1="16" x2="6.01" y2="16"/><line x1="10" y1="16" x2="10.01" y2="16"/></svg> Docker</button>
-        <button class="side-nav-item" data-tab="snippets"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg> Snippets</button>
-        <button class="side-nav-item" data-tab="scheduled"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Scheduled</button>
-        <button class="side-nav-item" data-tab="sessions"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-9 5 18 3-9h5"/></svg> Sessions</button>
-        <button class="side-nav-item" id="side-terminal" data-tab="terminal" style="display:none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m6 9 3 3-3 3"/><line x1="12" y1="15" x2="17" y2="15"/></svg> Terminal</button>
-        <button class="side-nav-item" data-tab="settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Settings</button>
-        <button class="side-nav-item" id="side-users" data-tab="users" style="display:none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Users</button>
-        <button class="side-nav-item" id="side-agents" data-tab="agents" style="display:none"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/><circle cx="12" cy="12" r="9"/></svg> Agents</button>
+        <button class="side-nav-item" data-tab="home"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="9" rx="1" />
+            <rect x="14" y="3" width="7" height="5" rx="1" />
+            <rect x="14" y="12" width="7" height="9" rx="1" />
+            <rect x="3" y="16" width="7" height="5" rx="1" />
+          </svg> Home</button>
+        <button class="side-nav-item active" data-tab="devices"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" />
+            <line x1="8" y1="21" x2="16" y2="21" />
+            <line x1="12" y1="17" x2="12" y2="21" />
+          </svg> Devices</button>
+        <button class="side-nav-item" data-tab="files"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z" />
+          </svg> Files</button>
+        <button class="side-nav-item" data-tab="bulk"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+          </svg> Bulk Run</button>
+        <button class="side-nav-item" data-tab="docker"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="22" y1="12" x2="2" y2="12" />
+            <path
+              d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+            <line x1="6" y1="16" x2="6.01" y2="16" />
+            <line x1="10" y1="16" x2="10.01" y2="16" />
+          </svg> Docker</button>
+        <button class="side-nav-item" data-tab="snippets"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />
+          </svg> Snippets</button>
+        <button class="side-nav-item" data-tab="scheduled"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 7v5l3 3" />
+          </svg> Scheduled</button>
+        <button class="side-nav-item" data-tab="sessions"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2 12h4l3-9 5 18 3-9h5" />
+          </svg> Sessions</button>
+        <button class="side-nav-item" id="side-terminal" data-tab="terminal" style="display:none"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="2" />
+            <path d="m6 9 3 3-3 3" />
+            <line x1="12" y1="15" x2="17" y2="15" />
+          </svg> Terminal</button>
+        <button class="side-nav-item" data-tab="settings"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg> Settings</button>
+        <button class="side-nav-item" id="side-users" data-tab="users" style="display:none"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg> Users</button>
+        <button class="side-nav-item" id="side-agents" data-tab="agents" style="display:none"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M5 12h14" />
+            <path d="M12 5v14" />
+            <circle cx="12" cy="12" r="9" />
+          </svg> Agents</button>
       </nav>
     </aside>
 
@@ -59,15 +129,59 @@
         <div class="content-head">
           <h1>Remote Devices</h1>
           <div>
-            <input id="device-search" class="input" style="width:200px;display:inline-block" placeholder="Search devices…" />
-            <select id="device-tag-filter" class="input" style="width:auto;display:inline-block"><option value="">All tags</option></select>
-            <button id="add-device" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>Add</span></button>
-            <button id="export-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
-            <button id="import-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
-            <button id="discover-tailscale" class="btn btn-ghost btn-icon-text" title="Discover Tailscale devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M2 12h20"/><circle cx="12" cy="12" r="9"/></svg><span>TS</span></button>
-            <button id="inv-ansible" class="btn btn-ghost btn-icon-text" title="Ansible inventory"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 2 2 4-4"/><path d="M21 10V8a2 2 0 0 0-2-2h-4"/><path d="M3 8V6a2 2 0 0 1 2-2h4"/><path d="M3 16v2a2 2 0 0 0 2 2h4"/><path d="M8 8h8"/></svg><span>Ansible</span></button>
-            <button id="inv-terraform" class="btn btn-ghost btn-icon-text" title="Terraform inventory"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 16 2 2 4-4"/><path d="M21 10V8a2 2 0 0 0-2-2h-4"/><path d="M3 8V6a2 2 0 0 1 2-2h4"/><path d="M3 16v2a2 2 0 0 0 2 2h4"/><path d="M8 8h8"/></svg><span>Terraform</span></button>
-            <button id="refresh-status" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16v5h5"/></svg><span>Refresh</span></button>
+            <input id="device-search" class="input" style="width:200px;display:inline-block"
+              placeholder="Search devices…" />
+            <select id="device-tag-filter" class="input" style="width:auto;display:inline-block">
+              <option value="">All tags</option>
+            </select>
+            <button id="add-device" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg><span>Add</span></button>
+            <button id="export-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg><span>Export</span></button>
+            <button id="import-devices" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg><span>Import</span></button>
+            <button id="discover-tailscale" class="btn btn-ghost btn-icon-text" title="Discover Tailscale devices"><svg
+                class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M12 2v20M2 12h20" />
+                <circle cx="12" cy="12" r="9" />
+              </svg><span>TS</span></button>
+            <button id="inv-ansible" class="btn btn-ghost btn-icon-text" title="Ansible inventory"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="m16 16 2 2 4-4" />
+                <path d="M21 10V8a2 2 0 0 0-2-2h-4" />
+                <path d="M3 8V6a2 2 0 0 1 2-2h4" />
+                <path d="M3 16v2a2 2 0 0 0 2 2h4" />
+                <path d="M8 8h8" />
+              </svg><span>Ansible</span></button>
+            <button id="inv-terraform" class="btn btn-ghost btn-icon-text" title="Terraform inventory"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="m16 16 2 2 4-4" />
+                <path d="M21 10V8a2 2 0 0 0-2-2h-4" />
+                <path d="M3 8V6a2 2 0 0 1 2-2h4" />
+                <path d="M3 16v2a2 2 0 0 0 2 2h4" />
+                <path d="M8 8h8" />
+              </svg><span>Terraform</span></button>
+            <button id="refresh-status" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+                <path d="M16 16v5h5" />
+              </svg><span>Refresh</span></button>
           </div>
         </div>
         <div id="status-grid" class="status-grid"></div>
@@ -80,19 +194,48 @@
           <select id="files-device" class="input-sm"></select>
         </div>
         <div class="files-toolbar">
-          <button id="files-up" class="btn btn-ghost btn-icon" title="Up"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg></button>
-          <button id="files-mkdir" class="btn btn-ghost btn-icon" title="New folder"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
-          <button id="files-newfile" class="btn btn-ghost btn-icon" title="New file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
-          <button id="files-upload" class="btn btn-ghost btn-icon" title="Upload file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
-          <button id="files-upload-link" class="btn btn-ghost btn-icon" title="Upload from URL"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></button>
+          <button id="files-up" class="btn btn-ghost btn-icon" title="Up"><svg class="ic" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg></button>
+          <button id="files-mkdir" class="btn btn-ghost btn-icon" title="New folder"><svg class="ic" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2Z" />
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            </svg></button>
+          <button id="files-newfile" class="btn btn-ghost btn-icon" title="New file"><svg class="ic" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+              <path d="M14 2v6h6" />
+              <line x1="12" y1="11" x2="12" y2="17" />
+              <line x1="9" y1="14" x2="15" y2="14" />
+            </svg></button>
+          <button id="files-upload" class="btn btn-ghost btn-icon" title="Upload file"><svg class="ic"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg></button>
+          <button id="files-upload-link" class="btn btn-ghost btn-icon" title="Upload from URL"><svg class="ic"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+            </svg></button>
           <input id="files-upload-input" type="file" multiple style="display:none" />
-          <input id="files-search" class="input-sm" type="search" placeholder="Filter files…" style="margin-left:auto;min-width:160px" />
+          <input id="files-search" class="input-sm" type="search" placeholder="Filter files…"
+            style="margin-left:auto;min-width:160px" />
           <span id="files-path" class="files-path">/</span>
         </div>
         <div id="files-list" class="files-list"></div>
         <div id="upload-progress" class="upload-progress hidden">
           <div class="up-label" id="up-label">Uploading…</div>
-          <div class="up-bar"><div class="up-fill" id="up-fill"></div></div>
+          <div class="up-bar">
+            <div class="up-fill" id="up-fill"></div>
+          </div>
         </div>
         <div id="file-editor" class="file-editor hidden">
           <h3 id="file-editor-title">Edit file</h3>
@@ -106,7 +249,9 @@
 
       <!-- Bulk run view -->
       <div id="view-bulk" class="hidden">
-        <div class="content-head"><h1>Bulk Command Runner</h1></div>
+        <div class="content-head">
+          <h1>Bulk Command Runner</h1>
+        </div>
         <div class="bulk-box">
           <label>Command
             <textarea id="bulk-command" rows="3" placeholder="e.g. uname -a"></textarea>
@@ -124,7 +269,9 @@
               <label>OS <input id="bulk-os" class="input" placeholder="Ubuntu 22.04" /></label>
               <label>Notes <input id="bulk-notes" class="input" placeholder="optional" /></label>
               <label>Jump host (bastion)
-                <select id="bulk-bastion" class="input"><option value="">— none —</option></select>
+                <select id="bulk-bastion" class="input">
+                  <option value="">— none —</option>
+                </select>
               </label>
             </div>
             <button id="bulk-apply" class="btn btn-ghost">Apply to selected</button>
@@ -139,15 +286,25 @@
         <div class="content-head">
           <h1>Docker Manager</h1>
           <select id="docker-device" class="input-sm"></select>
-          <button id="docker-refresh" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16v5h5"/></svg><span>Refresh</span></button>
-          <button id="docker-stats" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><span>Stats</span></button>
+          <button id="docker-refresh" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+              <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+              <path d="M16 16v5h5" />
+            </svg><span>Refresh</span></button>
+          <button id="docker-stats" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg><span>Stats</span></button>
         </div>
         <div id="docker-list" class="docker-list"></div>
         <div class="docker-run">
           <label class="docker-run-label">Run docker command on this device</label>
           <div class="docker-run-row">
             <span class="docker-run-prefix">docker</span>
-            <input id="docker-cmd" class="input" placeholder="images   |   network ls   |   run --rm alpine echo hi   |   compose -f app.yml up -d" />
+            <input id="docker-cmd" class="input"
+              placeholder="images   |   network ls   |   run --rm alpine echo hi   |   compose -f app.yml up -d" />
             <label class="docker-run-tty"><input type="checkbox" id="docker-pty" /> TTY</label>
             <button id="docker-run-btn" class="btn btn-primary btn-sm">Run</button>
           </div>
@@ -156,7 +313,12 @@
         <div id="docker-logs" class="docker-logs hidden">
           <div class="content-head">
             <h3 id="docker-logs-title">Logs</h3>
-            <button id="docker-logs-close" class="btn btn-ghost btn-icon" title="Back"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+            <button id="docker-logs-close" class="btn btn-ghost btn-icon" title="Back"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg></button>
           </div>
           <pre id="docker-logs-content" class="docker-logs-content"></pre>
         </div>
@@ -167,10 +329,28 @@
         <div class="content-head">
           <h1>Snippets</h1>
           <div>
-            <select id="snippet-filter" class="input-sm"><option value="">All categories</option></select>
-            <button id="snip-export" class="btn btn-ghost btn-icon-text" title="Export snippets JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
-            <button id="snip-import" class="btn btn-ghost btn-icon-text" title="Import snippets JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
-            <button id="snippet-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New</span></button>
+            <select id="snippet-filter" class="input-sm">
+              <option value="">All categories</option>
+            </select>
+            <button id="snip-export" class="btn btn-ghost btn-icon-text" title="Export snippets JSON"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg><span>Export</span></button>
+            <button id="snip-import" class="btn btn-ghost btn-icon-text" title="Import snippets JSON"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg><span>Import</span></button>
+            <button id="snippet-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg><span>New</span></button>
           </div>
         </div>
         <div id="snippet-list" class="snippet-list"></div>
@@ -181,10 +361,27 @@
         <div class="content-head">
           <h1>Scheduled Tasks</h1>
           <div>
-            <input id="sched-search" class="input" style="width:180px;display:inline-block" placeholder="Search tasks…" />
-            <button id="sched-export" class="btn btn-ghost btn-icon-text" title="Export tasks JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><span>Export</span></button>
-            <button id="sched-import" class="btn btn-ghost btn-icon-text" title="Import tasks JSON"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg><span>Import</span></button>
-            <button id="sched-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New task</span></button>
+            <input id="sched-search" class="input" style="width:180px;display:inline-block"
+              placeholder="Search tasks…" />
+            <button id="sched-export" class="btn btn-ghost btn-icon-text" title="Export tasks JSON"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg><span>Export</span></button>
+            <button id="sched-import" class="btn btn-ghost btn-icon-text" title="Import tasks JSON"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg><span>Import</span></button>
+            <button id="sched-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg><span>New task</span></button>
           </div>
         </div>
         <div id="sched-list" class="sched-list"></div>
@@ -194,20 +391,34 @@
           <label>Command <input id="sched-command" class="input" placeholder="apt update && apt upgrade -y" /></label>
           <label>Target devices <div id="sched-devices" class="device-check"></div></label>
           <label>Interval (minutes) <input id="sched-interval" class="input" type="number" value="60" min="1" /></label>
-          <label class="switch-row"><span>Run once (execute a single time, then disable)</span><input type="checkbox" id="sched-runonce" /></label>
-          <label id="sched-runat-label" class="hidden">Run at <input id="sched-runat" class="input" type="datetime-local" /></label>
+          <label class="switch-row"><span>Run once (execute a single time, then disable)</span><input type="checkbox"
+              id="sched-runonce" /></label>
+          <label id="sched-runat-label" class="hidden">Run at <input id="sched-runat" class="input"
+              type="datetime-local" /></label>
           <div class="modal-actions">
-            <button id="sched-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-            <button id="sched-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
+            <button id="sched-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg><span>Cancel</span></button>
+            <button id="sched-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                <path d="M17 21v-8H7v8" />
+                <path d="M7 3v5h8" />
+              </svg><span>Create</span></button>
           </div>
         </div>
       </div>
 
       <!-- Session history view -->
       <div id="view-sessions" class="hidden">
-        <div class="content-head"><h1>Session History</h1></div>
+        <div class="content-head">
+          <h1>Session History</h1>
+        </div>
         <div class="toolbar-row">
-          <input id="session-search" class="input-sm" type="search" placeholder="Search device, host, user, or command…" style="flex:1;min-width:0" />
+          <input id="session-search" class="input-sm" type="search" placeholder="Search device, host, user, or command…"
+            style="flex:1;min-width:0" />
         </div>
         <div id="session-list" class="session-list"></div>
       </div>
@@ -224,8 +435,17 @@
           <div id="session-cmds-player-wrap" style="display:none">
             <div id="session-player" style="height:320px;background:#000;border-radius:8px;padding:6px"></div>
             <div class="terminal-toolbar" style="margin-top:8px">
-              <button id="sp-play" class="btn btn-ghost btn-icon-xs" title="Play/Pause"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
-              <button id="sp-restart" class="btn btn-ghost btn-icon-xs" title="Restart"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+              <button id="sp-play" class="btn btn-ghost btn-icon-xs" title="Play/Pause"><svg class="ic"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <polygon points="6 3 20 12 6 21 6 3" />
+                </svg></button>
+              <button id="sp-restart" class="btn btn-ghost btn-icon-xs" title="Restart"><svg class="ic"
+                  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                  stroke-linejoin="round">
+                  <path d="M21 12a9 9 0 1 1-3-6.7L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg></button>
               <span class="muted" style="margin-left:auto">Speed</span>
               <select id="sp-speed" class="input-sm">
                 <option value="0.5">0.5x</option>
@@ -237,25 +457,42 @@
           </div>
           <pre id="session-cmds-body" style="white-space:pre-wrap;max-height:50vh;overflow:auto"></pre>
           <div class="modal-actions">
-            <button id="session-cmds-close" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close</span></button>
+            <button id="session-cmds-close" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg><span>Close</span></button>
           </div>
         </div>
       </div>
 
       <!-- Settings view -->
       <div id="view-settings" class="hidden">
-        <div class="content-head"><h1>Settings</h1></div>
+        <div class="content-head">
+          <h1>Settings</h1>
+        </div>
 
         <details class="settings-acc" open>
-          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Account &amp; Security</span></summary>
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg><span>Account &amp; Security</span></summary>
           <div class="settings-box">
             <h3>Profile</h3>
             <p class="muted">Logged in as <b id="set-username">—</b></p>
-            <label>Current password <input id="pw-old" class="input" type="password" autocomplete="current-password" /></label>
-            <label>New password <input id="pw-new" class="input" type="password" autocomplete="new-password" placeholder="min 6 characters" /></label>
-            <label>Confirm new password <input id="pw-conf" class="input" type="password" autocomplete="new-password" /></label>
+            <label>Current password <input id="pw-old" class="input" type="password"
+                autocomplete="current-password" /></label>
+            <label>New password <input id="pw-new" class="input" type="password" autocomplete="new-password"
+                placeholder="min 6 characters" /></label>
+            <label>Confirm new password <input id="pw-conf" class="input" type="password"
+                autocomplete="new-password" /></label>
             <div class="modal-actions">
-              <button id="pw-change" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Change password</span></button>
+              <button id="pw-change" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg><span>Change password</span></button>
             </div>
           </div>
           <div class="settings-box">
@@ -263,57 +500,97 @@
             <p class="muted" id="totp-status-text">Checking…</p>
             <div id="totp-setup" class="hidden">
               <p>Scan this QR code with Google Authenticator / FreeOTP, then enter the 6-digit code to enable:</p>
-              <img id="totp-qr" alt="2FA QR code" style="width:200px;height:200px;background:#fff;border-radius:8px;padding:6px;display:none" />
+              <img id="totp-qr" alt="2FA QR code"
+                style="width:200px;height:200px;background:#fff;border-radius:8px;padding:6px;display:none" />
               <p class="muted" style="font-size:12px;word-break:break-all" id="totp-secret-text"></p>
-              <label>6-digit code <input id="totp-code" class="input" inputmode="numeric" placeholder="123456" /></label>
+              <label>6-digit code <input id="totp-code" class="input" inputmode="numeric"
+                  placeholder="123456" /></label>
               <div class="modal-actions">
-                <button id="totp-confirm" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span>Enable 2FA</span></button>
+                <button id="totp-confirm" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg><span>Enable 2FA</span></button>
               </div>
             </div>
             <div id="totp-enabled-actions">
-              <button id="totp-disable" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Disable 2FA</span></button>
+              <button id="totp-disable" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg><span>Disable 2FA</span></button>
             </div>
             <div id="totp-disabled-actions">
-              <button id="totp-start" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span>Enable 2FA</span></button>
+              <button id="totp-start" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                  fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg><span>Enable 2FA</span></button>
             </div>
           </div>
           <div class="settings-box">
             <h3>Single Sign-On (OIDC)</h3>
-            <label class="switch-row"><span>Enable OIDC SSO (login via your IdP)</span><input type="checkbox" id="set-oidc" /></label>
-            <p class="muted" style="font-size:12px">OIDC also requires server env vars: <code>OIDC_DISCOVERY_URL</code>, <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code>. The SSO button appears on the login page once enabled and configured.</p>
+            <label class="switch-row"><span>Enable OIDC SSO (login via your IdP)</span><input type="checkbox"
+                id="set-oidc" /></label>
+            <p class="muted" style="font-size:12px">OIDC also requires server env vars: <code>OIDC_DISCOVERY_URL</code>,
+              <code>OIDC_CLIENT_ID</code>, <code>OIDC_CLIENT_SECRET</code>. The SSO button appears on the login page
+              once enabled and configured.
+            </p>
           </div>
         </details>
 
         <details class="settings-acc">
-          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><span>Notifications &amp; Alerts</span></summary>
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg><span>Notifications &amp; Alerts</span></summary>
           <div class="settings-box">
             <label class="switch-row"><span>Enable alerts</span><input type="checkbox" id="set-notify" /></label>
-            <label>Telegram bot token <input id="set-tg-token" class="input" type="password" placeholder="123456:ABC-DEF…" /></label>
-            <label>Telegram chat id <input id="set-tg-chat" class="input" placeholder="123456789" /> <button id="set-tg-getid" type="button" class="btn btn-ghost btn-xs">Get chat ID</button></label>
-            <label>Discord webhook URL <input id="set-discord" class="input" placeholder="https://discord.com/api/webhooks/…" /></label>
+            <label>Telegram bot token <input id="set-tg-token" class="input" type="password"
+                placeholder="123456:ABC-DEF…" /></label>
+            <label>Telegram chat id <input id="set-tg-chat" class="input" placeholder="123456789" /> <button
+                id="set-tg-getid" type="button" class="btn btn-ghost btn-xs">Get chat ID</button></label>
+            <label>Discord webhook URL <input id="set-discord" class="input"
+                placeholder="https://discord.com/api/webhooks/…" /></label>
             <label>ntfy URL <input id="set-ntfy" class="input" placeholder="https://ntfy.sh/topic" /></label>
-            <label>Gotify URL <input id="set-gotify" class="input" placeholder="https://gotify.example.com/message?token=…" /></label>
-            <label>Slack webhook <input id="set-slack" class="input" placeholder="https://hooks.slack.com/services/…" /></label>
-            <label>Custom webhook (POST JSON) <input id="set-webhook" class="input" placeholder="https://example.com/hook" /></label>
+            <label>Gotify URL <input id="set-gotify" class="input"
+                placeholder="https://gotify.example.com/message?token=…" /></label>
+            <label>Slack webhook <input id="set-slack" class="input"
+                placeholder="https://hooks.slack.com/services/…" /></label>
+            <label>Custom webhook (POST JSON) <input id="set-webhook" class="input"
+                placeholder="https://example.com/hook" /></label>
             <label>Email (SMTP) — to <input id="set-email-to" class="input" placeholder="alerts@example.com" /></label>
             <label>SMTP host / port / user / password
               <div style="display:flex;gap:6px;flex-wrap:wrap">
-                <input id="set-email-host" class="input" style="flex:2;min-width:120px" placeholder="smtp.example.com" />
+                <input id="set-email-host" class="input" style="flex:2;min-width:120px"
+                  placeholder="smtp.example.com" />
                 <input id="set-email-port" class="input" type="number" style="width:70px" placeholder="587" />
                 <input id="set-email-user" class="input" style="flex:2;min-width:120px" placeholder="user@ex.com" />
-                <input id="set-email-pass" class="input" type="password" style="flex:2;min-width:120px" placeholder="password" />
+                <input id="set-email-pass" class="input" type="password" style="flex:2;min-width:120px"
+                  placeholder="password" />
               </div>
             </label>
-            <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10" max="3600" /></label>
-            <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank" style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
+            <label>Monitor interval (seconds) <input id="set-interval" class="input" type="number" value="60" min="10"
+                max="3600" /></label>
+            <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank"
+                  style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
             <div class="modal-actions">
-              <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Send test</span></button>
+              <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 2 11 13" />
+                  <path d="M22 2 15 22 11 13 2 9 22 2Z" />
+                </svg><span>Send test</span></button>
             </div>
           </div>
         </details>
 
         <details class="settings-acc">
-          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg><span>Appearance</span></summary>
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <path
+                d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg><span>Appearance</span></summary>
           <div class="settings-box">
             <label class="switch-row"><span>Theme</span>
               <select id="set-theme" class="input" style="max-width:160px">
@@ -328,34 +605,67 @@
 
         <div class="settings-box" style="margin-top:8px">
           <div class="modal-actions">
-            <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 0 0 1-2-2V5a2 0 0 1 2-2h11l5 5v11a2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save all settings</span></button>
+            <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 0 0 1-2-2V5a2 0 0 1 2-2h11l5 5v11a2 0 0 1-2 2Z" />
+                <path d="M17 21v-8H7v8" />
+                <path d="M7 3v5h8" />
+              </svg><span>Save all settings</span></button>
           </div>
         </div>
         <div class="settings-box" id="about-box" style="margin-top:8px">
           <h3 style="margin:0 0 6px">About ShellDeck</h3>
           <p class="muted" style="margin:0;font-size:13px;line-height:1.6">
             <span id="about-name">ShellDeck</span> <span id="about-version">v…</span><br />
-            by <a id="about-author" href="https://github.com/Vandexuzu/ShellDeck" target="_blank" rel="noopener">Vandexuzu</a><br />
-            <a id="about-repo" href="https://github.com/Vandexuzu/ShellDeck" target="_blank" rel="noopener">github.com/Vandexuzu/ShellDeck</a>
+            by <a id="about-author" href="https://github.com/Vandexuzu/ShellDeck" target="_blank"
+              rel="noopener">Vandexuzu</a><br />
+            <a id="about-repo" href="https://github.com/Vandexuzu/ShellDeck" target="_blank"
+              rel="noopener">github.com/Vandexuzu/ShellDeck</a>
           </p>
         </div>
       </div>
 
       <!-- Home / dashboard view -->
       <div id="view-home" class="hidden">
-        <div class="content-head"><h1>Home</h1><span class="muted" id="home-sub"></span></div>
+        <div class="content-head">
+          <h1>Home</h1><span class="muted" id="home-sub"></span>
+        </div>
 
         <!-- A: stat cards -->
         <div class="home-stats" id="home-stats"></div>
 
         <!-- E: quick actions -->
         <div class="home-quick">
-          <button class="qa" data-go="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span>Open Terminal</span></button>
-          <button class="qa" data-go="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg><span>Add Device</span></button>
-          <button class="qa" data-go="bulk"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Bulk Run</span></button>
-          <button class="qa" data-go="scheduled"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg><span>Schedule</span></button>
-          <button class="qa" data-go="snippets"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z"/></svg><span>Snippets</span></button>
-          <button class="qa" data-go="settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z"/></svg><span>Settings</span></button>
+          <button class="qa" data-go="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <line x1="8" y1="21" x2="16" y2="21" />
+              <line x1="12" y1="17" x2="12" y2="21" />
+            </svg><span>Open Terminal</span></button>
+          <button class="qa" data-go="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M5 12h14" />
+              <path d="M12 5v14" />
+            </svg><span>Add Device</span></button>
+          <button class="qa" data-go="bulk"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg><span>Bulk Run</span></button>
+          <button class="qa" data-go="scheduled"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 3" />
+            </svg><span>Schedule</span></button>
+          <button class="qa" data-go="snippets"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z" />
+            </svg><span>Snippets</span></button>
+          <button class="qa" data-go="settings"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+            </svg><span>Settings</span></button>
         </div>
 
         <div class="home-grid">
@@ -387,13 +697,19 @@
         <div class="content-head">
           <h1>Users</h1>
           <div>
-            <input id="user-search" class="input" style="width:180px;display:inline-block" placeholder="Search users…" />
-            <button id="user-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New user</span></button>
+            <input id="user-search" class="input" style="width:180px;display:inline-block"
+              placeholder="Search users…" />
+            <button id="user-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg><span>New user</span></button>
           </div>
         </div>
         <div id="user-list" class="user-list"></div>
         <div id="audit-log-section" class="hidden">
-          <h3 style="margin:18px 0 8px">Audit Log <span class="muted" style="font-weight:400;font-size:13px">(logins & key actions)</span></h3>
+          <h3 style="margin:18px 0 8px">Audit Log <span class="muted" style="font-weight:400;font-size:13px">(logins &
+              key actions)</span></h3>
           <div id="audit-log" class="audit-log"></div>
         </div>
         <div id="user-form" class="user-form hidden">
@@ -408,15 +724,25 @@
             </select>
           </label>
           <div class="modal-actions">
-            <button id="user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-            <button id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
+            <button id="user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg><span>Cancel</span></button>
+            <button id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                <path d="M17 21v-8H7v8" />
+                <path d="M7 3v5h8" />
+              </svg><span>Create</span></button>
           </div>
         </div>
         <div id="user-edit-form" class="user-form hidden">
           <h3>Edit user</h3>
           <input type="hidden" id="edit-user-id" />
           <label>Username <input id="edit-user-username" class="input" /></label>
-          <label>New password <input id="edit-user-password" type="password" class="input" placeholder="leave blank to keep" autocomplete="new-password" /></label>
+          <label>New password <input id="edit-user-password" type="password" class="input"
+              placeholder="leave blank to keep" autocomplete="new-password" /></label>
           <label>Role
             <select id="edit-user-role" class="input">
               <option value="viewer">viewer (read-only)</option>
@@ -425,8 +751,17 @@
             </select>
           </label>
           <div class="modal-actions">
-            <button id="edit-user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-            <button id="edit-user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+            <button id="edit-user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg><span>Cancel</span></button>
+            <button id="edit-user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                <path d="M17 21v-8H7v8" />
+                <path d="M7 3v5h8" />
+              </svg><span>Save</span></button>
           </div>
         </div>
       </div>
@@ -435,19 +770,35 @@
       <div id="view-agents" class="hidden">
         <div class="content-head">
           <h1>Agents</h1>
-          <button id="agent-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span>New agent</span></button>
+          <button id="agent-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg><span>New agent</span></button>
         </div>
-        <p class="muted" style="padding-left:18px;padding-right:18px;">Reverse-tunnel agents let devices behind NAT/firewall connect outward to ShellDeck. Run the agent script on the device with its token.</p>
+        <p class="muted" style="padding-left:18px;padding-right:18px;">Reverse-tunnel agents let devices behind
+          NAT/firewall connect outward to ShellDeck. Run the agent script on the device with its token.</p>
         <div id="agent-list" class="agent-list"></div>
         <div id="agent-form" class="user-form hidden">
           <h3>New agent</h3>
           <label>Name <input id="agent-name" class="input" /></label>
           <label>Link to device (optional)
-            <select id="agent-device" class="input"><option value="">— none —</option></select>
+            <select id="agent-device" class="input">
+              <option value="">— none —</option>
+            </select>
           </label>
           <div class="modal-actions">
-            <button id="agent-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-            <button id="agent-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Create</span></button>
+            <button id="agent-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg><span>Cancel</span></button>
+            <button id="agent-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                <path d="M17 21v-8H7v8" />
+                <path d="M7 3v5h8" />
+              </svg><span>Create</span></button>
           </div>
         </div>
       </div>
@@ -455,13 +806,29 @@
       <div id="view-terminal" class="hidden">
         <div class="terminal-head">
           <div class="terminal-broadcast-bar" id="broadcast-bar">
-            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M21 12a9 9 0 0 1-2.64 6.36M3 12a9 9 0 0 1 2.64-6.36"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
-            <input id="broadcast-input" class="input-sm" type="text" placeholder="Broadcast command to all open terminals…" />
-            <button id="broadcast-send" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg><span>Send</span></button>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="2" />
+              <path
+                d="M16.24 7.76a6 6 0 0 1 0 8.49M7.76 16.24a6 6 0 0 1 0-8.49M21 12a9 9 0 0 1-2.64 6.36M3 12a9 9 0 0 1 2.64-6.36" />
+              <line x1="12" y1="2" x2="12" y2="22" />
+            </svg>
+            <input id="broadcast-input" class="input-sm" type="text"
+              placeholder="Broadcast command to all open terminals…" />
+            <button id="broadcast-send" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg><span>Send</span></button>
             <span id="broadcast-count" class="muted"></span>
           </div>
           <div class="tab-bar" id="tab-bar"></div>
-          <button id="close-terminal" class="btn btn-ghost btn-icon" title="Close terminal"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+          <button id="close-terminal" class="btn btn-ghost btn-icon" title="Close terminal"><svg class="ic"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg></button>
         </div>
         <div id="terminals" class="terminals"></div>
       </div>
@@ -488,20 +855,42 @@
         <label id="f-key-label" class="hidden">Private key (PEM)
           <textarea id="f-key" rows="4" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"></textarea>
         </label>
-        <button type="button" id="f-genkey" class="btn btn-ghost btn-icon-text hidden"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg><span>Generate key</span></button>
+        <button type="button" id="f-genkey" class="btn btn-ghost btn-icon-text hidden"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path
+              d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
+          </svg><span>Generate key</span></button>
         <label id="f-pubkey-label" class="hidden">Public key (add to target's authorized_keys)
           <textarea id="f-pubkey" rows="3" readonly placeholder="ssh-ed25519 AAAA..."></textarea>
         </label>
         <label>OS <input id="f-os" placeholder="Ubuntu 22.04" /></label>
         <label>Notes <textarea id="f-notes" rows="2"></textarea></label>
         <label>Tags <input id="f-tags" placeholder="prod, web, critical" /></label>
-        <label class="switch-row"><span>Reachable via Tailscale (.ts.net)</span><input type="checkbox" id="f-tailscale" /></label>
-        <label>Jump host (bastion) <select id="f-bastion"><option value="">— none —</option></select></label>
+        <label class="switch-row"><span>Reachable via Tailscale (.ts.net)</span><input type="checkbox"
+            id="f-tailscale" /></label>
+        <label>Jump host (bastion) <select id="f-bastion">
+            <option value="">— none —</option>
+          </select></label>
         <div id="form-error" class="form-error"></div>
         <div class="modal-actions">
-          <button type="button" id="modal-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2Z"/></svg><span>Test</span></button>
-          <button type="button" id="modal-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-          <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+          <button type="button" id="modal-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 2 11 13" />
+              <path d="M22 2 15 22 11 13 2 9 22 2Z" />
+            </svg><span>Test</span></button>
+          <button type="button" id="modal-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg><span>Cancel</span></button>
+          <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+              <path d="M17 21v-8H7v8" />
+              <path d="M7 3v5h8" />
+            </svg><span>Save</span></button>
         </div>
       </form>
     </div>
@@ -511,11 +900,16 @@
   <div id="ts-modal" class="modal hidden">
     <div class="modal-card">
       <h2>Discover Tailscale Devices</h2>
-      <p class="muted">Devices found on your Tailscale network. Click one to prefill a new device (Tailscale is auto-enabled).</p>
+      <p class="muted">Devices found on your Tailscale network. Click one to prefill a new device (Tailscale is
+        auto-enabled).</p>
       <div id="ts-list" class="ts-list"></div>
       <div id="ts-error" class="form-error"></div>
       <div class="modal-actions">
-        <button id="ts-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Close</span></button>
+        <button id="ts-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg><span>Close</span></button>
       </div>
     </div>
   </div>
@@ -525,11 +919,21 @@
     <div class="modal-card">
       <h2>Import Devices (JSON)</h2>
       <p class="muted">Paste exported JSON. Re-enter passwords — exports omit secrets.</p>
-      <textarea id="import-text" rows="8" placeholder='[{"name":"srv1","host":"1.2.3.4","username":"root","password":"..."}]'></textarea>
+      <textarea id="import-text" rows="8"
+        placeholder='[{"name":"srv1","host":"1.2.3.4","username":"root","password":"..."}]'></textarea>
       <div id="import-error" class="form-error"></div>
       <div class="modal-actions">
-        <button id="import-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-        <button id="import-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Import</span></button>
+        <button id="import-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg><span>Cancel</span></button>
+        <button id="import-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+            <path d="M17 21v-8H7v8" />
+            <path d="M7 3v5h8" />
+          </svg><span>Import</span></button>
       </div>
     </div>
   </div>
@@ -542,25 +946,37 @@
         <input type="hidden" id="snippet-id" />
         <label>Name <input id="s-name" class="input" required /></label>
         <label>Command <textarea id="s-command" rows="3" class="input" required></textarea></label>
-        <label>Category <input id="s-category" class="input" placeholder="e.g. System, Network, Docker (optional)" /></label>
+        <label>Category <input id="s-category" class="input"
+            placeholder="e.g. System, Network, Docker (optional)" /></label>
         <div class="modal-actions">
-          <button type="button" id="snippet-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg><span>Cancel</span></button>
-          <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg><span>Save</span></button>
+          <button type="button" id="snippet-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic"
+              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg><span>Cancel</span></button>
+          <button type="submit" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+              <path d="M17 21v-8H7v8" />
+              <path d="M7 3v5h8" />
+            </svg><span>Save</span></button>
         </div>
       </form>
     </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>
-  <div id="boot-loading" class="boot-loading"><div class="spinner"></div><span>Loading ShellDeck…</span></div>
-  <footer id="app-footer" class="app-footer">
-    <span id="footer-app">ShellDeck</span> · <a id="footer-author" href="https://github.com/Vandexuzu/ShellDeck" target="_blank" rel="noopener">by Vandexuzu</a>
-  </footer>
+  <div id="boot-loading" class="boot-loading">
+    <div class="spinner"></div><span>Loading ShellDeck…</span>
+  </div>
+
 
   <!-- Command palette (Ctrl/Cmd+K) -->
   <div id="cmd-palette" class="modal hidden">
     <div class="modal-card" style="max-width:520px;padding:14px">
-      <input id="cp-input" class="input" style="width:100%" placeholder="Go to… (devices, snippets, actions)" autocomplete="off" />
+      <input id="cp-input" class="input" style="width:100%" placeholder="Go to… (devices, snippets, actions)"
+        autocomplete="off" />
       <div id="cp-results" style="margin-top:10px;max-height:50vh;overflow:auto"></div>
     </div>
   </div>
@@ -570,4 +986,5 @@
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-search@0.8.0/lib/xterm-addon-search.js"></script>
   <script src="/static/app.js?v=71"></script>
 </body>
+
 </html>

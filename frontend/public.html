@@ -1,31 +1,111 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>ShellDeck — Status</title>
   <style>
-    :root { --bg:#0e1117; --panel:#161b22; --border:#222a35; --text:#e6edf3; --muted:#8b949e; --ok:#3fb950; --down:#f85149; --accent:#4f8cff; }
-    * { box-sizing: border-box; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: var(--bg); color: var(--text); padding: 24px; }
-    h1 { display:flex; align-items:center; gap:10px; }
-    .bolt { color:#f5c518; }
-    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px,1fr)); gap:16px; margin-top:20px; }
-    .card { background: var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px; }
-    .card h3 { margin:0 0 8px; font-size:16px; }
-    .row { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; color:var(--muted); }
-    .row b { color: var(--text); font-weight:600; }
-    .dot { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; }
-    .up { background: var(--ok); } .down { background: var(--down); }
-    .updated { color:var(--muted); font-size:12px; margin-top:8px; }
-    a { color: var(--accent); text-decoration:none; }
+    :root {
+      --bg: #0e1117;
+      --panel: #161b22;
+      --border: #222a35;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --ok: #3fb950;
+      --down: #f85149;
+      --accent: #4f8cff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+    }
+
+    h1 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .bolt {
+      color: #f5c518;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 3px 0;
+      color: var(--muted);
+    }
+
+    .row b {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .up {
+      background: var(--ok);
+    }
+
+    .down {
+      background: var(--down);
+    }
+
+    .updated {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 8px;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
   </style>
 </head>
+
 <body>
-  <h1><span class="bolt">⚡</span> ShellDeck Status</h1>
+  <h1>ShellDeck Status</h1>
   <div id="summary" class="updated">Loading…</div>
   <div id="grid" class="grid"></div>
-  <p class="updated">Public, read-only dashboard · powered by <a href="https://github.com/Vandexuzu/ShellDeck" target="_blank">ShellDeck</a></p>
+  <p class="updated">Public, read-only dashboard · powered by <a href="https://github.com/Vandexuzu/ShellDeck"
+      target="_blank">ShellDeck</a></p>
   <script>
     async function load() {
       try {
@@ -51,4 +131,5 @@
     setInterval(load, 30000);
   </script>
 </body>
+
 </html>

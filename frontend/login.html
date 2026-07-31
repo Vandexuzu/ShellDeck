@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -13,14 +14,16 @@
       try {
         var t = localStorage.getItem("shelldeck_theme");
         if (t === "light" || t === "dark" || t === "premium") document.documentElement.setAttribute("data-theme", t);
-      } catch (_) {}
+      } catch (_) { }
     })();
   </script>
   <link rel="stylesheet" href="/static/style.css" />
 </head>
+
 <body class="auth-body">
   <div class="auth-card">
-    <div class="auth-brand"><img src="/static/logo-dark.svg" alt="ShellDeck" id="brand-logo" style="width:170px;height:26px;display:block;margin:0 auto" /></div>
+    <div class="auth-brand"><img src="/static/logo-dark.svg" alt="ShellDeck" id="brand-logo"
+        style="width:170px;height:26px;display:block;margin:0 auto" /></div>
     <div class="auth-tabs">
       <button id="tab-login" class="auth-tab active" type="button">Login</button>
       <button id="tab-register" class="auth-tab" type="button">Register</button>
@@ -37,7 +40,8 @@
       </label>
       <div id="auth-error" class="auth-error"></div>
       <button type="submit" id="auth-submit" class="btn btn-primary btn-block">Login</button>
-      <button type="button" id="oidc-login" class="btn btn-ghost btn-block hidden" style="margin-top:8px">Sign in with SSO</button>
+      <button type="button" id="oidc-login" class="btn btn-ghost btn-block hidden" style="margin-top:8px">Sign in with
+        SSO</button>
     </form>
     <p class="auth-hint" id="auth-hint">Don't have an account? Switch to Register.</p>
   </div>
@@ -48,12 +52,11 @@
         var t = localStorage.getItem("shelldeck_theme") || "dark";
         var el = document.getElementById("brand-logo");
         if (el) el.src = (t === "light") ? "/static/logo-light.svg" : "/static/logo-dark.svg";
-      } catch (_) {}
+      } catch (_) { }
     })();
   </script>
   <script src="/static/login.js?v=3"></script>
-  <footer class="app-footer">
-    <span>ShellDeck</span> · <a href="https://github.com/Vandexuzu/ShellDeck" target="_blank" rel="noopener">by Vandexuzu</a>
-  </footer>
+
 </body>
+
 </html>

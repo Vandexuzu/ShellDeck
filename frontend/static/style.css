@@ -156,7 +156,7 @@ body {
   padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
 }
 .brand { font-weight: 700; font-size: 18px; display: flex; align-items: flex-end; gap: 8px; line-height: 1.1; }
-.brand #topbar-version { margin-bottom: 2px; }
+.brand #topbar-version { margin-bottom: 0px; }
 .topbar-right { display: flex; align-items: center; gap: 12px; color: var(--muted); }
 
 .layout { display: flex; height: calc(100vh - 53px); }
@@ -440,13 +440,12 @@ body {
   font-weight: 600;
   font-size: 14px;
   user-select: none;
-  background: var(--surface, #0f141a);
+  
 }
 .settings-acc > summary::-webkit-details-marker { display: none; }
 .settings-acc > summary .ic { width: 18px; height: 18px; color: var(--primary, #4f9cf9); flex: 0 0 auto; }
 .settings-acc > summary::after { content: ""; margin-left: auto; width: 9px; height: 9px; border-right: 2px solid var(--muted, #8b97a7); border-bottom: 2px solid var(--muted, #8b97a7); transform: rotate(45deg); transition: transform .15s ease; }
 .settings-acc[open] > summary::after { transform: rotate(-135deg); }
-.settings-acc > summary:hover { background: var(--surface-2, #11161d); }
 .settings-acc > .settings-box { border: none; border-top: 1px solid var(--border, #2a3038); border-radius: 0; max-width: none; background: var(--panel, #1a2030); }
 
 /* Home dashboard */
