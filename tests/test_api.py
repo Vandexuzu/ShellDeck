@@ -77,7 +77,9 @@ def test_snippets_flow():
     sid = c.json()["id"]
     # list
     lst = client.get("/api/snippets", headers=h)
-    assert lst.status_code == 200 and len(lst.json()) == 1
+    assert lst.status_code == 200
+    my = [s for s in lst.json() if s["id"] == sid]
+    assert len(my) == 1 and my[0]["name"] == "uptime"
     # delete
     assert client.delete(f"/api/snippets/{sid}", headers=h).status_code == 204
 

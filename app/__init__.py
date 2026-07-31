@@ -1,0 +1,1 @@
+"""ShellDeck application package."""

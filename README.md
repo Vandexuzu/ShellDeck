@@ -33,6 +33,8 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 | 🔔 **Alerts**           | Telegram · Discord · ntfy · Gotify · Slack · Email · webhook                                            |
 | 🕸 **Agent relay**      | Reach devices behind NAT/firewall — full shell **and** file manager over an outbound WebSocket          |
 | 🌐 **Public dashboard** | Read-only status page at `/public` (no login) — host IPs are masked (e.g. `10.0.0.x`)                   |
+| 🕸 **Network Topology**    | Live LAN scanner: auto-detect subnet, discover hosts, draw an interactive graph (pan/zoom)                |
+| 🔎 **Custom scan**        | Scan any `/24` subnet with custom ports; enriched data: hostname, device type, vendor, MAC, latency, web  |
 | 🪜 **Bastion**          | Tunnel SSH through a jump host automatically                                                            |
 | 📲 **PWA**              | Install to phone home screen; mobile UI (cards + bottom nav)                                            |
 | 🔐 **2FA**              | TOTP / 2FA (RFC 6238, no external dependency); OIDC SSO (Google / GitHub / corporate)                   |
@@ -52,6 +54,46 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 - **admin** — full control of everything; first registered user becomes admin.
 - **operator** — full control of their _own_ devices; read-only view of the admin's shared fleet.
 - **viewer** — read-only view of _all_ devices; no shell, no writes.
+
+---
+
+## 🕸 Network Topology
+
+A live network scanner that maps your LAN as an interactive graph + sortable table. **Admin-only**; every scan is written to the audit log.
+
+### How it works
+- The subnet is **auto-derived** from the first registered device's IP (e.g. `192.168.66.0/24`). Override it with the **Subnet** field (any `/24` or smaller).
+- Hosts are discovered with **TCP connect probes** (no ICMP/ping needed) — works inside Docker without `CAP_NET_RAW`.
+- The **gateway** is detected from the host's default route (`ip route`), falling back to `.1`/`.254` of the subnet — so it reflects the real router, not just the first device.
+- Requires `network_mode: host` in `docker-compose.yml` so the container can reach the LAN.
+
+### Custom scan
+| Field    | Purpose                                                                                  |
+| -------- | ---------------------------------------------------------------------------------------- |
+| Subnet   | `192.168.1.0/24` or `auto` (default)                                                     |
+| Ports    | Comma-separated TCP ports to **report** (e.g. `22,80,443`). Liveness is still probed against a broad common-port set, so a host is never falsely marked offline just because your ports are closed. |
+
+When you specify **Ports**, only hosts that actually expose one of those ports are shown (plus the gateway and any registered ShellDeck devices as anchors). Leave it empty to list the whole subnet.
+
+### Enriched host data
+Each discovered host is enriched with:
+
+| Field        | Source                                                        |
+| ------------ | ------------------------------------------------------------ |
+| Hostname     | reverse DNS (`gethostbyaddr`)                                |
+| Device type  | port-signature classification (SSH host, Web, SMB, RDP, …)   |
+| Open ports   | TCP connect probe                                            |
+| Latency      | connect round-trip time (ms)                                 |
+| MAC + Vendor | `/proc/net/arp` + OUI lookup                                 |
+| mDNS / SSDP  | UPnP discovery (best-effort)                                 |
+| Web title    | HTTP `<title>` of web services                              |
+| Service banner | SSH / HTTP banner                                          |
+| Last seen    | compared against the previous scan snapshot                  |
+
+### Interaction
+- **Graph:** drag to pan, scroll wheel to zoom (toward cursor). On mobile, one-finger drag pans.
+- **Hover** a node (desktop) → native tooltip with full details.
+- **Click / tap** a node → detail panel below the graph (IP, role, host, type, ports, latency, vendor, MAC, web title, last seen).
 
 ---
 
@@ -166,6 +208,8 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Snippet categories + filter
 - [x] Starter snippet templates seeded on first install
 - [x] App identity (version, author, GitHub link in UI)
+- [x] Network Topology scanner (interactive graph + enriched host table)
+- [x] Custom subnet/port scan with audit logging
 
 **Earlier milestones**
 
@@ -188,6 +232,11 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [ ] Mobile terminal touch optimisations
 
 See the [issue tracker](https://github.com/Vandexuzu/ShellDeck/issues) for more.
+
+## 💬 Community
+
+- **Discussion group:** [t.me/ShellDeck](https://t.me/ShellDeck) — ask questions, share setups, and talk ShellDeck with other self-hosters.
+- **Issues & features:** [github.com/Vandexuzu/ShellDeck/issues](https://github.com/Vandexuzu/ShellDeck/issues)
 
 ## 🤝 Contributing
 

@@ -1,6 +1,7 @@
 """SQLAlchemy ORM models."""
 from __future__ import annotations
 
+import json as _json
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
@@ -186,3 +187,24 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
 
     user: Mapped["User"] = relationship()
+
+
+class TopologySnapshot(Base):
+    """Stored topology scan result: nodes (devices + discovered hosts) + edges."""
+
+    __tablename__ = "topology_snapshots"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scan_time: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+    nodes_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    edges_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    discovered_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+
+    def nodes(self) -> list[dict]:
+        return _json.loads(self.nodes_json or "[]")
+
+    def edges(self) -> list[dict]:
+        return _json.loads(self.edges_json or "[]")
+
+    def discovered(self) -> list[dict]:
+        return _json.loads(self.discovered_json or "[]")

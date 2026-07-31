@@ -3,10 +3,17 @@ services:
     build: .
     container_name: shelldeck
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    # Default to host networking so the container shares the host's LAN interface.
+    # This lets topology discovery / network scans reach devices on the local
+    # subnet (e.g. 192.168.x.x) instead of being isolated on Docker's bridge.
+    # If you prefer bridge mode, comment the next line and uncomment the ports
+    # block below.
+    network_mode: host
+    # ports:
+    #   - "8000:8000"
     env_file: .env
     volumes:
       - ./data:/app/data
     # Persist the SQLite DB + .env inside the volume
     command: sh -c "cp -n .env /app/data/.env 2>/dev/null; uvicorn app.main:app --host 0.0.0.0 --port 8000"
+

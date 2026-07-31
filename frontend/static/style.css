@@ -189,7 +189,23 @@ body {
 .content-head { background: var(--panel); }
 #view-home { padding-top: 0; }
 #view-home .content-head { margin-bottom: 0; }
-.status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; padding: 18px; }
+/* Topology view: header stays at the top (normal flow), graph gets a concrete
+   height so it never collapses, and the list scrolls beneath it. */
+#view-topology { display: block; }
+#view-topology .content-head { position: static; }
+#view-topology #topo-graph {
+  height: min(50vh, 460px);
+  min-height: 260px;
+  margin: 14px 14px 0;
+}
+#view-topology #topo-list { margin: 14px; max-height: 38vh; overflow-y: auto; }
+/* On small screens, shrink the graph so the discovered table is visible
+   without scrolling the whole page. */
+@media (max-width: 768px) {
+  #view-topology #topo-graph { height: 38vh; min-height: 220px; }
+  #view-topology #topo-list { max-height: 42vh; }
+}
+.status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; padding: 18px; }
 .status-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .status-card .sc-title { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -483,7 +499,7 @@ body {
 .sched-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .sched-card .sc-name { font-weight: 600; margin-bottom: 6px; }
 .sched-card .sc-cmd { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 12px; white-space: pre-wrap; margin: 0 0 8px; }
-.sched-card .sc-out { background: #0b0f17; border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; margin: 0 0 8px; }
+.sched-card .sc-out { border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 11px; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 200px; overflow: auto; margin: 0 0 8px; }
 .sched-form { padding: 18px; max-width: 460px; display: flex; flex-direction: column; gap: 12px; }
 .device-check { display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px; }
 .chk { flex-direction: row !important; align-items: center; gap: 8px; color: var(--text) !important; font-size: 13px !important; }

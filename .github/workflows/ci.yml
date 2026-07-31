@@ -23,4 +23,5 @@ jobs:
         env:
           SECRET_KEY: ci-test-secret
           DATABASE_URL: sqlite:///./ci-test.db
+          PYTHONPATH: .
         run: pytest -q

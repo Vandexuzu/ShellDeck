@@ -112,7 +112,7 @@ async function ensureAuth() {
 // ----------------------------- Tabs ----------------------------------------
 function switchTab(name) {
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal"].forEach(v => {
+  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology"].forEach(v => {
     const el = document.getElementById("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
   });
@@ -125,6 +125,7 @@ function switchTab(name) {
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
   if (name === "settings") { loadSettings(); refreshTotpStatus(); }
+  if (name === "topology") loadTopology();
   if (name === "home") loadHome();
   if (name === "terminal") {
     // The terminal view was just shown — re-fit every open pane so terminals
@@ -273,7 +274,237 @@ async function cloneDevice(id) {
   } catch (e) { showToast(e.message, "error"); }
 }
 
-document.getElementById("add-device").onclick = () => openModal();
+function loadTopology() {
+  const svg = document.getElementById("topo-svg");
+  const list = document.getElementById("topo-list");
+  const legend = document.getElementById("topo-legend");
+  if (svg) {
+    svg.innerHTML = '<text x="12" y="20" fill="var(--muted)" font-size="12">Click Scan to discover the network topology.</text>';
+  }
+  if (list) list.innerHTML = "";
+  if (legend) legend.innerHTML = `
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444"></span> Gateway</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#4f8cff"></span> ShellDeck</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b"></span> Discovered</span>
+    <span><span style="display:inline-block;width:16px;height:2px;background:#4f8cff"></span> WAN</span>
+    <span><span style="display:inline-block;width:16px;height:2px;background:#22c55e"></span> LAN</span>
+  `;
+}
+
+function renderTopology(data) {
+  const svg = document.getElementById("topo-svg");
+  const list = document.getElementById("topo-list");
+  if (!svg) return;
+  const nodes = data.nodes || [];
+  const edges = data.edges || [];
+  // Defer until the layout is applied so clientWidth/Height are correct.
+  requestAnimationFrame(() => {
+  const w = svg.clientWidth || 800;
+  const h = svg.clientHeight || 460;
+  const cx = w / 2;
+  const cy = h / 2;
+  const positions = {};
+  const gatewayNodes = nodes.filter(n => n.role === "gateway");
+  const shelldeckNodes = nodes.filter(n => n.role === "shelldeck");
+  const otherNodes = nodes.filter(n => n.role !== "gateway" && n.role !== "shelldeck");
+
+  // Cap the number of drawn nodes so the graph stays readable; the full list
+  // is always available in the table below. Gateway is always drawn (center anchor).
+  const MAX_DRAW = 120;
+  const drawable = [...gatewayNodes, ...shelldeckNodes, ...otherNodes].slice(0, MAX_DRAW);
+
+  for (const g of gatewayNodes) positions[g.ip] = { x: cx, y: cy };
+
+  // Distribute nodes on concentric rings so they never overlap. Each ring holds
+  // a growing number of slots; radius steps outward as rings fill up.
+  const perRingBase = 8;
+  let idx = 0;
+  let ring = 0;
+  while (idx < drawable.length) {
+    const perRing = perRingBase + ring * 4;
+    const radius = Math.min(w, h) * 0.12 + ring * Math.min(w, h) * 0.13;
+    for (let k = 0; k < perRing && idx < drawable.length; k++, idx++) {
+      const angle = (k / perRing) * Math.PI * 2 + ring * 0.4;
+      positions[drawable[idx].ip] = {
+        x: cx + Math.cos(angle) * radius,
+        y: cy + Math.sin(angle) * radius,
+      };
+    }
+    ring++;
+  }
+
+  let edgeSvg = "";
+  for (const e of edges) {
+    const from = positions[e.from];
+    const to = positions[e.to];
+    if (!from || !to) continue;
+    const color = e.proto === "wan" ? "#4f8cff" : "#22c55e";
+    edgeSvg += `<line x1="${from.x}" y1="${from.y}" x2="${to.x}" y2="${to.y}" stroke="${color}" stroke-width="2" stroke-opacity="0.5"/>`;
+  }
+
+  let nodeSvg = "";
+  for (const n of drawable) {
+    const p = positions[n.ip];
+    if (!p) continue;
+    const fill = n.role === "gateway" ? "#ef4444" : n.role === "shelldeck" ? "#4f8cff" : "#f59e0b";
+    const r = n.role === "gateway" ? 14 : n.role === "shelldeck" ? 12 : 8;
+    const tip = [
+      `IP: ${n.ip}`,
+      n.hostname ? `Host: ${n.hostname}` : "",
+      `Role: ${n.role}`,
+      n.device_type ? `Type: ${n.device_type}` : "",
+      `Status: ${n.status}`,
+      n.ports.length ? `Ports: ${n.ports.join(", ")}` : "Ports: -",
+      n.latency_ms != null ? `Latency: ${n.latency_ms} ms` : "",
+      n.vendor ? `Vendor: ${n.vendor}` : "",
+      n.mac ? `MAC: ${n.mac}` : "",
+      n.web_title ? `Web: ${n.web_title}` : "",
+    ].filter(Boolean).join("\n");
+    nodeSvg += `<g class="topo-node" data-ip="${escapeHtml(n.ip)}" style="cursor:pointer">`;
+    nodeSvg += `<title>${escapeHtml(tip)}</title>`;
+    nodeSvg += `<circle cx="${p.x}" cy="${p.y}" r="${r + 4}" fill="rgba(0,0,0,0.35)"/>`;
+    nodeSvg += `<circle cx="${p.x}" cy="${p.y}" r="${r}" fill="${fill}" stroke="var(--panel)" stroke-width="2"/>`;
+    if (n.role !== "unknown") {
+      nodeSvg += `<text x="${p.x}" y="${p.y - r - 6}" text-anchor="middle" fill="var(--text)" font-size="11" font-weight="600">${escapeHtml(n.device_name || n.ip)}</text>`;
+    }
+    nodeSvg += `<text x="${p.x}" y="${p.y + r + 14}" text-anchor="middle" fill="var(--muted)" font-size="10">${escapeHtml(n.ip)}${n.ports.length ? " : " + n.ports.join(",") : ""}</text>`;
+    nodeSvg += `</g>`;
+  }
+  svg.innerHTML = `<g id="topo-root">${edgeSvg}${nodeSvg}</g>`;
+  enableTopoPanZoom(svg);
+
+  // Click a node (mobile-friendly) to show a detail panel below the graph.
+  const byIp = {};
+  for (const n of drawable) byIp[n.ip] = n;
+  svg.querySelectorAll(".topo-node").forEach(g => {
+    g.addEventListener("click", () => {
+      const n = byIp[g.getAttribute("data-ip")];
+      if (!n) return;
+      const panel = document.getElementById("topo-detail");
+      if (panel) {
+        panel.style.display = "block";
+        panel.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <b style="color:var(--text)">${escapeHtml(n.ip)}</b>
+            <span class="badge ${n.role === "gateway" ? "off" : n.role === "shelldeck" ? "" : "pending"}">${escapeHtml(n.role)}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.7">
+            ${n.hostname ? `Host: ${escapeHtml(n.hostname)}<br>` : ""}
+            ${n.device_type ? `Type: ${escapeHtml(n.device_type)}<br>` : ""}
+            Status: ${escapeHtml(n.status)}<br>
+            Ports: ${n.ports.length ? escapeHtml(n.ports.join(", ")) : "-"}${n.latency_ms != null ? `<br>Latency: ${n.latency_ms} ms` : ""}
+            ${n.vendor ? `<br>Vendor: ${escapeHtml(n.vendor)}` : ""}
+            ${n.mac ? `<br>MAC: ${escapeHtml(n.mac)}` : ""}
+            ${n.web_title ? `<br>Web: ${escapeHtml(n.web_title)}` : ""}
+            ${n.last_seen ? `<br>Last seen: ${escapeHtml(n.last_seen.replace("T", " ").slice(0, 19))}` : ""}
+          </div>`;
+      }
+    });
+  });
+  });
+
+  const onlineCount = nodes.filter(n => n.status === "online").length;
+  const discoveredCount = (data.discovered || []).length;
+  const summary = `<div style="margin-bottom:10px;font-size:13px;color:var(--muted)">
+      <b style="color:var(--text)">${nodes.length}</b> nodes
+      (<b style="color:var(--text)">${onlineCount}</b> online,
+      <b style="color:var(--text)">${discoveredCount}</b> discovered on LAN)
+    </div>`;
+
+  const rows = nodes.map(n => `
+    <tr>
+      <td>${escapeHtml(n.ip)}</td>
+      <td>${escapeHtml(n.device_name || n.hostname || n.name || "-")}</td>
+      <td>${escapeHtml(n.hostname || "-")}</td>
+      <td><span class="badge ${n.role === "gateway" ? "off" : n.role === "shelldeck" ? "" : "pending"}">${escapeHtml(n.role)}</span></td>
+      <td>${escapeHtml(n.device_type || "-")}</td>
+      <td><span class="dot ${n.status === "online" ? "ok" : "down"}"></span> ${escapeHtml(n.status)}</td>
+      <td>${n.ports.length ? n.ports.join(", ") : "-"}</td>
+      <td>${n.latency_ms != null ? n.latency_ms + " ms" : "-"}</td>
+      <td>${escapeHtml(n.vendor || "-")}</td>
+      <td>${escapeHtml(n.mac || "-")}</td>
+      <td>${escapeHtml(n.mdns || "-")}</td>
+      <td>${escapeHtml(n.web_title || (n.banners && n.banners["22"] ? n.banners["22"] : "-"))}</td>
+      <td>${escapeHtml((n.last_seen || "").replace("T", " ").slice(0, 19) || "-")}</td>
+    </tr>`).join("");
+
+  if (list) list.innerHTML = summary + `<div style="overflow-x:auto"><table class="session-table"><thead><tr><th>IP</th><th>Name</th><th>Hostname</th><th>Role</th><th>Device</th><th>Status</th><th>Ports</th><th>Latency</th><th>Vendor</th><th>MAC</th><th>mDNS</th><th>Service / Web</th><th>Last seen</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// Pan + zoom for the topology SVG graph. Drag to pan, wheel to zoom.
+function enableTopoPanZoom(svg) {
+  const root = svg.querySelector("#topo-root");
+  if (!root) return;
+  let scale = 1, tx = 0, ty = 0, dragging = false, lastX = 0, lastY = 0;
+
+  const apply = () => {
+    root.setAttribute("transform", `translate(${tx} ${ty}) scale(${scale})`);
+  };
+
+  svg.onwheel = (e) => {
+    e.preventDefault();
+    const factor = e.deltaY < 0 ? 1.1 : 0.9;
+    const newScale = Math.min(5, Math.max(0.3, scale * factor));
+    // Zoom toward the cursor position.
+    const rect = svg.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    tx = mx - (mx - tx) * (newScale / scale);
+    ty = my - (my - ty) * (newScale / scale);
+    scale = newScale;
+    apply();
+  };
+
+  svg.onmousedown = (e) => {
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    svg.style.cursor = "grabbing";
+  };
+  window.addEventListener("mouseup", () => { dragging = false; svg.style.cursor = "grab"; });
+  svg.onmousemove = (e) => {
+    if (!dragging) return;
+    tx += e.clientX - lastX;
+    ty += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    apply();
+  };
+
+  // Basic touch support (single-finger pan).
+  svg.ontouchstart = (e) => {
+    if (e.touches.length === 1) {
+      dragging = true; lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+    }
+  };
+  svg.ontouchmove = (e) => {
+    if (dragging && e.touches.length === 1) {
+      e.preventDefault();
+      tx += e.touches[0].clientX - lastX;
+      ty += e.touches[0].clientY - lastY;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      apply();
+    }
+  };
+  svg.ontouchend = () => { dragging = false; };
+
+  svg.style.cursor = "grab";
+  apply();
+}
+
+document.getElementById("topo-scan").onclick = async () => {
+  const svg = document.getElementById("topo-svg");
+  const subnet = (document.getElementById("topo-subnet").value || "").trim();
+  const ports = (document.getElementById("topo-ports").value || "").trim();
+  const params = new URLSearchParams();
+  params.set("subnet", subnet || "auto");
+  if (ports) params.set("ports", ports);
+  svg.innerHTML = '<text x="12" y="20" fill="var(--muted)" font-size="12">Scanning… this can take up to a minute.</text>';
+  try {
+    const data = await api(`/api/devices/topology/scan?${params.toString()}`);
+    renderTopology(data);
+    showToast(`Scan complete: ${data.nodes.length} nodes found`, "ok");
+  } catch (e) {
+    svg.innerHTML = `<text x="12" y="20" fill="var(--danger)" font-size="12">Error: ${escapeHtml(e.message)}</text>`;
+    showToast(e.message, "error");
+  }
+};
 document.getElementById("modal-cancel").onclick = closeModal;
 document.getElementById("modal-test").onclick = async () => {
   const id = document.getElementById("device-id").value;
@@ -821,6 +1052,7 @@ function buildPaletteItems() {
   const items = [
     { label: "Home", icon: "home", run: () => switchTab("home") },
     { label: "Devices", icon: "drive", run: () => switchTab("devices") },
+    { label: "Topology", icon: "graph", run: () => switchTab("topology") },
     { label: "Files", icon: "folder", run: () => switchTab("files") },
     { label: "Bulk Run", icon: "zap", run: () => switchTab("bulk") },
     { label: "Docker", icon: "box", run: () => switchTab("docker") },
