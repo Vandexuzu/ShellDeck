@@ -165,7 +165,7 @@ body {
 .side-nav-item { display: block; text-align: left; border: 1px solid transparent; background: transparent; color: var(--muted); padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 14px; width: 100%; }
 .side-nav-item:hover { background: var(--panel-2); color: var(--text); }
 .side-nav-item.active { background: var(--primary); border-color: var(--primary); color: #fff; }
-.sidebar-head, .content-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.sidebar-head, .content-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); min-height: 52px; }
 .terminal-head { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
 .sidebar-head h2, .content-head h1, .terminal-head h1 { margin: 0; font-size: 16px; }
 

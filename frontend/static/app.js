@@ -619,6 +619,7 @@ document.getElementById("inv-terraform").onclick = () => downloadInventory("terr
 document.getElementById("import-devices").onclick = () => {
   document.getElementById("import-modal").classList.remove("hidden");
 };
+document.getElementById("add-device").onclick = () => openModal();
 // Tailscale discovery
 document.getElementById("discover-tailscale").onclick = async () => {
   const list = document.getElementById("ts-list");
