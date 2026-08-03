@@ -111,6 +111,7 @@ async function ensureAuth() {
 
 // ----------------------------- Tabs ----------------------------------------
 function switchTab(name) {
+  try { localStorage.setItem("shelldeck_view", name); } catch (_) {}
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
   ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology"].forEach(v => {
     const el = document.getElementById("view-" + v);
@@ -1428,13 +1429,6 @@ function renderTabBar() {
     tab.appendChild(close);
     bar.appendChild(tab);
   }
-  const add = document.createElement("div");
-  add.className = "tab tab-add";
-  add.title = "New tab on same device";
-  add.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
-  add.onclick = (e) => { e.stopPropagation(); showDevicePicker(add); };
-  bar.appendChild(add);
-
   const splitBtn = document.createElement("div");
   splitBtn.className = "tab tab-split";
   splitBtn.title = "Split current terminal";
@@ -1618,6 +1612,13 @@ function activateTab(id) {
   try { t.splits[t.activeSplit || 0].term.focus(); } catch (_) {}
 }
 
+function sendToActivePane(str) {
+  const t = tabs.get(activeTabId);
+  if (!t) return;
+  const sp = t.splits[t.activeSplit || 0];
+  if (sp && sp.ws && sp.ws.readyState === WebSocket.OPEN) sp.ws.send(str);
+}
+
 function closeTab(id) {
   const t = tabs.get(id);
   if (!t) return;
@@ -1716,6 +1717,46 @@ document.addEventListener("click", (e) => {
   }
 });
 
+document.getElementById("tab-add-btn").onclick = (e) => { e.stopPropagation(); showDevicePicker(e.currentTarget); };
+document.getElementById("toggle-keys").onclick = () => document.getElementById("terminal-keys").classList.toggle("hidden");
+let oskMod = { ctrl: false, alt: false, shift: false };
+const OSK_SEQ = {
+  esc: "\x1b", tab: "\x09", backspace: "\x7f", enter: "\x0d",
+  up: "\x1b[A", down: "\x1b[B", right: "\x1b[C", left: "\x1b[D",
+  home: "\x1b[H", end: "\x1b[F",
+  ctrl_c: "\x03", ctrl_z: "\x1a",
+};
+function oskSetMod(name, on) {
+  oskMod[name] = on;
+  const el = document.getElementById("osk-" + name);
+  if (el) el.classList.toggle("active", on);
+}
+function oskChar(ch) {
+  // Apply modifiers to a literal character.
+  let c = ch;
+  if (oskMod.shift) c = c.toUpperCase();
+  if (oskMod.ctrl && /[a-z]/i.test(c)) c = String.fromCharCode(c.toLowerCase().charCodeAt(0) - 96); // Ctrl+A = \x01
+  let seq = c;
+  if (oskMod.alt) seq = "\x1b" + seq; // Alt+X = ESC X
+  return seq;
+}
+function oskSend(cmd) {
+  if (cmd === "ctrl") { oskSetMod("ctrl", !oskMod.ctrl); return; }
+  if (cmd === "alt") { oskSetMod("alt", !oskMod.alt); return; }
+  if (cmd === "shift") { oskSetMod("shift", !oskMod.shift); return; }
+  // Non-letter keys clear transient modifiers (except sticky ones stay until toggled off)
+  let seq = OSK_SEQ[cmd];
+  if (seq === undefined) return;
+  if (oskMod.alt) seq = "\x1b" + seq;
+  sendToActivePane(seq);
+}
+// Wire on-screen keyboard (letters via data-char, special via data-cmd).
+document.querySelectorAll("#terminal-keys .osk").forEach(b => {
+  b.onclick = () => {
+    if (b.dataset.char) sendToActivePane(oskChar(b.dataset.char));
+    else if (b.dataset.cmd) oskSend(b.dataset.cmd);
+  };
+});
 document.getElementById("close-terminal").onclick = () => {
   // Close the active tab; if it was the last, leave the tab bar/terminal view.
   if (activeTabId) { closeTab(activeTabId); return; }
@@ -2109,9 +2150,15 @@ document.getElementById("sp-restart").onclick = () => {
 document.getElementById("sp-speed").onchange = (e) => { spSpeed = parseFloat(e.target.value) || 1; };
 
 // ----------------------------- Home dashboard -----------------------------
+// Backend stores timestamps as naive UTC; mark them as UTC so the browser
+// (which runs in local time) computes relative deltas correctly.
+function _asUTC(iso) {
+  if (!iso) return iso;
+  return /[zZ]|[+\-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + "Z";
+}
 function fmtAgo(iso) {
   if (!iso) return "—";
-  const d = new Date(iso), s = (Date.now() - d.getTime()) / 1000;
+  const d = new Date(_asUTC(iso)), s = (Date.now() - d.getTime()) / 1000;
   if (s < 60) return "just now";
   if (s < 3600) return Math.floor(s / 60) + "m ago";
   if (s < 86400) return Math.floor(s / 3600) + "h ago";
@@ -2119,7 +2166,7 @@ function fmtAgo(iso) {
 }
 function fmtUntil(iso) {
   if (!iso) return "—";
-  const d = new Date(iso), s = (d.getTime() - Date.now()) / 1000;
+  const d = new Date(_asUTC(iso)), s = (d.getTime() - Date.now()) / 1000;
   if (s < 0) return "due";
   if (s < 60) return "in <1m";
   if (s < 3600) return "in " + Math.floor(s / 60) + "m";
@@ -2132,6 +2179,81 @@ function fmtDur(sec) {
   if (sec < 3600) return Math.floor(sec / 60) + "m";
   return Math.floor(sec / 3600) + "h " + Math.floor((sec % 3600) / 60) + "m";
 }
+// Horizontal bar chart for one device's CPU/MEM/DSK usage.
+function healthBars(h) {
+  const metrics = [
+    ["CPU", h.cpu_load],
+    ["MEM", h.mem_used_pct],
+    ["DSK", h.disk_used_pct],
+  ];
+  const rows = metrics.map(([label, val]) => {
+    const pct = val == null ? 0 : Math.max(0, Math.min(100, val));
+    const cls = val == null ? "" : (pct >= 85 ? "high" : pct >= 60 ? "mid" : "low");
+    const txt = val == null ? "—" : (Math.round(val * 10) / 10) + "%";
+    return `<div class="dev-row"><span class="dev-l">${label}</span>
+      <span class="dev-track"><span class="dev-fill ${cls}" style="width:${pct}%"></span></span>
+      <span class="dev-v">${txt}</span></div>`;
+  }).join("");
+  return `<span class="h-bars">${rows}</span>`;
+}
+// Fleet-wide average usage bar (one horizontal bar per metric).
+function fleetSummary(health) {
+  const online = health.filter(h => h.reachable);
+  if (!online.length) return `<p class="home-empty">No online devices.</p>`;
+  const avg = k => Math.round(online.reduce((a, h) => a + (h[k] || 0), 0) / online.length * 10) / 10;
+  const rows = [
+    ["CPU", avg("cpu_load")],
+    ["MEM", avg("mem_used_pct")],
+    ["DSK", avg("disk_used_pct")],
+  ].map(([label, v]) => {
+    const cls = v >= 85 ? "high" : v >= 60 ? "mid" : "low";
+    return `<div class="fleet-row"><span class="fleet-l">${label}</span>
+      <span class="fleet-track"><span class="fleet-fill ${cls}" style="width:${v}%"></span></span>
+      <span class="fleet-v">${v}%</span></div>`;
+  }).join("");
+  return `<div class="fleet-summary">${rows}</div>`;
+}
+// Home dashboard device-health pagination state
+let allHealth = [];
+let healthPage = 1;
+const HEALTH_PER_PAGE = 5;
+
+function renderHealth() {
+  const hb = document.getElementById("home-health");
+  const pager = document.getElementById("home-health-pager");
+  if (!allHealth.length) {
+    hb.innerHTML = `<p class="home-empty">No devices.</p>`;
+    if (pager) pager.innerHTML = "";
+    return;
+  }
+  const total = allHealth.length;
+  const pages = Math.max(1, Math.ceil(total / HEALTH_PER_PAGE));
+  if (healthPage < 1) healthPage = 1;
+  if (healthPage > pages) healthPage = pages;
+  const start = (healthPage - 1) * HEALTH_PER_PAGE;
+  const slice = allHealth.slice(start, start + HEALTH_PER_PAGE);
+  hb.innerHTML = slice.map(h => {
+    if (!h.reachable) {
+      const ls = h.last_seen ? ` · last seen ${fmtAgo(h.last_seen)}` : "";
+      return `<div class="health-row down" onclick="switchTab('devices')">
+        <span class="h-name"><span class="dot down"></span>${escapeHtml(h.name)}</span>
+        <span class="h-offline">Offline${ls}</span>
+      </div>`;
+    }
+    return `<div class="health-row" onclick="switchTab('devices')">
+      <span class="h-name"><span class="dot up"></span>${escapeHtml(h.name)}</span>
+      ${healthBars(h)}
+    </div>`;
+  }).join("");
+  if (pager) {
+    const from = start + 1, to = Math.min(start + HEALTH_PER_PAGE, total);
+    pager.innerHTML = `
+      <button class="pager-btn" ${healthPage <= 1 ? "disabled" : ""} onclick="healthPage=Math.max(1,healthPage-1);renderHealth()">‹ Prev</button>
+      <span class="pager-info">${from}–${to} of ${total}</span>
+      <button class="pager-btn" ${healthPage >= pages ? "disabled" : ""} onclick="healthPage=Math.min(${pages},healthPage+1);renderHealth()">Next ›</button>`;
+  }
+}
+
 async function loadHome() {
   const box = document.getElementById("home-stats");
   if (box) box.innerHTML = "<p class='muted'>Loading dashboard…</p>";
@@ -2152,16 +2274,25 @@ async function loadHome() {
     document.getElementById("home-sub").textContent =
       `2FA: ${d.security.twofa_users} user(s) · OIDC: ${d.security.oidc_enabled ? "on" : "off"} · Public: ${d.security.public_dashboard ? "on" : "off"}`;
 
-    // B: device health
-    const hb = document.getElementById("home-health");
-    if (!d.device_health.length) hb.innerHTML = `<p class="home-empty">No devices.</p>`;
-    else hb.innerHTML = d.device_health.map(h => `
-      <div class="health-row" onclick="switchTab('devices')">
-        <span><span class="dot ${h.reachable ? "up" : "down"}"></span>${escapeHtml(h.name)}</span>
-        <span class="metrics">CPU ${h.cpu_load != null ? h.cpu_load.toFixed(1) : "—"}</span>
-        <span class="metrics">MEM ${h.mem_used_pct != null ? h.mem_used_pct + "%" : "—"}</span>
-        <span class="metrics">DSK ${h.disk_used_pct != null ? h.disk_used_pct + "%" : "—"}</span>
-      </div>`).join("");
+    // A2: active alerts strip (offline devices)
+    const alertBox = document.getElementById("home-alerts");
+    const offline = s.devices_total - s.online;
+    if (offline > 0) {
+      alertBox.className = "home-alerts alert-danger";
+      alertBox.innerHTML = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span><b>${offline} device${offline > 1 ? "s" : ""} offline</b> — click to view</span>`;
+      alertBox.onclick = () => switchTab("devices");
+    } else {
+      alertBox.className = "home-alerts hidden";
+      alertBox.innerHTML = "";
+      alertBox.onclick = null;
+    }
+
+    // B: device health (paginated client-side)
+    const sumBox = document.getElementById("home-health-summary");
+    if (sumBox) sumBox.innerHTML = fleetSummary(d.device_health);
+    allHealth = d.device_health || [];
+    if (healthPage > Math.ceil(allHealth.length / HEALTH_PER_PAGE)) healthPage = 1;
+    renderHealth();
 
     // C: recent activity
     const rb = document.getElementById("home-recent");
@@ -2209,7 +2340,9 @@ document.getElementById("files-device").onchange = loadFiles;
   refreshFilesDeviceSelect();
   refreshDockerDeviceSelect();
   restoreTabs();
-  switchTab("home");
+  let startView = "home";
+  try { const v = localStorage.getItem("shelldeck_view"); if (v) startView = v; } catch (_) {}
+  switchTab(startView);
   if (currentUser && currentUser.role === "admin") {
     const su = document.getElementById("side-users");
     if (su) su.style.display = "";

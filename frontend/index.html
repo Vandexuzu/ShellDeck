@@ -18,7 +18,7 @@
       } catch (_) { }
     })();
   </script>
-  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="/static/style.css?v={{VERSION}}" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
 </head>
 
@@ -646,6 +646,9 @@
         <!-- A: stat cards -->
         <div class="home-stats" id="home-stats"></div>
 
+        <!-- A2: active alerts strip (hidden when none) -->
+        <div id="home-alerts" class="home-alerts hidden"></div>
+
         <!-- E: quick actions -->
         <div class="home-quick">
           <button class="qa" data-go="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -684,7 +687,9 @@
           <!-- B: device health -->
           <div class="home-card">
             <h3>Device Health</h3>
+            <div id="home-health-summary" class="home-health-summary"></div>
             <div id="home-health" class="home-health"></div>
+            <div id="home-health-pager" class="home-pager"></div>
           </div>
           <!-- C: recent activity -->
           <div class="home-card">
@@ -834,15 +839,74 @@
               </svg><span>Send</span></button>
             <span id="broadcast-count" class="muted"></span>
           </div>
-          <div class="tab-bar" id="tab-bar"></div>
+        <div class="tab-bar-row">
+          <div class="tab-bar-wrap">
+            <div class="tab-bar" id="tab-bar"></div>
+            <button id="tab-add-btn" class="btn btn-ghost btn-icon tab-add-fixed" title="New shell"><svg class="ic"
+                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+                stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg></button>
+          </div>
           <button id="close-terminal" class="btn btn-ghost btn-icon" title="Close terminal"><svg class="ic"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
               stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg></button>
+          <button id="toggle-keys" class="btn btn-ghost btn-icon" title="On-screen keys">⌨</button>
+        </div>
         </div>
         <div id="terminals" class="terminals"></div>
+        <div id="terminal-keys" class="terminal-keys hidden">
+          <div class="key-row qwerty-row">
+            <button class="osk osk-letter" data-char="q">q</button>
+            <button class="osk osk-letter" data-char="w">w</button>
+            <button class="osk osk-letter" data-char="e">e</button>
+            <button class="osk osk-letter" data-char="r">r</button>
+            <button class="osk osk-letter" data-char="t">t</button>
+            <button class="osk osk-letter" data-char="y">y</button>
+            <button class="osk osk-letter" data-char="u">u</button>
+            <button class="osk osk-letter" data-char="i">i</button>
+            <button class="osk osk-letter" data-char="o">o</button>
+            <button class="osk osk-letter" data-char="p">p</button>
+          </div>
+          <div class="key-row qwerty-row">
+            <button class="osk osk-letter" data-char="a">a</button>
+            <button class="osk osk-letter" data-char="s">s</button>
+            <button class="osk osk-letter" data-char="d">d</button>
+            <button class="osk osk-letter" data-char="f">f</button>
+            <button class="osk osk-letter" data-char="g">g</button>
+            <button class="osk osk-letter" data-char="h">h</button>
+            <button class="osk osk-letter" data-char="j">j</button>
+            <button class="osk osk-letter" data-char="k">k</button>
+            <button class="osk osk-letter" data-char="l">l</button>
+          </div>
+          <div class="key-row">
+            <button id="osk-ctrl" class="osk" data-cmd="ctrl">Ctrl</button>
+            <button class="osk osk-letter" data-char="z">z</button>
+            <button class="osk osk-letter" data-char="x">x</button>
+            <button class="osk osk-letter" data-char="c">c</button>
+            <button class="osk osk-letter" data-char="v">v</button>
+            <button class="osk osk-letter" data-char="b">b</button>
+            <button class="osk osk-letter" data-char="n">n</button>
+            <button class="osk osk-letter" data-char="m">m</button>
+            <button class="osk" data-cmd="backspace">⌫</button>
+          </div>
+          <div class="key-row">
+            <button id="osk-shift" class="osk" data-cmd="shift">Shift</button>
+            <button class="osk" data-cmd="esc">Esc</button>
+            <button class="osk" data-cmd="tab">Tab</button>
+            <button class="osk arrow" data-cmd="up">↑</button>
+            <button class="osk" data-cmd="enter">Enter</button>
+          </div>
+          <div class="key-row">
+            <button class="osk" data-cmd="home">Home</button>
+            <button class="osk" data-cmd="end">End</button>
+            <button id="osk-alt" class="osk" data-cmd="alt">Alt</button>
+            <button class="osk arrow" data-cmd="right">→</button>
+            <button class="osk arrow" data-cmd="down">↓</button>
+            <button class="osk arrow" data-cmd="left">←</button>
+          </div>
+        </div>
       </div>
 
       <!-- Topology view -->
@@ -1019,7 +1083,7 @@
   <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xterm-addon-search@0.8.0/lib/xterm-addon-search.js"></script>
-  <script src="/static/app.js?v=71"></script>
+  <script src="/static/app.js?v={{VERSION}}"></script>
 </body>
 
 </html>

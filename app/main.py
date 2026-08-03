@@ -4,7 +4,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
@@ -104,9 +104,17 @@ app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
 
 
 @app.get("/")
-def index() -> FileResponse:
+def index() -> HTMLResponse:
     from pathlib import Path
-    return FileResponse(Path(__file__).parent.parent / "frontend" / "index.html")
+    html = (Path(__file__).parent.parent / "frontend" / "index.html").read_text()
+    # Inject the app version as a cache-buster on the static bundle so browsers
+    # re-fetch app.js / style.css after every version bump (avoids stale caching).
+    try:
+        ver = (Path(__file__).parent.parent / "VERSION").read_text().strip()
+    except Exception:
+        ver = "0"
+    html = html.replace("{{VERSION}}", ver)
+    return HTMLResponse(html)
 
 
 @app.get("/login")

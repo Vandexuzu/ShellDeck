@@ -52,8 +52,8 @@ async def _cached_docker_count(d: Device, db: Session) -> dict:
     out, _, code = await _run_docker_safe(d, db)
     result = {"id": d.id, "name": d.name, "available": code == 0, "running": 0, "total": 0}
     if code == 0:
-        states = [ln.strip() for ln in out.splitlines() if ln.strip()]
-        result["running"] = sum(1 for st in states if st.lower().startswith("up"))
+        states = [ln.strip().lower() for ln in out.splitlines() if ln.strip()]
+        result["running"] = sum(1 for st in states if st == "running")
         result["total"] = len(states)
     _status_cache[("docker", d.id)] = (now, result)
     return result
@@ -82,6 +82,7 @@ def about() -> dict:
 @router.get("/summary")
 async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
     devices = list(db.scalars(_visible_devices(db, user)))
+    dev_by_id = {d.id: d for d in devices}
     device_ids = [d.id for d in devices]
 
     # --- A: stat cards ---------------------------------------------------
@@ -133,6 +134,7 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
             "id": s.id, "name": s.name, "host": s.host, "reachable": s.reachable,
             "cpu_load": s.cpu_load, "mem_used_pct": s.mem_used_pct,
             "disk_used_pct": s.disk_used_pct, "uptime": s.uptime,
+            "last_seen": dev_by_id[s.id].last_seen.isoformat() if (s.id in dev_by_id and dev_by_id[s.id].last_seen) else None,
         }
         for s in statuses
     ]
