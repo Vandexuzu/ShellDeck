@@ -2061,8 +2061,8 @@ async function loadSessions() {
         <td data-label="Device">${escapeHtml(r.device_name)}</td>
         <td data-label="Host" class="muted">${escapeHtml(r.device_host)}</td>
         <td data-label="User">${escapeHtml(r.username || "-")}</td>
-        <td data-label="Started">${r.started_at ? new Date(r.started_at).toLocaleString() : "-"}</td>
-        <td data-label="Ended">${r.ended_at ? new Date(r.ended_at).toLocaleString() : "active"}</td>
+        <td data-label="Started">${r.started_at ? new Date(_asUTC(r.started_at)).toLocaleString() : "-"}</td>
+        <td data-label="Ended">${r.ended_at ? new Date(_asUTC(r.ended_at)).toLocaleString() : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
         <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play")}</button> <button class="btn btn-ghost btn-icon-xs" data-rerun="${r.id}" title="Re-run commands on device">${icon("restart")}</button></td>
       </tr>`).join("")}</tbody></table>`;
@@ -2090,7 +2090,7 @@ function openSessionModal(r, tab, rawText) {
   const out = document.getElementById("session-cmds");
   out.classList.remove("hidden");
   document.getElementById("session-cmds-title").textContent =
-    `${tab === "player" && r.has_recording ? "Playback" : "Session"} — ${r.device_name} (${r.started_at ? new Date(r.started_at).toLocaleString() : "-"})`;
+    `${tab === "player" && r.has_recording ? "Playback" : "Session"} — ${r.device_name} (${r.started_at ? new Date(_asUTC(r.started_at)).toLocaleString() : "-"})`;
   const body = document.getElementById("session-cmds-body");
   const wrap = document.getElementById("session-cmds-player-wrap");
   // Tabs
