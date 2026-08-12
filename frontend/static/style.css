@@ -380,8 +380,8 @@ body {
 .tabs { display: none; }
 
 /* ---- Files (SFTP) ---- */
-.files-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); }
-.files-path { color: var(--muted); font-family: ui-monospace, monospace; }
+.files-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; min-width: 0; }
+.files-path { color: var(--muted); font-family: ui-monospace, monospace; min-width: 0; flex: 1 1 200px; overflow-wrap: anywhere; word-break: break-all; }
 .files-list { padding: 8px 18px; }
 .file-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
 .file-row:hover { background: var(--panel-2); }
@@ -573,14 +573,13 @@ body {
     padding: 6px 4px; z-index: 50; background: var(--panel);
     overflow-x: auto; -webkit-overflow-scrolling: touch;
   }
-  .side-nav { flex-direction: row; gap: 2px; width: 100%; }
+  .side-nav { flex-direction: row; gap: 2px; width: 100%; flex-wrap: nowrap; }
   .side-nav-item {
-    flex: 1 1 0; min-width: 0; width: auto; text-align: center; padding: 10px 2px; border-radius: 10px;
+    flex: 0 0 auto; min-width: 56px; width: 56px; text-align: center; padding: 10px 2px; border-radius: 10px;
     font-size: 0; gap: 0; line-height: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
   }
   .side-nav-item .ic { width: 20px; height: 20px; }
-  .side-nav { gap: 1px; flex-wrap: wrap; }
-  .sidebar { gap: 0; justify-content: space-between; overflow: hidden; }
+  .sidebar { gap: 0; justify-content: flex-start; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .sidebar-head { display: none; }
   .content { overflow-y: visible; }
   .content-head { flex-wrap: wrap; gap: 8px; }

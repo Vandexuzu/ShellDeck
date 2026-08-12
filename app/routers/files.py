@@ -1,9 +1,11 @@
 """SFTP file manager: browse, read, write and delete files on a device."""
 from __future__ import annotations
 
+import os
 import asyncssh
 import ipaddress
 import socket
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -11,27 +13,30 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.models import Device, User
-from app.routers.devices import load_credentials, _can_view, _can_access
+from app.routers.devices import load_credentials, connect_device, _can_view, _can_access
 from app.schemas import FileEntry, FilePath, FileWrite
 from app.security import get_current_user, operator_only
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
 
-def _connect_opts(device: Device) -> dict:
-    username, password, private_key = load_credentials(device)
-    opts = {
-        "host": device.host,
-        "port": device.port,
-        "username": username,
-        "known_hosts": None if settings.ssh_ignore_known_hosts else False,
-        "connect_timeout": 10,
-    }
-    if private_key:
-        opts["client_keys"] = [private_key]
-    else:
-        opts["password"] = password
-    return opts
+@asynccontextmanager
+async def sftp_for(device: Device, db: Session):
+    """Open an SFTP session to `device`, routing through its bastion if set.
+
+    Yields the SFTP client and closes both the target and bastion connections
+    afterwards (matching connect_device's contract). This is what makes the
+    file manager honour `device.bastion_id` — previously files.py connected
+    directly to device.host and ignored the bastion entirely.
+    """
+    conn, bastion = await connect_device(device, db)
+    try:
+        sftp = await conn.start_sftp_client()
+        yield sftp
+    finally:
+        conn.close()
+        if bastion is not None:
+            bastion.close()
 
 
 async def _list_dir(sftp, path: str) -> list[FileEntry]:
@@ -39,7 +44,11 @@ async def _list_dir(sftp, path: str) -> list[FileEntry]:
     for item in await sftp.readdir(path):
         name = item.filename
         a = item.attrs
-        full = f"{path.rstrip('/')}/{name}"
+        # Normalize so ".." entries become the real parent (e.g.
+        # "/etc/apt/keyrings/.." -> "/etc/apt") instead of accumulating.
+        full = os.path.normpath(f"{path.rstrip('/')}/{name}")
+        if full == "":
+            full = "/"
         is_dir = a.type == 2  # ssh2.SFTPAttrs: 2 == directory
         entries.append(FileEntry(name=name, path=full, is_dir=is_dir, size=a.size or 0, mtime=a.mtime))
     entries.sort(key=lambda e: (not e.is_dir, e.name.lower()))
@@ -52,13 +61,10 @@ async def browse(device_id: int, path: str = "/", db: Session = Depends(get_db),
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                target = path or "/"
-                # Allow returning the parent dir entry too by listing parent of target.
-                parent = "/".join(target.rstrip("/").split("/")[:-1]) or "/"
-                entries = await _list_dir(sftp, target)
-                return entries
+        async with sftp_for(device, db) as sftp:
+            target = path or "/"
+            entries = await _list_dir(sftp, target)
+            return entries
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"SFTP failed: {type(exc).__name__}: {exc}")
 
@@ -69,13 +75,12 @@ async def read_file(device_id: int, body: FilePath, db: Session = Depends(get_db
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                async with sftp.open(body.path, "r") as f:
-                    data = await f.read(2_000_000)
-                if isinstance(data, bytes):
-                    data = data.decode("utf-8", errors="replace")
-                return {"path": body.path, "content": data}
+        async with sftp_for(device, db) as sftp:
+            async with sftp.open(body.path, "r") as f:
+                data = await f.read(2_000_000)
+            if isinstance(data, bytes):
+                data = data.decode("utf-8", errors="replace")
+            return {"path": body.path, "content": data}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Read failed: {type(exc).__name__}: {exc}")
 
@@ -87,16 +92,15 @@ async def download_file(device_id: int, path: str, db: Session = Depends(get_db)
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                name = path.rsplit("/", 1)[-1] or "download"
-                async with sftp.open(path, "rb") as f:
-                    data = await f.read()
-                return Response(
-                    content=data,
-                    media_type="application/octet-stream",
-                    headers={"Content-Disposition": f'attachment; filename="{name}"'},
-                )
+        async with sftp_for(device, db) as sftp:
+            name = path.rsplit("/", 1)[-1] or "download"
+            async with sftp.open(path, "rb") as f:
+                data = await f.read()
+            return Response(
+                content=data,
+                media_type="application/octet-stream",
+                headers={"Content-Disposition": f'attachment; filename="{name}"'},
+            )
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Download failed: {type(exc).__name__}: {exc}")
 
@@ -107,11 +111,10 @@ async def write_file(device_id: int, body: FileWrite, db: Session = Depends(get_
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                async with sftp.open(body.path, "w") as f:
-                    await f.write(body.content)
-                return {"path": body.path, "written": len(body.content)}
+        async with sftp_for(device, db) as sftp:
+            async with sftp.open(body.path, "w") as f:
+                await f.write(body.content)
+            return {"path": body.path, "written": len(body.content)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Write failed: {type(exc).__name__}: {exc}")
 
@@ -122,10 +125,9 @@ async def mkdir(device_id: int, body: FilePath, db: Session = Depends(get_db), u
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                await sftp.mkdir(body.path)
-                return {"path": body.path, "created": True}
+        async with sftp_for(device, db) as sftp:
+            await sftp.mkdir(body.path)
+            return {"path": body.path, "created": True}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Mkdir failed: {type(exc).__name__}: {exc}")
 
@@ -136,13 +138,12 @@ async def delete_file(device_id: int, body: FilePath, db: Session = Depends(get_
     if device is None or not _can_access(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                try:
-                    await sftp.remove(body.path)
-                except Exception:
-                    await sftp.rmtree(body.path)
-                return {"path": body.path, "deleted": True}
+        async with sftp_for(device, db) as sftp:
+            try:
+                await sftp.remove(body.path)
+            except Exception:
+                await sftp.rmtree(body.path)
+            return {"path": body.path, "deleted": True}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Delete failed: {type(exc).__name__}: {exc}")
 
@@ -167,16 +168,15 @@ async def upload_file(
     target_dir = path.rstrip("/") or "/"
     dest = f"{target_dir}/{file.filename}" if target_dir != "/" else f"/{file.filename}"
     try:
-        async with asyncssh.connect(**_connect_opts(device)) as conn:
-            async with conn.start_sftp_client() as sftp:
-                try:
-                    await sftp.stat(target_dir)
-                except Exception:
-                    await sftp.makedirs(target_dir)
-                data = await file.read()
-                async with sftp.open(dest, "wb") as f:
-                    await f.write(data)
-                return {"path": dest, "uploaded": len(data)}
+        async with sftp_for(device, db) as sftp:
+            try:
+                await sftp.stat(target_dir)
+            except Exception:
+                await sftp.makedirs(target_dir)
+            data = await file.read()
+            async with sftp.open(dest, "wb") as f:
+                await f.write(data)
+            return {"path": dest, "uploaded": len(data)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Upload failed: {type(exc).__name__}: {exc}")
 
@@ -246,16 +246,15 @@ async def upload_link(
                 target_dir = path.rstrip("/") or "/"
                 dest = f"{target_dir}/{name}" if target_dir != "/" else f"/{name}"
                 total = 0
-                async with asyncssh.connect(**_connect_opts(device)) as conn:
-                    async with conn.start_sftp_client() as sftp:
-                        try:
-                            await sftp.stat(target_dir)
-                        except Exception:
-                            await sftp.makedirs(target_dir)
-                        async with sftp.open(dest, "wb") as f:
-                            async for chunk in resp.aiter_bytes(65536):
-                                await f.write(chunk)
-                                total += len(chunk)
+                async with sftp_for(device, db) as sftp:
+                    try:
+                        await sftp.stat(target_dir)
+                    except Exception:
+                        await sftp.makedirs(target_dir)
+                    async with sftp.open(dest, "wb") as f:
+                        async for chunk in resp.aiter_bytes(65536):
+                            await f.write(chunk)
+                            total += len(chunk)
                 return {"path": dest, "uploaded": total}
     except HTTPException:
         raise
