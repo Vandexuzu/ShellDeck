@@ -73,6 +73,7 @@ def _migrate_columns() -> None:
         expected = [
             ("users", "totp_secret", "VARCHAR(64)"),
             ("snippets", "category", "VARCHAR(64)"),
+            ("settings", "timezone", "VARCHAR(64) DEFAULT 'Asia/Jakarta'"),
         ]
         for table, col, ddl in expected:
             if table not in insp.get_table_names():

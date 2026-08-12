@@ -17,6 +17,7 @@ from app.models import Device, ScheduledTask, User
 from app.routers.bulk import _run_on_device
 from app.schemas import ScheduledTaskCreate, ScheduledTaskOut, ScheduledTaskUpdate
 from app.security import operator_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/scheduled", tags=["scheduled"])
 
@@ -89,6 +90,8 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    log_audit(db, user, "scheduled_create", f"name={task.name} device_ids={payload.device_ids}"
+              + (f" cron={task.cron}" if task.cron else f" interval={task.interval_minutes}m"))
     return _serialize(task)
 
 
@@ -99,6 +102,7 @@ def delete_task(task_id: int, db: Session = Depends(get_db), user: User = Depend
         raise HTTPException(status_code=404, detail="Task not found")
     db.delete(task)
     db.commit()
+    log_audit(db, user, "scheduled_delete", f"id={task_id} name={task.name}")
 
 
 @router.post("/{task_id}/run")
@@ -108,6 +112,7 @@ async def run_task_now(task_id: int, db: Session = Depends(get_db), user: User =
     if task is None or task.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Task not found")
     await run_task(task, db)
+    log_audit(db, user, "scheduled_run", f"id={task_id} name={task.name}")
     return {"ok": True, "last_run": task.last_run.isoformat() if task.last_run else None}
 
 
@@ -142,6 +147,7 @@ def import_tasks(payload: list[ScheduledTaskCreate], db: Session = Depends(get_d
         ))
         created += 1
     db.commit()
+    log_audit(db, user, "scheduled_import", f"imported={created}")
     return {"imported": created}
 
 

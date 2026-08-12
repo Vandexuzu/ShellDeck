@@ -122,6 +122,7 @@ class SettingsRow(Base):
     monitor_interval: Mapped[int] = mapped_column(Integer, default=60)  # seconds between checks
     public_dashboard: Mapped[bool] = mapped_column(default=False)       # allow unauth /public view
     oidc_enabled: Mapped[bool] = mapped_column(default=False)          # enable OIDC SSO login
+    timezone: Mapped[str] = mapped_column(String(64), default="Asia/Jakarta")  # IANA tz for displaying timestamps
 
 
 class ScheduledTask(Base):

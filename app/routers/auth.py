@@ -18,9 +18,12 @@ from app.security import (
     verify_password,
     verify_totp,
 )
+from app.audit import log_audit as _shared_log_audit
 
 
 def _client_ip(request: Request) -> str | None:
+    if request is None:
+        return None
     fwd = request.headers.get("x-forwarded-for")
     if fwd:
         return fwd.split(",")[0].strip()
@@ -92,6 +95,7 @@ def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     current_user.password_hash = hash_password(payload.new_password)
     db.commit()
+    _shared_log_audit(db, current_user, "change_password", "self")
     return {"ok": True}
 
 
@@ -190,6 +194,7 @@ def totp_setup(payload: TotpSetup, db: Session = Depends(get_db), current_user: 
         raise HTTPException(status_code=400, detail="Invalid 2FA code")
     current_user.totp_secret = payload.secret
     db.commit()
+    _shared_log_audit(db, current_user, "2fa_enable", "self")
     return {"ok": True, "enabled": True}
 
 
@@ -198,6 +203,7 @@ def totp_disable(db: Session = Depends(get_db), current_user: User = Depends(get
     """Disable 2FA for the current user."""
     current_user.totp_secret = None
     db.commit()
+    _shared_log_audit(db, current_user, "2fa_disable", "self")
     return {"ok": True, "enabled": False}
 
 

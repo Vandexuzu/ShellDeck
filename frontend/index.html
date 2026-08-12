@@ -125,6 +125,15 @@
             <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg> Users</button>
+        <button class="side-nav-item" id="side-audit" data-tab="audit" style="display:none"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <path d="M14 2v6h6" />
+            <path d="M8 13h8" />
+            <path d="M8 17h8" />
+            <path d="M8 9h2" />
+          </svg> Audit</button>
         <button class="side-nav-item" id="side-agents" data-tab="agents" style="display:none"><svg class="ic"
             viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
             stroke-linejoin="round">
@@ -142,9 +151,9 @@
         <div class="content-head">
           <h1>Remote Devices</h1>
           <div>
-            <input id="device-search" class="input" style="width:200px;display:inline-block"
+            <input id="device-search" class="input" style="width:200px"
               placeholder="Search devices…" />
-            <select id="device-tag-filter" class="input" style="width:auto;display:inline-block">
+            <select id="device-tag-filter" class="input" style="width:auto">
               <option value="">All tags</option>
             </select>
             <button id="add-device" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
@@ -397,11 +406,13 @@
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
-              </svg><span>New task</span></button>
+              </svg><span>Add</span></button>
           </div>
         </div>
         <div id="sched-list" class="sched-list"></div>
-        <div id="sched-form" class="sched-form hidden">
+        <div id="sched-modal" class="modal hidden">
+          <div class="modal-card">
+            <form id="sched-form" class="sched-form">
           <h3>New scheduled task</h3>
           <label>Name <input id="sched-name" class="input" placeholder="Daily update" /></label>
           <label>Command <input id="sched-command" class="input" placeholder="apt update && apt upgrade -y" /></label>
@@ -424,6 +435,8 @@
                 <path d="M7 3v5h8" />
               </svg><span>Create</span></button>
           </div>
+            </form>
+          </div>
         </div>
       </div>
 
@@ -431,8 +444,6 @@
       <div id="view-sessions" class="hidden">
         <div class="content-head">
           <h1>Session History</h1>
-        </div>
-        <div class="toolbar-row">
           <input id="session-search" class="input-sm" type="search" placeholder="Search device, host, user, or command…"
             style="flex:1;min-width:0" />
         </div>
@@ -487,6 +498,33 @@
         <div class="content-head">
           <h1>Settings</h1>
         </div>
+
+        <details class="settings-acc" open>
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg><span>General</span></summary>
+          <div class="settings-box">
+            <label>Timezone (used for all timestamps across the app)
+              <select id="set-timezone" class="input" style="max-width:260px">
+                <option value="Asia/Jakarta">Asia/Jakarta (WIB, UTC+7)</option>
+                <option value="Asia/Makassar">Asia/Makassar (WITA, UTC+8)</option>
+                <option value="Asia/Jayapura">Asia/Jayapura (WIT, UTC+9)</option>
+                <option value="UTC">UTC</option>
+                <option value="Asia/Singapore">Asia/Singapore</option>
+                <option value="Asia/Kuala_Lumpur">Asia/Kuala Lumpur</option>
+                <option value="Asia/Tokyo">Asia/Tokyo</option>
+                <option value="Asia/Shanghai">Asia/Shanghai</option>
+                <option value="Europe/London">Europe/London</option>
+                <option value="Europe/Berlin">Europe/Berlin</option>
+                <option value="America/New_York">America/New_York</option>
+                <option value="America/Los_Angeles">America/Los_Angeles</option>
+                <option value="Australia/Sydney">Australia/Sydney</option>
+              </select>
+            </label>
+          </div>
+        </details>
 
         <details class="settings-acc" open>
           <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -724,16 +762,32 @@
                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" />
                 <line x1="5" y1="12" x2="19" y2="12" />
-              </svg><span>New user</span></button>
+              </svg><span>Add</span></button>
           </div>
         </div>
         <div id="user-list" class="user-list"></div>
-        <div id="audit-log-section" class="hidden">
-          <h3 style="margin:18px 0 8px">Audit Log <span class="muted" style="font-weight:400;font-size:13px">(logins &
-              key actions)</span></h3>
-          <div id="audit-log" class="audit-log"></div>
+      </div>
+
+      <!-- Audit Log view (admin only) -->
+      <div id="view-audit" class="hidden">
+        <div class="content-head">
+          <h1>Audit Log</h1>
+          <div>
+            <input id="audit-search" class="input" style="width:180px"
+              placeholder="Search action/user…" />
+            <select id="audit-limit" class="input" style="width:90px">
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+            </select>
+          </div>
         </div>
-        <div id="user-form" class="user-form hidden">
+        <div id="audit-log" class="audit-log"></div>
+      </div>
+        <div id="user-modal" class="modal hidden">
+          <div class="modal-card">
+            <form id="user-form" class="user-form">
           <h3>New user</h3>
           <label>Username <input id="user-username" class="input" /></label>
           <label>Password <input id="user-password" type="password" class="input" /></label>
@@ -746,19 +800,23 @@
           </label>
           <div class="modal-actions">
             <button id="user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg><span>Cancel</span></button>
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg><span>Cancel</span></button>
             <button id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
-                <path d="M17 21v-8H7v8" />
-                <path d="M7 3v5h8" />
-              </svg><span>Create</span></button>
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+              <path d="M17 21v-8H7v8" />
+              <path d="M7 3v5h8" />
+            </svg><span>Create</span></button>
+          </div>
+            </form>
           </div>
         </div>
-        <div id="user-edit-form" class="user-form hidden">
+        <div id="user-edit-modal" class="modal hidden">
+          <div class="modal-card">
+            <form id="user-edit-form" class="user-form">
           <h3>Edit user</h3>
           <input type="hidden" id="edit-user-id" />
           <label>Username <input id="edit-user-username" class="input" /></label>
@@ -784,6 +842,8 @@
                 <path d="M7 3v5h8" />
               </svg><span>Save</span></button>
           </div>
+            </form>
+          </div>
         </div>
       </div>
 
@@ -800,7 +860,9 @@
         <p class="muted" style="padding-left:18px;padding-right:18px;">Reverse-tunnel agents let devices behind
           NAT/firewall connect outward to ShellDeck. Run the agent script on the device with its token.</p>
         <div id="agent-list" class="agent-list"></div>
-        <div id="agent-form" class="user-form hidden">
+        <div id="agent-modal" class="modal hidden">
+          <div class="modal-card">
+            <form id="agent-form" class="user-form">
           <h3>New agent</h3>
           <label>Name <input id="agent-name" class="input" /></label>
           <label>Link to device (optional)
@@ -820,6 +882,8 @@
                 <path d="M17 21v-8H7v8" />
                 <path d="M7 3v5h8" />
               </svg><span>Create</span></button>
+          </div>
+            </form>
           </div>
         </div>
       </div>
@@ -1031,30 +1095,6 @@
     </div>
   </div>
 
-  <!-- Import modal -->
-  <div id="import-modal" class="modal hidden">
-    <div class="modal-card">
-      <h2>Import Devices (JSON)</h2>
-      <p class="muted">Paste exported JSON. Re-enter passwords — exports omit secrets.</p>
-      <textarea id="import-text" rows="8"
-        placeholder='[{"name":"srv1","host":"1.2.3.4","username":"root","password":"..."}]'></textarea>
-      <div id="import-error" class="form-error"></div>
-      <div class="modal-actions">
-        <button id="import-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg><span>Cancel</span></button>
-        <button id="import-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
-            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
-            <path d="M17 21v-8H7v8" />
-            <path d="M7 3v5h8" />
-          </svg><span>Import</span></button>
-      </div>
-    </div>
-  </div>
-
   <!-- Snippet modal -->
   <div id="snippet-modal" class="modal hidden">
     <div class="modal-card">
@@ -1080,6 +1120,97 @@
             </svg><span>Save</span></button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Snippet run: pick which devices to run on -->
+  <div id="snippet-run-modal" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="snippet-run-title">Run snippet on devices</h2>
+      <p class="muted" id="snippet-run-cmd" style="font-size:13px;word-break:break-all"></p>
+      <div id="snippet-run-list" class="device-pick-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="snippet-run-all" class="btn btn-ghost btn-icon-text"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polyline points="9 11 12 14 22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg><span>Select all</span></button>
+        <button type="button" id="snippet-run-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg><span>Cancel</span></button>
+        <button type="button" id="snippet-run-go" class="btn btn-primary btn-icon-text"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg><span>Run on selected</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reusable confirm dialog (replaces native confirm()) -->
+  <div id="confirm-modal" class="modal hidden">
+    <div class="modal-card" style="max-width:380px">
+      <h2 id="confirm-title">Confirm</h2>
+      <p id="confirm-msg" class="muted" style="word-break:break-word"></p>
+      <div class="modal-actions">
+        <button type="button" id="confirm-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg><span>Cancel</span></button>
+        <button type="button" id="confirm-ok" class="btn btn-danger btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          </svg><span>OK</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reusable prompt dialog (replaces native prompt()) -->
+  <div id="prompt-modal" class="modal hidden">
+    <div class="modal-card" style="max-width:420px">
+      <h2 id="prompt-title">Input</h2>
+      <label id="prompt-label">Value <input id="prompt-input" class="input" /></label>
+      <div class="modal-actions">
+        <button type="button" id="prompt-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg><span>Cancel</span></button>
+        <button type="button" id="prompt-ok" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+            <path d="M17 21v-8H7v8" />
+            <path d="M7 3v5h8" />
+          </svg><span>OK</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reusable multi-line paste dialog (for JSON imports) -->
+  <div id="paste-modal" class="modal hidden">
+    <div class="modal-card" style="max-width:560px">
+      <h2 id="paste-title">Paste JSON</h2>
+      <p id="paste-hint" class="muted" style="font-size:13px"></p>
+      <textarea id="paste-area" rows="10" class="input" style="width:100%;font-family:ui-monospace,monospace;font-size:12px;resize:vertical"></textarea>
+      <div class="modal-actions">
+        <button type="button" id="paste-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg><span>Cancel</span></button>
+        <button type="button" id="paste-ok" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+            <path d="M17 21v-8H7v8" />
+            <path d="M7 3v5h8" />
+          </svg><span>Import</span></button>
+      </div>
     </div>
   </div>
 

@@ -12,6 +12,24 @@ function canAccessDevice(d) {
   return true; // viewer: read-only view of all devices (server blocks writes)
 }
 let currentUser = null;  // { id, username, role, is_admin }
+// Global display timezone (set from Settings on login; default WIB).
+let appTimezone = "Asia/Jakarta";
+
+// Format an ISO timestamp using the global display timezone. Naive timestamps
+// (no Z / offset) are treated as UTC — that's how the backend stores them.
+function fmtTime(iso) {
+  if (!iso) return "-";
+  const s = /[zZ]|[+\-]\d{2}:?\d{2}$/.test(iso) ? iso : iso + "Z";
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return "-";
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      timeZone: appTimezone, hour12: false,
+    }).format(d);
+  } catch (_) { return d.toLocaleString(); }
+}
 
 window.addEventListener("error", (e) => {
   const t = document.getElementById("toast");
@@ -102,8 +120,14 @@ async function ensureAuth() {
     const me = await api("/api/auth/me");
     currentUser = me;
     document.getElementById("username").textContent = `${me.username} (${me.role})`;
-    // Admin-only UI: Users tab in sidebar.
+    // Admin-only UI: Users + Audit tabs in sidebar.
     document.getElementById("side-users").style.display = me.role === "admin" ? "" : "none";
+    document.getElementById("side-audit").style.display = me.role === "admin" ? "" : "none";
+    // Load the global display timezone from settings (best-effort).
+    try {
+      const s = await api("/api/settings");
+      if (s && s.timezone) appTimezone = s.timezone;
+    } catch (_) { /* keep default Asia/Jakarta */ }
   } catch (_) {
     location.href = "/login";
   }
@@ -113,7 +137,7 @@ async function ensureAuth() {
 function switchTab(name) {
   try { localStorage.setItem("shelldeck_view", name); } catch (_) {}
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology"].forEach(v => {
+  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit"].forEach(v => {
     const el = document.getElementById("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
   });
@@ -123,6 +147,7 @@ function switchTab(name) {
   if (name === "docker") loadDocker();
   if (name === "users") loadUsers();
   if (name === "agents") loadAgents();
+  if (name === "audit") loadAudit();
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
   if (name === "settings") { loadSettings(); refreshTotpStatus(); }
@@ -219,7 +244,7 @@ async function loadStatus() {
       if (eb) eb.onclick = () => openModal(+eb.dataset.edit);
       const db = card.querySelector("[data-del]");
       if (db) db.onclick = async () => {
-        if (!confirm(`Delete device ${s.name}?`)) return;
+        if (!await showConfirm(`Delete device ${s.name}?`, "Delete device")) return;
         await api(`/api/devices/${s.id}`, { method: "DELETE" });
         loadDevices(); loadStatus(); refreshFilesDeviceSelect();
       };
@@ -249,8 +274,22 @@ function openModal(id = null) {
     sel.appendChild(o);
   }
   if (id) {
-    // preselect bastion for editing
-    api(`/api/devices/${id}`).then(d => { sel.value = d.bastion_id ? String(d.bastion_id) : ""; document.getElementById("f-tailscale").checked = !!d.tailscale; }).catch(() => {});
+    api(`/api/devices/${id}`).then(d => {
+      document.getElementById("f-name").value = d.name || "";
+      document.getElementById("f-host").value = d.host || "";
+      document.getElementById("f-port").value = d.port ?? 22;
+      document.getElementById("f-username").value = d.username || "";
+      const auth = document.getElementById("f-auth");
+      auth.value = d.auth_method || "password";
+      auth.dispatchEvent(new Event("change"));  // reveal password/key field accordingly
+      document.getElementById("f-os").value = d.os || "";
+      document.getElementById("f-notes").value = d.notes || "";
+      document.getElementById("f-tags").value = d.tags || "";
+      sel.value = d.bastion_id ? String(d.bastion_id) : "";
+      document.getElementById("f-tailscale").checked = !!d.tailscale;
+      // password/private_key are NOT returned by the API (security) — leave blank
+      // so the user only re-enters them when they actually want to change creds.
+    }).catch(() => {});
   }
 }
 function closeModal() { document.getElementById("modal").classList.add("hidden"); }
@@ -616,10 +655,18 @@ function downloadInventory(fmt, filename) {
 }
 document.getElementById("inv-ansible").onclick = () => downloadInventory("ansible", "shelldeck-inventory.ini");
 document.getElementById("inv-terraform").onclick = () => downloadInventory("terraform", "shelldeck-inventory.tf");
-document.getElementById("import-devices").onclick = () => {
-  document.getElementById("import-modal").classList.remove("hidden");
+document.getElementById("import-devices").onclick = async () => {
+  const txt = await showPaste("Import Devices (JSON)", "Paste exported JSON. Re-enter passwords — exports omit secrets.");
+  if (!txt) return;
+  try {
+    const data = JSON.parse(txt);
+    const res = await api("/api/devices/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+    await loadDevices();
+    showToast(`Imported ${res.imported} device(s)`, "ok");
+  } catch (err) {
+    showToast("Invalid JSON: " + (err.message || err), "error");
+  }
 };
-document.getElementById("add-device").onclick = () => openModal();
 // Tailscale discovery
 document.getElementById("discover-tailscale").onclick = async () => {
   const list = document.getElementById("ts-list");
@@ -652,20 +699,6 @@ document.getElementById("discover-tailscale").onclick = async () => {
   } catch (e) { errEl.textContent = "Error: " + e.message; }
 };
 document.getElementById("ts-cancel").onclick = () => document.getElementById("ts-modal").classList.add("hidden");
-document.getElementById("import-cancel").onclick = () => document.getElementById("import-modal").classList.add("hidden");
-document.getElementById("import-save").onclick = async () => {
-  const errEl = document.getElementById("import-error");
-  errEl.textContent = "";
-  try {
-    const data = JSON.parse(document.getElementById("import-text").value);
-    const res = await api("/api/devices/import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
-    document.getElementById("import-modal").classList.add("hidden");
-    await loadDevices();
-    showToast(`Imported ${res.imported} device(s)`, "ok");
-  } catch (err) {
-    errEl.textContent = "Error: " + (err.message || err);
-  }
-};
 
 // ----------------------------- Files (SFTP) --------------------------------
 let filesCurrent = { deviceId: null, path: "/" };
@@ -772,7 +805,7 @@ function renderFileRows(entries) {
       } catch (e) { showToast("Download failed: " + e.message, "error"); }
     };
     const dl = r.querySelector("[data-del-file]"); if (dl) dl.onclick = async () => {
-      if (!confirm("Delete " + dl.dataset.delFile + "?")) return;
+      if (!await showConfirm("Delete " + dl.dataset.delFile + "?", "Delete file")) return;
       const dev = currentFilesDevice();
       if (dev && dev.has_agent) await fsOp("delete", dl.dataset.delFile);
       else await api(`/api/files/${filesCurrent.deviceId}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: dl.dataset.delFile }) });
@@ -786,7 +819,7 @@ document.getElementById("files-up").onclick = () => {
   listFiles(parent === "" ? "/" : parent);
 };
 document.getElementById("files-mkdir").onclick = async () => {
-  const name = prompt("Folder name:");
+  const name = await showPrompt("Folder name:", "", "New folder");
   if (!name) return;
   const path = (filesCurrent.path.replace(/\/$/, "") + "/" + name);
   const dev = currentFilesDevice();
@@ -866,7 +899,7 @@ document.getElementById("files-upload-input").onchange = async (e) => {
 })();
 document.getElementById("files-upload-link").onclick = async () => {
   if (!filesCurrent.deviceId) { showToast("Select a device first", "error"); return; }
-  const url = prompt("Download file from URL and upload to this device:\n(Paste direct file link)");
+  const url = await showPrompt("Download file from URL and upload to this device:", "", "Upload from URL");
   if (!url) return;
   try {
     const fd = new FormData();
@@ -893,7 +926,7 @@ async function openFileEditor(path) {
   }
   document.getElementById("file-editor-save").onclick = async () => {
     const content = document.getElementById("file-editor-content").value;
-    const target = path || (filesCurrent.path.replace(/\/$/, "") + "/" + prompt("New file name:"));
+    const target = path || (filesCurrent.path.replace(/\/$/, "") + "/" + await showPrompt("New file name:", "", "New file"));
     if (!target) return;
     const dev = currentFilesDevice();
     if (dev && dev.has_agent) await fsOp("write", target, content);
@@ -961,7 +994,7 @@ document.getElementById("bulk-apply").onclick = async () => {
 document.getElementById("bulk-delete").onclick = async () => {
   const ids = [...document.querySelectorAll("#bulk-devices input:checked")].map(c => +c.value);
   if (!ids.length) { showToast("Select at least one device", "error"); return; }
-  if (!confirm(`Delete ${ids.length} device(s)? This also removes their session history.`)) return;
+  if (!await showConfirm(`Delete ${ids.length} device(s)? This also removes their session history.`, "Delete devices")) return;
   try {
     const r = await api("/api/devices/bulk", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_ids: ids }) });
     showToast(`Deleted ${r.deleted} device(s)`, "ok");
@@ -990,48 +1023,57 @@ async function loadSnippets() {
         <div class="sc-name">${escapeHtml(s.name)}${s.category ? ` <span class="tag">${escapeHtml(s.category)}</span>` : ""}</div>
         <pre class="sc-cmd">${escapeHtml(s.command)}</pre>
         <div class="di-actions">
-          <button class="btn btn-primary btn-icon-text" data-run="${s.id}" title="Run on a device">${icon("play")}<span>Run</span></button>
-          <button class="btn btn-ghost btn-icon-text" data-bulk="${s.id}" title="Run on all devices">${icon("broadcast")}<span>Bulk</span></button>
+          <button class="btn btn-primary btn-icon-text" data-run="${s.id}" title="Run on devices">${icon("play")}<span>Run</span></button>
           <button class="btn btn-ghost btn-icon" data-edit-snip="${s.id}" title="Edit snippet">${icon("edit")}</button>
           <button class="btn btn-danger btn-icon" data-del-snip="${s.id}" title="Delete snippet">${icon("trash")}</button>
         </div>
       </div>`).join("");
-    list.querySelectorAll("[data-run]").forEach(b => b.onclick = () => runSnippetOnDevice(+b.dataset.run, snips));
-    list.querySelectorAll("[data-bulk]").forEach(b => b.onclick = () => runSnippetBulk(+b.dataset.bulk, snips));
+    list.querySelectorAll("[data-run]").forEach(b => b.onclick = () => openSnippetRun(+b.dataset.run, snips));
     list.querySelectorAll("[data-edit-snip]").forEach(b => b.onclick = () => openSnippetModal(+b.dataset.editSnip, snips));
     list.querySelectorAll("[data-del-snip]").forEach(b => b.onclick = async () => {
-      if (!confirm("Delete snippet?")) return;
+      if (!await showConfirm("Delete snippet?", "Delete snippet")) return;
       await api(`/api/snippets/${b.dataset.delSnip}`, { method: "DELETE" });
       loadSnippets();
     });
   } catch (e) { list.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
-function runSnippetOnDevice(snipId, snips) {
+// Open a device-picker modal so the user can choose exactly which devices
+// a snippet runs on (replaces the old "prompt for id" + "run on ALL devices").
+let _snippetRunCmd = "";
+function openSnippetRun(snipId, snips) {
   const s = snips.find(x => x.id === snipId);
+  if (!s) return;
   if (!currentDevices.length) { showToast("No devices", "error"); return; }
-  const devId = +prompt("Run on device id:\n" + currentDevices.map(d => `${d.id}=${d.name}`).join("\n"), currentDevices[0].id);
-  if (!devId) return;
-  // openTerminal accepts an initialCommand that is sent once the shell is ready,
-  // so we don't touch the internal `ws` (which is scoped inside openTerminal).
-  openTerminal(devId, s.name, s.command);
+  _snippetRunCmd = s.command;
+  document.getElementById("snippet-run-title").textContent = `Run “${s.name}” on devices`;
+  document.getElementById("snippet-run-cmd").textContent = s.command;
+  const box = document.getElementById("snippet-run-list");
+  box.innerHTML = currentDevices.map(d => `
+    <label class="device-pick">
+      <input type="checkbox" class="snip-dev" value="${d.id}" checked />
+      <span>${escapeHtml(d.name)} <span class="muted">(${escapeHtml(d.host)}:${d.port || 22})</span></span>
+    </label>`).join("");
+  document.getElementById("snippet-run-modal").classList.remove("hidden");
+  // default: select all (user can uncheck)
+  document.getElementById("snippet-run-all").onclick = () => box.querySelectorAll(".snip-dev").forEach(c => c.checked = true);
+  document.getElementById("snippet-run-cancel").onclick = () => document.getElementById("snippet-run-modal").classList.add("hidden");
+  document.getElementById("snippet-run-go").onclick = () => runSnippetSelected(s.name);
 }
 
-// Run a snippet across every visible device at once via the bulk runner
-// (no need to open a terminal per device — results come back as text).
-async function runSnippetBulk(snipId, snips) {
-  const s = snips.find(x => x.id === snipId);
-  if (!currentDevices.length) { showToast("No devices", "error"); return; }
-  if (!confirm(`Run "${s.name}" on ALL ${currentDevices.length} devices?`)) return;
+async function runSnippetSelected(name) {
+  const box = document.getElementById("snippet-run-list");
+  const ids = [...box.querySelectorAll(".snip-dev:checked")].map(c => +c.value);
+  if (!ids.length) { showToast("Select at least one device", "error"); return; }
+  document.getElementById("snippet-run-modal").classList.add("hidden");
   try {
     const res = await api("/api/bulk/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_ids: currentDevices.map(d => d.id), command: s.command }),
+      body: JSON.stringify({ device_ids: ids, command: _snippetRunCmd }),
     });
     const lines = res.map(r => `■ ${r.name} (${r.reachable ? "ok" : "FAIL"})\n${r.reachable ? r.output : r.error}`).join("\n\n");
-    showToast(`Ran "${s.name}" on ${res.length} devices`, "ok");
-    // Surface full output in a modal so it isn't lost in a toast.
-    openTextModal(`Bulk run — ${s.name}`, lines || "(no output)");
+    showToast(`Ran “${name}” on ${res.length} device(s)`, "ok");
+    openTextModal(`Bulk run — ${name}`, lines || "(no output)");
   } catch (e) {
     showToast(e.message, "error");
   }
@@ -1046,6 +1088,80 @@ function openTextModal(title, text) {
   body.style.display = "";
   body.textContent = text;
   out.classList.remove("hidden");
+}
+
+// Reusable confirm/prompt dialogs — match the ShellDeck modal style
+// (replaces the browser-native confirm()/prompt() which look out of place,
+//  especially on mobile).
+function showConfirm(message, title = "Confirm") {
+  return new Promise((resolve) => {
+    const m = document.getElementById("confirm-modal");
+    document.getElementById("confirm-title").textContent = title;
+    document.getElementById("confirm-msg").textContent = message;
+    const done = (val) => { m.classList.add("hidden"); cleanup(); resolve(val); };
+    const ok = document.getElementById("confirm-ok");
+    const cancel = document.getElementById("confirm-cancel");
+    const onKey = (e) => { if (e.key === "Escape") done(false); };
+    function cleanup() {
+      ok.onclick = null; cancel.onclick = null;
+      document.removeEventListener("keydown", onKey);
+    }
+    ok.onclick = () => done(true);
+    cancel.onclick = () => done(false);
+    m.addEventListener("click", function bg(e) { if (e.target === m) done(false); });
+    document.addEventListener("keydown", onKey);
+    m.classList.remove("hidden");
+  });
+}
+
+function showPrompt(message, defaultValue = "", title = "Input") {
+  return new Promise((resolve) => {
+    const m = document.getElementById("prompt-modal");
+    document.getElementById("prompt-title").textContent = title;
+    document.getElementById("prompt-label").firstChild.textContent = message + " ";
+    const inp = document.getElementById("prompt-input");
+    inp.value = defaultValue;
+    const done = (val) => { m.classList.add("hidden"); cleanup(); resolve(val); };
+    const ok = document.getElementById("prompt-ok");
+    const cancel = document.getElementById("prompt-cancel");
+    const onKey = (e) => { if (e.key === "Escape") done(null); };
+    function cleanup() {
+      ok.onclick = null; cancel.onclick = null;
+      document.removeEventListener("keydown", onKey);
+    }
+    ok.onclick = () => done(inp.value);
+    cancel.onclick = () => done(null);
+    inp.onkeydown = (e) => { if (e.key === "Enter") done(inp.value); };
+    m.addEventListener("click", function bg(e) { if (e.target === m) done(null); });
+    document.addEventListener("keydown", onKey);
+    m.classList.remove("hidden");
+    setTimeout(() => inp.focus(), 30);
+  });
+}
+
+// Multi-line paste dialog (JSON import) — modal styled, returns text or null.
+function showPaste(title, hint = "") {
+  return new Promise((resolve) => {
+    const m = document.getElementById("paste-modal");
+    document.getElementById("paste-title").textContent = title;
+    document.getElementById("paste-hint").textContent = hint;
+    const area = document.getElementById("paste-area");
+    area.value = "";
+    const done = (val) => { m.classList.add("hidden"); cleanup(); resolve(val); };
+    const ok = document.getElementById("paste-ok");
+    const cancel = document.getElementById("paste-cancel");
+    const onKey = (e) => { if (e.key === "Escape") done(null); };
+    function cleanup() {
+      ok.onclick = null; cancel.onclick = null;
+      document.removeEventListener("keydown", onKey);
+    }
+    ok.onclick = () => done(area.value.trim() || null);
+    cancel.onclick = () => done(null);
+    m.addEventListener("click", function bg(e) { if (e.target === m) done(null); });
+    document.addEventListener("keydown", onKey);
+    m.classList.remove("hidden");
+    setTimeout(() => area.focus(), 30);
+  });
 }
 
 // ---- Command palette (Ctrl/Cmd+K) ----
@@ -1129,8 +1245,8 @@ document.getElementById("snip-export").onclick = async () => {
     URL.revokeObjectURL(url);
   } catch (e) { showToast(e.message, "error"); }
 };
-document.getElementById("snip-import").onclick = () => {
-  const txt = prompt("Paste snippets JSON export:");
+document.getElementById("snip-import").onclick = async () => {
+  const txt = await showPaste("Import snippets", "Paste the snippets JSON export below:");
   if (!txt) return;
   try {
     const data = JSON.parse(txt);
@@ -1286,40 +1402,54 @@ async function loadUsers() {
     });
     box.querySelectorAll(".user-edit").forEach(b => b.onclick = () => openUserEdit(b.dataset.id, b.dataset.name, b.dataset.role));
     box.querySelectorAll(".user-del").forEach(b => b.onclick = async () => {
-      if (!confirm(`Delete user ${b.dataset.name}?`)) return;
+      if (!await showConfirm(`Delete user ${b.dataset.name}?`, "Delete user")) return;
       try {
         await api(`/api/users/${b.dataset.id}`, { method: "DELETE" });
         showToast("User deleted", "ok");
         loadUsers();
       } catch (e) { showToast(e.message, "error"); }
     });
-    // Audit log (admin only)
-    try {
-      const audit = await api("/api/audit?limit=50");
-      const sec = document.getElementById("audit-log-section");
-      const al = document.getElementById("audit-log");
-      if (audit && audit.length) {
-        al.innerHTML = `<table class="user-table"><thead><tr>
-          <th>Time</th><th>User</th><th>Action</th><th>Detail</th><th>IP</th>
-          </tr></thead><tbody>${audit.map(a => `
-          <tr class="${a.action === 'login_failed' ? 'down' : ''}">
-            <td data-label="Time" class="muted">${a.created_at ? new Date(a.created_at).toLocaleString() : '-'}</td>
-            <td data-label="User">${escapeHtml(a.username || '-')}</td>
-            <td data-label="Action"><span class="badge ${a.action === 'login_failed' ? 'off' : ''}">${escapeHtml(a.action)}</span></td>
-            <td data-label="Detail" class="muted">${escapeHtml(a.detail || '-')}</td>
-            <td data-label="IP" class="muted">${escapeHtml(a.ip || '-')}</td>
-          </tr>`).join("")}</tbody></table>`;
-        sec.classList.remove("hidden");
-      } else {
-        al.innerHTML = "<p class='muted'>No audit entries yet.</p>";
-        sec.classList.remove("hidden");
-      }
-    } catch (_) { /* non-admin silently skips */ }
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
+
+// ----------------------------- Audit Log (admin) ---------------------------
+async function loadAudit() {
+  const box = document.getElementById("audit-log");
+  if (!box) return;
+  if (!currentUser || currentUser.role !== "admin") {
+    box.innerHTML = "<p class='muted'>Audit log is admin-only.</p>";
+    return;
+  }
+  box.innerHTML = "<p class='muted'>Loading audit log…</p>";
+  try {
+    const limit = document.getElementById("audit-limit")?.value || "50";
+    const url = `/api/auth/audit?limit=${encodeURIComponent(limit)}&_=${Date.now()}`;
+    const audit = await api(url);
+    const q = (document.getElementById("audit-search")?.value || "").trim().toLowerCase();
+    const rows = q
+      ? audit.filter(a => (a.username || "").toLowerCase().includes(q) || (a.action || "").toLowerCase().includes(q) || (a.detail || "").toLowerCase().includes(q))
+      : audit;
+    if (!rows.length) { box.innerHTML = "<p class='muted'>No audit entries found.</p>"; return; }
+    box.innerHTML = `<table class="user-table"><thead><tr>
+      <th>Time</th><th>User</th><th>Action</th><th>Detail</th><th>IP</th>
+      </tr></thead><tbody>${rows.map(a => `
+      <tr class="${a.action === 'login_failed' ? 'down' : ''}">
+        <td data-label="Time" class="muted">${fmtTime(a.created_at)}</td>
+        <td data-label="User">${escapeHtml(a.username || '-')}</td>
+        <td data-label="Action"><span class="badge ${a.action === 'login_failed' ? 'off' : ''}">${escapeHtml(a.action)}</span></td>
+        <td data-label="Detail" class="muted">${escapeHtml(a.detail || '-')}</td>
+        <td data-label="IP" class="muted">${escapeHtml(a.ip || '-')}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch (e) {
+    console.error("loadAudit failed:", e);
+    box.innerHTML = `<p class='muted'>Audit log unavailable: ${escapeHtml(e && e.message ? e.message : String(e))}</p>`;
+  }
+}
+document.getElementById("audit-search")?.addEventListener("input", loadAudit);
+document.getElementById("audit-limit")?.addEventListener("change", loadAudit);
 document.getElementById("user-search")?.addEventListener("input", loadUsers);
-document.getElementById("user-add").onclick = () => document.getElementById("user-form").classList.toggle("hidden");
-document.getElementById("user-cancel").onclick = () => document.getElementById("user-form").classList.add("hidden");
+document.getElementById("user-add").onclick = () => document.getElementById("user-modal").classList.remove("hidden");
+document.getElementById("user-cancel").onclick = () => document.getElementById("user-modal").classList.add("hidden");
 document.getElementById("user-save").onclick = async () => {
   const username = document.getElementById("user-username").value.trim();
   const password = document.getElementById("user-password").value;
@@ -1327,7 +1457,7 @@ document.getElementById("user-save").onclick = async () => {
   if (!username || !password) { showToast("Username & password required", "error"); return; }
   try {
     await api("/api/users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password, role }) });
-    document.getElementById("user-form").classList.add("hidden");
+    document.getElementById("user-modal").classList.add("hidden");
     loadUsers();
   } catch (e) { showToast(e.message, "error"); }
 };
@@ -1336,10 +1466,10 @@ function openUserEdit(id, name, role) {
   document.getElementById("edit-user-username").value = name;
   document.getElementById("edit-user-password").value = "";
   document.getElementById("edit-user-role").value = role;
-  document.getElementById("user-form").classList.add("hidden");
-  document.getElementById("user-edit-form").classList.remove("hidden");
+  document.getElementById("user-modal").classList.add("hidden");
+  document.getElementById("user-edit-modal").classList.remove("hidden");
 }
-document.getElementById("edit-user-cancel").onclick = () => document.getElementById("user-edit-form").classList.add("hidden");
+document.getElementById("edit-user-cancel").onclick = () => document.getElementById("user-edit-modal").classList.add("hidden");
 document.getElementById("edit-user-save").onclick = async () => {
   const id = document.getElementById("edit-user-id").value;
   const username = document.getElementById("edit-user-username").value.trim();
@@ -1350,7 +1480,7 @@ document.getElementById("edit-user-save").onclick = async () => {
   if (role) body.role = role;
   try {
     await api(`/api/users/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    document.getElementById("user-edit-form").classList.add("hidden");
+    document.getElementById("user-edit-modal").classList.add("hidden");
     showToast("User updated", "ok");
     loadUsers();
   } catch (e) { showToast(e.message, "error"); }
@@ -1374,7 +1504,7 @@ async function loadAgents() {
         </div>
       </div>`).join("");
     box.querySelectorAll("[data-del-agent]").forEach(b => b.onclick = async () => {
-      if (!confirm("Delete this agent?")) return;
+      if (!await showConfirm("Delete this agent?", "Delete agent")) return;
       await api(`/api/agents/${b.dataset.delAgent}`, { method: "DELETE" });
       loadAgents();
     });
@@ -1385,16 +1515,16 @@ document.getElementById("agent-add").onclick = () => {
   if (currentDevices && currentDevices.length) {
     sel.innerHTML = '<option value="">— none —</option>' + currentDevices.map(d => `<option value="${d.id}">${escapeHtml(d.name)} #${d.id}</option>`).join("");
   }
-  document.getElementById("agent-form").classList.remove("hidden");
+  document.getElementById("agent-modal").classList.remove("hidden");
 };
-document.getElementById("agent-cancel").onclick = () => document.getElementById("agent-form").classList.add("hidden");
+document.getElementById("agent-cancel").onclick = () => document.getElementById("agent-modal").classList.add("hidden");
 document.getElementById("agent-save").onclick = async () => {
   const name = document.getElementById("agent-name").value.trim();
   const device_id = document.getElementById("agent-device").value || null;
   if (!name) { showToast("Name required", "error"); return; }
   try {
     await api("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, device_id: device_id ? parseInt(device_id, 10) : null }) });
-    document.getElementById("agent-form").classList.add("hidden");
+    document.getElementById("agent-modal").classList.add("hidden");
     loadAgents();
     showToast("Agent created — copy the token to the device script", "ok");
   } catch (e) { showToast(e.message, "error"); }
@@ -1479,10 +1609,10 @@ function createPane(tabEl, deviceId, initialCommand) {
   ws.onopen = () => { if (initialCommand) ws.send(initialCommand + "\r"); };
   term.onData((d) => ws.readyState === WebSocket.OPEN && ws.send(d));
   // Ctrl+F (or Cmd+F) opens an in-terminal search using the SearchAddon.
-  term.attachCustomKeyEventHandler((e) => {
+  term.attachCustomKeyEventHandler(async (e) => {
     if ((e.ctrlKey || e.metaKey) && (e.key === "f" || e.key === "F")) {
       e.preventDefault();
-      const q = prompt("Search in terminal:");
+      const q = await showPrompt("Search in terminal:", "", "Find");
       if (q && searchAddon) { searchAddon.findNext(q, { incremental: false }); }
       return false; // swallow so it isn't sent to the shell
     }
@@ -1801,7 +1931,7 @@ async function loadScheduled() {
         </div>
       </div>`).join("");
     box.querySelectorAll("[data-del-task]").forEach(b => b.onclick = async () => {
-      if (!confirm("Delete this task?")) return;
+      if (!await showConfirm("Delete this task?", "Delete task")) return;
       await api(`/api/scheduled/${b.dataset.delTask}`, { method: "DELETE" });
       loadScheduled();
     });
@@ -1817,7 +1947,7 @@ document.getElementById("sched-add").onclick = () => {
   if (!currentDevices || !currentDevices.length) { box.innerHTML = "<span class='muted'>No devices yet</span>"; }
   else box.innerHTML = currentDevices.map(d => `
     <label class="chk"><input type="checkbox" value="${d.id}" /> ${escapeHtml(d.name)} <span class="id-badge">#${d.id}</span></label>`).join("");
-  document.getElementById("sched-form").classList.remove("hidden");
+  document.getElementById("sched-modal").classList.remove("hidden");
 };
 document.getElementById("sched-runonce").onchange = (e) => {
   document.getElementById("sched-runat-label").classList.toggle("hidden", !e.target.checked);
@@ -1833,8 +1963,8 @@ document.getElementById("sched-export").onclick = async () => {
     URL.revokeObjectURL(url);
   } catch (e) { showToast(e.message, "error"); }
 };
-document.getElementById("sched-import").onclick = () => {
-  const txt = prompt("Paste scheduled tasks JSON export:");
+document.getElementById("sched-import").onclick = async () => {
+  const txt = await showPaste("Import scheduled tasks", "Paste the scheduled tasks JSON export below:");
   if (!txt) return;
   try {
     const data = JSON.parse(txt);
@@ -1843,7 +1973,7 @@ document.getElementById("sched-import").onclick = () => {
       .catch(e => showToast(e.message, "error"));
   } catch (e) { showToast("Invalid JSON", "error"); }
 };
-document.getElementById("sched-cancel").onclick = () => document.getElementById("sched-form").classList.add("hidden");
+document.getElementById("sched-cancel").onclick = () => document.getElementById("sched-modal").classList.add("hidden");
 document.getElementById("sched-save").onclick = async () => {
   const name = document.getElementById("sched-name").value.trim();
   const command = document.getElementById("sched-command").value.trim();
@@ -1856,7 +1986,7 @@ document.getElementById("sched-save").onclick = async () => {
   if (!name || !command) { showToast("Name & command required", "error"); return; }
   try {
     await api("/api/scheduled", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, command, device_ids: ids, interval_minutes: interval, run_once, run_at }) });
-    document.getElementById("sched-form").classList.add("hidden");
+    document.getElementById("sched-modal").classList.add("hidden");
     loadScheduled();
     showToast("Task created", "ok");
   } catch (e) { showToast(e.message, "error"); }
@@ -1882,6 +2012,8 @@ async function loadSettings() {
     set("set-interval", s.monitor_interval);
     setCheck("set-public", s.public_dashboard);
     setCheck("set-oidc", s.oidc_enabled);
+    const tz = document.getElementById("set-timezone");
+    if (tz) tz.value = s.timezone || "Asia/Jakarta";
     // Appearance: reflect saved theme.
     const themeSel = document.getElementById("set-theme");
     if (themeSel) {
@@ -1915,7 +2047,8 @@ document.getElementById("set-save").onclick = async () => {
   monitor_interval: parseInt(document.getElementById("set-interval").value, 10) || 60,
   public_dashboard: document.getElementById("set-public").checked,
   oidc_enabled: document.getElementById("set-oidc").checked,
-  };
+  timezone: document.getElementById("set-timezone").value || "Asia/Jakarta",
+};
   const tok = document.getElementById("set-tg-token").value.trim();
   if (tok) payload.telegram_token = tok;
   const ep = document.getElementById("set-email-pass").value.trim();
@@ -2061,8 +2194,8 @@ async function loadSessions() {
         <td data-label="Device">${escapeHtml(r.device_name)}</td>
         <td data-label="Host" class="muted">${escapeHtml(r.device_host)}</td>
         <td data-label="User">${escapeHtml(r.username || "-")}</td>
-        <td data-label="Started">${r.started_at ? new Date(_asUTC(r.started_at)).toLocaleString() : "-"}</td>
-        <td data-label="Ended">${r.ended_at ? new Date(_asUTC(r.ended_at)).toLocaleString() : "active"}</td>
+        <td data-label="Started">${fmtTime(r.started_at)}</td>
+        <td data-label="Ended">${r.ended_at ? fmtTime(r.ended_at) : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
         <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play")}</button> <button class="btn btn-ghost btn-icon-xs" data-rerun="${r.id}" title="Re-run commands on device">${icon("restart")}</button></td>
       </tr>`).join("")}</tbody></table>`;
@@ -2071,11 +2204,11 @@ async function loadSessions() {
       const cmds = (r.commands || "").split("\n").filter(Boolean);
       openSessionModal(r, "cmds", cmds.map(c => "$ " + c).join("\n") || "(no commands recorded)");
     });
-    box.querySelectorAll("[data-rerun]").forEach(b => b.onclick = () => {
+    box.querySelectorAll("[data-rerun]").forEach(b => b.onclick = async () => {
       const r = rows.find(x => String(x.id) === b.dataset.rerun);
       const cmds = (r.commands || "").split("\n").filter(Boolean);
       if (!cmds.length) { showToast("No commands to re-run", "error"); return; }
-      if (!confirm(`Re-run ${cmds.length} command(s) on ${r.device_name}?`)) return;
+      if (!await showConfirm(`Re-run ${cmds.length} command(s) on ${r.device_name}?`, "Re-run commands")) return;
       // Join commands and send as the terminal's initial input so they run
       // in order as soon as the shell is ready.
       openTerminal(r.device_id, r.device_name, cmds.join("\n"));
@@ -2090,7 +2223,7 @@ function openSessionModal(r, tab, rawText) {
   const out = document.getElementById("session-cmds");
   out.classList.remove("hidden");
   document.getElementById("session-cmds-title").textContent =
-    `${tab === "player" && r.has_recording ? "Playback" : "Session"} — ${r.device_name} (${r.started_at ? new Date(_asUTC(r.started_at)).toLocaleString() : "-"})`;
+    `${tab === "player" && r.has_recording ? "Playback" : "Session"} — ${r.device_name} (${fmtTime(r.started_at)})`;
   const body = document.getElementById("session-cmds-body");
   const wrap = document.getElementById("session-cmds-player-wrap");
   // Tabs

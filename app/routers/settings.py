@@ -11,6 +11,7 @@ from app.models import SettingsRow
 from app.schemas import SettingsOut, SettingsUpdate
 from app.security import get_current_user, admin_only
 from app.notifications import send_telegram, send_discord, send_ntfy, send_gotify, send_slack, send_email, send_webhook
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
@@ -69,8 +70,18 @@ def update_settings(
         row.public_dashboard = payload.public_dashboard
     if payload.oidc_enabled is not None:
         row.oidc_enabled = payload.oidc_enabled
+    if payload.timezone is not None:
+        # Only accept valid IANA timezone names so the frontend Intl formatter
+        # never blows up on a garbage value.
+        try:
+            import zoneinfo
+            zoneinfo.ZoneInfo(payload.timezone)
+            row.timezone = payload.timezone
+        except Exception:
+            raise HTTPException(status_code=422, detail="Invalid timezone")
     db.commit()
     db.refresh(row)
+    log_audit(db, _, "settings_update", f"monitor_interval={row.monitor_interval} public_dashboard={row.public_dashboard} oidc_enabled={row.oidc_enabled} timezone={row.timezone}")
     return row
 
 

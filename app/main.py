@@ -110,9 +110,31 @@ def index() -> HTMLResponse:
     # Inject the app version as a cache-buster on the static bundle so browsers
     # re-fetch app.js / style.css after every version bump (avoids stale caching).
     try:
-        ver = (Path(__file__).parent.parent / "VERSION").read_text().strip()
+        base = (Path(__file__).parent.parent / "VERSION").read_text().strip()
     except Exception:
-        ver = "0"
+        base = "0"
+    # Build a cache-buster that changes on every deploy: prefer a short git
+    # commit hash; fall back to the app.js file mtime (changes when the bundle
+    # is rebuilt/copied into the image) so browsers always re-fetch.
+    ver = base
+    try:
+        import subprocess
+        ghash = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=str(Path(__file__).parent.parent),
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        if ghash:
+            ver = f"{base}-{ghash}"
+        else:
+            raise RuntimeError("no git hash")
+    except Exception:
+        try:
+            import os
+            mtime = int(os.path.getmtime(Path(__file__).parent.parent / "frontend" / "static" / "app.js"))
+            ver = f"{base}-{mtime}"
+        except Exception:
+            pass
     html = html.replace("{{VERSION}}", ver)
     return HTMLResponse(html)
 

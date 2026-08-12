@@ -9,6 +9,7 @@ from app.db import get_db
 from app.models import Snippet, User
 from app.schemas import SnippetCreate, SnippetOut
 from app.security import get_current_user, operator_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/snippets", tags=["snippets"])
 
@@ -27,6 +28,7 @@ def create_snippet(payload: SnippetCreate, db: Session = Depends(get_db), user: 
     db.add(snippet)
     db.commit()
     db.refresh(snippet)
+    log_audit(db, user, "snippet_create", f"name={snippet.name}")
     return snippet
 
 
@@ -37,6 +39,7 @@ def delete_snippet(snippet_id: int, db: Session = Depends(get_db), user: User = 
         raise HTTPException(status_code=404, detail="Snippet not found")
     db.delete(snippet)
     db.commit()
+    log_audit(db, user, "snippet_delete", f"id={snippet_id} name={snippet.name}")
 
 
 @router.get("/export")
@@ -57,4 +60,5 @@ def import_snippets(payload: list[SnippetCreate], db: Session = Depends(get_db),
             db.add(Snippet(owner_id=user.id, name=item.name, command=item.command))
             created += 1
     db.commit()
+    log_audit(db, user, "snippet_import", f"imported={created}")
     return {"imported": created}

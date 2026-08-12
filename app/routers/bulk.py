@@ -15,6 +15,7 @@ from app.models import Device, User
 from app.routers.devices import connect_device, load_credentials, _can_access
 from app.schemas import BulkResult, BulkRun
 from app.security import get_current_user, operator_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/bulk", tags=["bulk"])
 
@@ -48,5 +49,6 @@ async def bulk_run(payload: BulkRun, db: Session = Depends(get_db), user: User =
     if len(accessible) != len(payload.device_ids):
         raise HTTPException(status_code=404, detail="Some devices not found or not accessible")
     results = await asyncio.gather(*[_run_on_device(d, payload.command, db) for d in accessible])
+    log_audit(db, user, "bulk_run", f"command={payload.command[:200]} devices={[d.id for d in accessible]}")
     return list(results)
 

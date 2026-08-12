@@ -12,6 +12,7 @@ from app.db import get_db
 from app.models import User
 from app.schemas import UserCreate, UserOut, UserRoleUpdate, UserUpdate
 from app.security import get_current_user, hash_password, admin_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -26,7 +27,7 @@ def list_users(db: Session = Depends(get_db), _: User = Depends(_admin)) -> list
 
 
 @router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = Depends(_admin)) -> User:
+def create_user(payload: UserCreate, db: Session = Depends(get_db), admin: User = Depends(_admin)) -> User:
     if db.scalar(select(User).where(User.username == payload.username)):
         raise HTTPException(status_code=400, detail="Username already registered")
     role = payload.role if payload.role in ("admin", "operator", "viewer") else "viewer"
@@ -39,11 +40,12 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db), _: User = De
     db.add(user)
     db.commit()
     db.refresh(user)
+    log_audit(db, admin, "user_create", f"username={user.username} role={role}")
     return user
 
 
 @router.put("/{user_id}", response_model=UserOut)
-def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), _: User = Depends(_admin)) -> User:
+def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db), admin: User = Depends(_admin)) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -65,9 +67,15 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
         user.is_admin = (payload.role == "admin")
     db.commit()
     db.refresh(user)
+    changes = []
+    if payload.username and payload.username != user.username:
+        changes.append(f"username={payload.username}")
+    if payload.password:
+        changes.append("password=changed")
+    if payload.role:
+        changes.append(f"role={payload.role}")
+    log_audit(db, admin, "user_update", f"id={user_id} " + " ".join(changes))
     return user
-
-
 @router.post("/{user_id}/role", response_model=UserOut)
 def change_role(user_id: int, payload: UserRoleUpdate, db: Session = Depends(get_db), _: User = Depends(_admin)) -> User:
     if payload.role not in ("admin", "operator", "viewer"):
@@ -84,6 +92,7 @@ def change_role(user_id: int, payload: UserRoleUpdate, db: Session = Depends(get
     user.is_admin = (payload.role == "admin")
     db.commit()
     db.refresh(user)
+    log_audit(db, admin, "user_role_change", f"id={user_id} username={user.username} -> role={payload.role}")
     return user
 
 
@@ -104,3 +113,4 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin: User = Depen
     db.query(Snippet).filter(Snippet.owner_id == user.id).delete()
     db.delete(user)
     db.commit()
+    log_audit(db, admin, "user_delete", f"id={user_id} username={user.username}")

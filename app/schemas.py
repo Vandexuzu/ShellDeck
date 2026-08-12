@@ -208,6 +208,7 @@ class SettingsOut(BaseModel):
     monitor_interval: int
     public_dashboard: bool
     oidc_enabled: bool
+    timezone: str = "Asia/Jakarta"
 
 
 class SettingsUpdate(BaseModel):
@@ -227,6 +228,7 @@ class SettingsUpdate(BaseModel):
     monitor_interval: int | None = None
     public_dashboard: bool | None = None
     oidc_enabled: bool | None = None
+    timezone: str | None = None
 
 
 # ------------------------------- Scheduled tasks ----------------------------

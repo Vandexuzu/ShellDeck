@@ -16,6 +16,7 @@ from app.models import Device, User
 from app.routers.devices import load_credentials, connect_device, _can_view, _can_access
 from app.schemas import FileEntry, FilePath, FileWrite
 from app.security import get_current_user, operator_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/files", tags=["files"])
 
@@ -114,6 +115,7 @@ async def write_file(device_id: int, body: FileWrite, db: Session = Depends(get_
         async with sftp_for(device, db) as sftp:
             async with sftp.open(body.path, "w") as f:
                 await f.write(body.content)
+            log_audit(db, user, "file_write", f"device={device.name} path={body.path}")
             return {"path": body.path, "written": len(body.content)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Write failed: {type(exc).__name__}: {exc}")
@@ -127,6 +129,7 @@ async def mkdir(device_id: int, body: FilePath, db: Session = Depends(get_db), u
     try:
         async with sftp_for(device, db) as sftp:
             await sftp.mkdir(body.path)
+            log_audit(db, user, "file_mkdir", f"device={device.name} path={body.path}")
             return {"path": body.path, "created": True}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Mkdir failed: {type(exc).__name__}: {exc}")
@@ -143,6 +146,7 @@ async def delete_file(device_id: int, body: FilePath, db: Session = Depends(get_
                 await sftp.remove(body.path)
             except Exception:
                 await sftp.rmtree(body.path)
+            log_audit(db, user, "file_delete", f"device={device.name} path={body.path}")
             return {"path": body.path, "deleted": True}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Delete failed: {type(exc).__name__}: {exc}")
@@ -176,6 +180,7 @@ async def upload_file(
             data = await file.read()
             async with sftp.open(dest, "wb") as f:
                 await f.write(data)
+            log_audit(db, user, "file_upload", f"device={device.name} path={dest} size={len(data)}")
             return {"path": dest, "uploaded": len(data)}
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Upload failed: {type(exc).__name__}: {exc}")

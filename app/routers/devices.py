@@ -17,6 +17,7 @@ from app.db import get_db
 from app.models import AuditLog, Device, SessionLog, TopologySnapshot, User
 from app.schemas import DeviceCreate, DeviceOut, DeviceUpdate
 from app.security import get_current_user, operator_only, admin_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
 
@@ -119,6 +120,8 @@ def create_device(payload: DeviceCreate, db: Session = Depends(get_db), user: Us
     db.add(device)
     db.commit()
     db.refresh(device)
+    log_audit(db, user, "device_create", f"name={device.name} host={device.host}:{device.port} auth={device.auth_method}"
+              + (f" bastion_id={device.bastion_id}" if device.bastion_id else ""))
     return _to_out(device, db)
 
 
@@ -782,6 +785,7 @@ def import_devices(payload: list[DeviceCreate], db: Session = Depends(get_db), u
         db.add(device)
         created += 1
     db.commit()
+    log_audit(db, user, "device_import", f"imported={created}")
     return {"imported": created}
 
 
@@ -809,6 +813,7 @@ def bulk_delete_devices(payload: BulkIds, db: Session = Depends(get_db), user: U
             db.delete(device)
             deleted += 1
     db.commit()
+    log_audit(db, user, "device_bulk_delete", f"deleted={deleted} ids={payload.device_ids}")
     return {"deleted": deleted}
 
 
@@ -829,6 +834,8 @@ def bulk_update_devices(payload: BulkUpdate, db: Session = Depends(get_db), user
                 device.bastion_id = payload.bastion_id
             updated += 1
     db.commit()
+    log_audit(db, user, "device_bulk_update", f"updated={updated} ids={payload.device_ids}"
+              + (f" bastion_id={payload.bastion_id}" if payload.bastion_id is not None else ""))
     return {"updated": updated}
 
 
@@ -921,6 +928,8 @@ def update_device(device_id: int, payload: DeviceUpdate, db: Session = Depends(g
             setattr(device, field, value)
     db.commit()
     db.refresh(device)
+    log_audit(db, user, "device_update", f"id={device_id} name={device.name} host={device.host}:{device.port}"
+              + (f" bastion_id={device.bastion_id}" if device.bastion_id else ""))
     return _to_out(device, db)
 
 
@@ -931,6 +940,7 @@ def delete_device(device_id: int, db: Session = Depends(get_db), user: User = De
     db.query(SessionLog).filter(SessionLog.device_id == device.id).delete()
     db.delete(device)
     db.commit()
+    log_audit(db, user, "device_delete", f"id={device_id} name={device.name} host={device.host}")
 
 
 def load_credentials(device: Device) -> tuple[str, str | None, str | None]:

@@ -1,6 +1,8 @@
 // ShellDeck service worker — offline shell caching for PWA installability.
-const CACHE = "shelldeck-v1";
-const SHELL = ["/", "/login", "/static/app.js", "/static/style.css", "/static/login.js", "/manifest.webmanifest"];
+// Cache version is bumped on every meaningful frontend change so the browser
+// drops stale cached assets (index.html / app.js) after a deploy.
+const CACHE = "shelldeck-v3";
+const SHELL = ["/login", "/static/login.js", "/static/style.css", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}));
@@ -20,7 +22,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(req.url);
   // Never cache API calls or the websocket terminal.
   if (url.pathname.startsWith("/api") || url.pathname.startsWith("/ws") || url.pathname.includes("terminal")) return;
-  // Cache-first for static assets, network fallback for navigation.
+  // Never cache the HTML navigation (index.html). It carries a ?v= cache-buster
+  // on app.js/style.css, so always fetch it fresh from the network.
+  if (url.pathname === "/" ) return;
+  // Cache-first only for versioned static assets under /static.
+  if (!url.pathname.startsWith("/static/")) return;
   event.respondWith(
     caches.match(req).then((cached) => cached || fetch(req).then((res) => {
       if (res.ok && url.origin === location.origin) {
@@ -28,6 +34,6 @@ self.addEventListener("fetch", (event) => {
         caches.open(CACHE).then((c) => c.put(req, copy));
       }
       return res;
-    }).catch(() => caches.match("/")))
+    }))
   );
 });

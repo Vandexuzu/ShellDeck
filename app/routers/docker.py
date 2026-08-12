@@ -17,6 +17,7 @@ from app.models import Device, User
 from app.routers.devices import connect_device, load_credentials, _can_view, _can_access
 from app.schemas import DockerContainer, DockerAction, DockerRun
 from app.security import get_current_user, operator_only
+from app.audit import log_audit
 
 router = APIRouter(prefix="/api/docker", tags=["docker"])
 
@@ -100,6 +101,7 @@ async def container_action(device_id: int, body: DockerAction, db: Session = Dep
     stdout, stderr, code = await _run(device, f"docker {body.action} {cid}{extra}", db, timeout=60)
     if code != 0:
         raise HTTPException(status_code=502, detail=f"docker {body.action} failed: {stderr.strip()}")
+    log_audit(db, user, "docker_action", f"device={device.name} container={cid} action={body.action}")
     return {"container_id": cid, "action": body.action, "ok": True}
 
 
@@ -169,3 +171,4 @@ async def docker_run(device_id: int, body: DockerRun, db: Session = Depends(get_
         conn.close()
         if bastion is not None:
             bastion.close()
+    log_audit(db, user, "docker_run", f"device={device.name} command={cmd[:200]}")
