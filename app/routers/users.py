@@ -77,7 +77,7 @@ def update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)
     log_audit(db, admin, "user_update", f"id={user_id} " + " ".join(changes))
     return user
 @router.post("/{user_id}/role", response_model=UserOut)
-def change_role(user_id: int, payload: UserRoleUpdate, db: Session = Depends(get_db), _: User = Depends(_admin)) -> User:
+def change_role(user_id: int, payload: UserRoleUpdate, db: Session = Depends(get_db), admin: User = Depends(_admin)) -> User:
     if payload.role not in ("admin", "operator", "viewer"):
         raise HTTPException(status_code=400, detail="Role must be admin|operator|viewer")
     user = db.get(User, user_id)
