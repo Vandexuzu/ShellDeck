@@ -546,6 +546,7 @@ document.getElementById("topo-scan").onclick = async () => {
   }
 };
 document.getElementById("modal-cancel").onclick = closeModal;
+document.getElementById("add-device").onclick = () => openModal();
 document.getElementById("modal-test").onclick = async () => {
   const id = document.getElementById("device-id").value;
   const errEl = document.getElementById("form-error");
