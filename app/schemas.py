@@ -120,6 +120,7 @@ class DeviceStatus(BaseModel):
     disk_used_pct: float | None = None
     uptime: str | None = None
     tailscale: bool = False
+    os: str | None = None
 
 
 # ------------------------------- Snippets -----------------------------------

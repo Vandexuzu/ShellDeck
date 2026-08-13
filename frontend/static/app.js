@@ -216,7 +216,7 @@ async function loadStatus() {
         <div class="metric"><span>${label}</span><b>${pct.toFixed(0)}%</b></div>
         <div class="bar ${pct < 60 ? "ok" : pct < 85 ? "warn" : "bad"}"><span style="width:${pct}%"></span></div>`;
       card.innerHTML = `
-        <div class="sc-title"><span>${escapeHtml(s.name)} ${s.tailscale ? '<span class="ts-badge" title="Tailscale">TS</span>' : ''}</span><span class="dot ${cls}"></span></div>
+        <div class="sc-title"><span>${escapeHtml(s.name)} ${s.tailscale ? '<span class="ts-badge" title="Tailscale">TS</span>' : ''}${s.os ? `<span class="ts-badge" title="OS">${escapeHtml(s.os)}</span>` : ''}</span><span class="dot ${cls}"></span></div>
         <div class="metric"><span>Host</span><b>${escapeHtml(s.host)}</b></div>
         ${s.reachable ? `
           ${bar("CPU load", s.cpu_load)}
