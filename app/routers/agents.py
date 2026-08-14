@@ -25,15 +25,15 @@ import secrets
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import time
 
-from app.db import get_db
-from app.models import Agent, Device, SessionLog, User
+from app.db import get_db, SessionLocal
+from app.models import Agent, Device, SessionLog, User, SettingsRow
 from app.security import get_user_from_token_raw, operator_only
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -63,24 +63,38 @@ class AgentOut(BaseModel):
     token: str
     device_id: int | None
     connected: bool
+    ips: list[str] | None = None
     last_seen: datetime | None
     created_at: datetime
 
 
 # ------------------------------- REST --------------------------------------
 @router.get("", response_model=list[AgentOut])
-def list_agents(db: Session = Depends(get_db), user: User = Depends(operator_only)) -> list[Agent]:
-    return list(db.scalars(select(Agent).where(Agent.owner_id == user.id).order_by(Agent.name)))
+def list_agents(db: Session = Depends(get_db), user: User = Depends(operator_only)) -> list[dict]:
+    agents = list(db.scalars(select(Agent).where(Agent.owner_id == user.id).order_by(Agent.name)))
+    out = []
+    for a in agents:
+        out.append({
+            "id": a.id, "name": a.name, "token": a.token, "device_id": a.device_id,
+            "connected": a.connected,
+            "ips": (json.loads(a.ips) if a.ips else None),
+            "last_seen": a.last_seen, "created_at": a.created_at,
+        })
+    return out
 
 
 @router.post("", response_model=AgentOut, status_code=status.HTTP_201_CREATED)
-def create_agent(payload: AgentCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Agent:
+def create_agent(payload: AgentCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     token = secrets.token_urlsafe(24)
     agent = Agent(owner_id=user.id, name=payload.name, token=token, device_id=payload.device_id)
     db.add(agent)
     db.commit()
     db.refresh(agent)
-    return agent
+    return {
+        "id": agent.id, "name": agent.name, "token": agent.token, "device_id": agent.device_id,
+        "connected": agent.connected, "ips": None,
+        "last_seen": agent.last_seen, "created_at": agent.created_at,
+    }
 
 
 @router.delete("/{agent_id}")
@@ -93,6 +107,76 @@ def delete_agent(agent_id: int, db: Session = Depends(get_db), user: User = Depe
     db.delete(agent)
     db.commit()
     return {"deleted": agent_id}
+
+
+# ------------------------------- Bootstrap helper ---------------------------
+_CLIENT_RAW = "https://raw.githubusercontent.com/Vandexuzu/ShellDeck/main/agent/client.py"
+
+
+@router.get("/{agent_id}/bootstrap")
+def agent_bootstrap(agent_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Return copy-paste helpers so a user can configure the agent client on the
+    target device in seconds (no manual editing of client.py / env vars)."""
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    # Derive the public base URL from the incoming request (scheme + host).
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    ws_base = base.replace("http://", "ws://").replace("https://", "wss://")
+    token = agent.token
+    # Pull agent tuning from global settings so the bootstrap reflects admin config.
+    settings = db.get(SettingsRow, 1)
+    hb = settings.agent_heartbeat if settings else 15
+    rc = settings.agent_reconnect if settings else 5
+    env_linux = f"SHELLDECK_URL='{base}' SHELLDECK_AGENT_TOKEN='{token}' SHELLDECK_HEARTBEAT='{hb}' SHELLDECK_RECONNECT='{rc}'"
+    env_ps = f"$env:SHELLDECK_URL='{base}'; $env:SHELLDECK_AGENT_TOKEN='{token}'; $env:SHELLDECK_HEARTBEAT='{hb}'; $env:SHELLDECK_RECONNECT='{rc}'"
+    # One-liner for Linux/macOS/Termux (downloads client.py then runs it).
+    oneliner = (
+        f"curl -fsSL {_CLIENT_RAW} -o shelldeck_agent.py && "
+        f"pip install websocket-client >/dev/null 2>&1; "
+        f"{env_linux} python3 shelldeck_agent.py"
+    )
+    # Windows PowerShell one-liner.
+    ps_oneliner = (
+        f"Invoke-WebRequest -Uri '{_CLIENT_RAW}' -OutFile shelldeck_agent.py; "
+        f"pip install websocket-client; "
+        f"{env_ps}; "
+        f"python shelldeck_agent.py"
+    )
+    # A standalone shell script the user can copy to the device.
+    script_sh = (
+        "#!/usr/bin/env bash\n"
+        "# ShellDeck agent bootstrap — saves as run_agent.sh and: bash run_agent.sh\n"
+        f"export SHELLDECK_URL='{base}'\n"
+        f"export SHELLDECK_AGENT_TOKEN='{token}'\n"
+        f"export SHELLDECK_HEARTBEAT='{hb}'\n"
+        f"export SHELLDECK_RECONNECT='{rc}'\n"
+        "pip install --quiet websocket-client\n"
+        f"curl -fsSL {_CLIENT_RAW} -o shelldeck_agent.py\n"
+        "exec python3 shelldeck_agent.py\n"
+    )
+    script_ps1 = (
+        "# ShellDeck agent bootstrap — saves as run_agent.ps1 and: powershell -ExecutionPolicy Bypass -File run_agent.ps1\n"
+        f"$env:SHELLDECK_URL = '{base}'\n"
+        f"$env:SHELLDECK_AGENT_TOKEN = '{token}'\n"
+        f"$env:SHELLDECK_HEARTBEAT = '{hb}'\n"
+        f"$env:SHELLDECK_RECONNECT = '{rc}'\n"
+        "pip install websocket-client\n"
+        f"Invoke-WebRequest -Uri '{_CLIENT_RAW}' -OutFile shelldeck_agent.py\n"
+        "python shelldeck_agent.py\n"
+    )
+    return {
+        "agent_id": agent.id,
+        "name": agent.name,
+        "url": base,
+        "ws_url": f"{ws_base}/api/agents/ws?token={token}",
+        "token": token,
+        "client_url": _CLIENT_RAW,
+        "oneliner": oneliner,
+        "powershell_oneliner": ps_oneliner,
+        "script_sh": script_sh,
+        "script_ps1": script_ps1,
+    }
 
 
 # ------------------------------- WebSocket (device side) -------------------
@@ -160,6 +244,24 @@ async def _route_agent_frame(raw: str) -> None:
     sess = _SESSIONS.get(cid) if cid is not None else None
     if t == "hb":
         # Heartbeat — update last_seen lazily (cheap: skip DB write every time).
+        return
+    if t == "ips":
+        # Device IP discovery: the agent reports its local interface addresses.
+        # The agent includes its token so we can persist the list on the right
+        # Agent row. Open a short-lived session for the write.
+        try:
+            reported = msg.get("ips") or []
+            if isinstance(reported, str):
+                reported = [reported]
+            token = msg.get("token")
+            if token:
+                with SessionLocal() as dbs:
+                    ag = dbs.scalar(select(Agent).where(Agent.token == token))
+                    if ag is not None:
+                        ag.ips = json.dumps(reported)
+                        dbs.commit()
+        except Exception:
+            pass
         return
     if t == "fs":
         fut = _FS_WAIT.pop(cid, None)

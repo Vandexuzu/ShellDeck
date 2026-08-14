@@ -523,6 +523,33 @@
                 <option value="Australia/Sydney">Australia/Sydney</option>
               </select>
             </label>
+            <label>Theme (global UI appearance)
+              <select id="set-theme" class="input" style="max-width:160px">
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+                <option value="premium">Premium</option>
+              </select>
+            </label>
+            <label>Session log retention (days)
+              <input id="set-retention" class="input" type="number" value="90" min="0" max="3650" style="max-width:160px" />
+              <span class="muted" style="font-size:11px">0 = keep forever</span>
+            </label>
+          </div>
+        </details>
+
+        <details class="settings-acc" open>
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg><span>Agent</span></summary>
+          <div class="settings-box">
+            <label>Agent heartbeat interval (seconds)
+              <input id="set-agent-hb" class="input" type="number" value="15" min="5" max="300" style="max-width:160px" />
+            </label>
+            <label>Agent reconnect delay (seconds)
+              <input id="set-agent-rc" class="input" type="number" value="5" min="1" max="120" style="max-width:160px" />
+            </label>
           </div>
         </details>
 
@@ -871,19 +898,53 @@
             </select>
           </label>
           <div class="modal-actions">
-            <button id="agent-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            <button id="agent-cancel" type="button" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg><span>Cancel</span></button>
-            <button id="agent-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            <button id="agent-save" type="button" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z" />
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 0 0 1 2-2h11l5 5v11a2 0 0 1-2 2Z" />
                 <path d="M17 21v-8H7v8" />
                 <path d="M7 3v5h8" />
               </svg><span>Create</span></button>
           </div>
             </form>
+          </div>
+        </div>
+
+        <!-- Agent bootstrap helper (setup command for the client side) -->
+        <div id="agent-bootstrap-modal" class="modal hidden">
+          <div class="modal-card">
+            <h3>Setup agent on the device</h3>
+            <p class="muted" style="font-size:13px;margin:0 0 12px">Run this on the target device. It auto-downloads the client and connects — no editing needed.</p>
+            <label style="font-weight:600">Linux / macOS (copy &amp; paste)</label>
+            <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px">
+              <textarea id="bs-oneliner" class="input" rows="3" readonly style="font-family:monospace;font-size:12px"></textarea>
+              <button class="btn btn-ghost btn-icon" data-copy="bs-oneliner" title="Copy">📋</button>
+            </div>
+            <label style="font-weight:600">Windows PowerShell (copy &amp; paste)</label>
+            <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px">
+              <textarea id="bs-ps1" class="input" rows="3" readonly style="font-family:monospace;font-size:12px"></textarea>
+              <button class="btn btn-ghost btn-icon" data-copy="bs-ps1" title="Copy">📋</button>
+            </div>
+            <details>
+              <summary style="cursor:pointer;color:var(--accent)">Or save as a script file</summary>
+              <label style="font-weight:600;margin-top:8px;display:block">run_agent.sh (Linux/macOS)</label>
+              <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
+                <textarea id="bs-sh" class="input" rows="6" readonly style="font-family:monospace;font-size:12px"></textarea>
+                <button class="btn btn-ghost btn-icon" data-copy="bs-sh" title="Copy">📋</button>
+              </div>
+              <label style="font-weight:600;display:block">run_agent.ps1 (Windows)</label>
+              <div style="display:flex;gap:8px;align-items:flex-start">
+                <textarea id="bs-ps1file" class="input" rows="6" readonly style="font-family:monospace;font-size:12px"></textarea>
+                <button class="btn btn-ghost btn-icon" data-copy="bs-ps1file" title="Copy">📋</button>
+              </div>
+            </details>
+            <div class="modal-actions">
+              <button id="agent-bootstrap-close" class="btn btn-primary btn-icon-text"><span>Done</span></button>
+            </div>
           </div>
         </div>
       </div>

@@ -123,6 +123,10 @@ class SettingsRow(Base):
     public_dashboard: Mapped[bool] = mapped_column(default=False)       # allow unauth /public view
     oidc_enabled: Mapped[bool] = mapped_column(default=False)          # enable OIDC SSO login
     timezone: Mapped[str] = mapped_column(String(64), default="Asia/Jakarta")  # IANA tz for displaying timestamps
+    theme: Mapped[str] = mapped_column(String(32), default="dark")      # global UI theme (dark/light/premium)
+    session_retention_days: Mapped[int] = mapped_column(Integer, default=90)  # purge SessionLog older than N days (0 = keep forever)
+    agent_heartbeat: Mapped[int] = mapped_column(Integer, default=15)  # agent heartbeat interval (seconds)
+    agent_reconnect: Mapped[int] = mapped_column(Integer, default=5)   # agent reconnect delay (seconds)
 
 
 class ScheduledTask(Base):
@@ -169,6 +173,7 @@ class Agent(Base):
     device_id: Mapped[int | None] = mapped_column(ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     connected: Mapped[bool] = mapped_column(default=False)
+    ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of device IPs reported by the agent
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     owner: Mapped["User"] = relationship()

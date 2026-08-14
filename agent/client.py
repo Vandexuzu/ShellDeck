@@ -42,7 +42,9 @@ try:
 except ImportError:
     sys.exit("Missing dependency: pip install websocket-client")
 
-HEARTBEAT_INTERVAL = 15.0
+# Heartbeat + reconnect tunables (overridable via env, pushed from server settings).
+HEARTBEAT_INTERVAL = float(os.environ.get("SHELLDECK_HEARTBEAT", "15"))
+RECONNECT_DELAY = float(os.environ.get("SHELLDECK_RECONNECT", "5"))
 
 
 def open_pty_shell() -> tuple[int, int, list]:
@@ -160,6 +162,60 @@ class AgentClient:
         self.sessions: dict[int, Session] = {}
         self.lock = threading.Lock()
 
+    def _collect_ips(self) -> list[str]:
+        """Return the device's local interface IP addresses (IPv4), skipping
+        loopback and link-local. Cross-platform: `ip -br addr` (Linux) and
+        `ipconfig` (Windows)."""
+        import re
+        import subprocess
+        ips: list[str] = []
+        try:
+            out = subprocess.run(["ip", "-br", "addr"], capture_output=True, text=True, timeout=10).stdout
+            for line in out.splitlines():
+                # e.g. eth0  UP  192.168.1.10/24  ...
+                m = re.search(r"(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/\d+", line)
+                if m:
+                    ip = m.group(1)
+                    if not ip.startswith(("127.", "169.254.")):
+                        ips.append(ip)
+        except Exception:
+            pass
+        if not ips:
+            try:
+                out = subprocess.run(["ipconfig"], capture_output=True, text=True, timeout=10).stdout
+                for m in re.finditer(r"IPv4 Address[.\s]*: (\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", out):
+                    ip = m.group(1)
+                    if not ip.startswith(("127.", "169.254.")):
+                        ips.append(ip)
+            except Exception:
+                pass
+        # De-dup while preserving order.
+        seen = set()
+        return [x for x in ips if not (x in seen or seen.add(x))]
+
+    def _report_ips(self):
+        try:
+            ips = self._collect_ips()
+            if ips and self.ws is not None:
+                self.ws.send_text(json.dumps({"t": "ips", "token": self.token, "ips": ips}))
+        except Exception:
+            pass
+
+    def on_open(self, ws):
+        print(f"[agent] connected to {self.url}.")
+        self._report_ips()
+        # Periodic heartbeat so proxies/load-balancers don't drop the idle socket.
+        def _hb():
+            import threading
+            while True:
+                try:
+                    if ws.sock is not None and ws.sock.connected:
+                        ws.send_text(json.dumps({"t": "hb"}))
+                except Exception:
+                    pass
+                time.sleep(HEARTBEAT_INTERVAL)
+        threading.Thread(target=_hb, daemon=True).start()
+
     def on_message(self, ws, raw):
         try:
             msg = json.loads(raw)
@@ -253,7 +309,7 @@ class AgentClient:
             try:
                 self.ws = websocket.WebSocketApp(
                     self.url,
-                    on_open=lambda ws: print("[agent] connected."),
+                    on_open=self.on_open,
                     on_close=lambda ws, *a: print("[agent] disconnected."),
                     on_message=self.on_message,
                 )
@@ -261,7 +317,7 @@ class AgentClient:
             except Exception as e:
                 print("[agent] error:", e)
             print("[agent] reconnecting in 5s ...")
-            time.sleep(5)
+            time.sleep(RECONNECT_DELAY)
 
 
 def main() -> None:

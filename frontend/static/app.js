@@ -257,12 +257,18 @@ document.getElementById("device-search")?.addEventListener("input", () => { load
 document.getElementById("device-tag-filter")?.addEventListener("change", () => { loadStatus(); });
 
 // ----------------------------- Device modal --------------------------------
-function openModal(id = null) {
+function openModal(id = null, opts = {}) {
   const modal = document.getElementById("modal");
   modal.classList.remove("hidden");
   document.getElementById("modal-title").textContent = id ? "Edit Device" : "Add Device";
   document.getElementById("device-id").value = id || "";
   if (!id) document.getElementById("device-form").reset();
+  if (!id && opts.host) {
+    document.getElementById("f-host").value = opts.host;
+    if (opts.name) document.getElementById("f-name").value = opts.name;
+    if (opts.os) document.getElementById("f-os").value = opts.os;
+    if (opts.notes) document.getElementById("f-notes").value = opts.notes;
+  }
   // Populate bastion (jump host) select with other devices.
   const sel = document.getElementById("f-bastion");
   const editingId = id;
@@ -1499,8 +1505,16 @@ async function loadAgents() {
       <div class="sched-card">
         <div class="sc-name">${escapeHtml(a.name)} ${a.connected ? '<span style="color:var(--ok)">● online</span>' : '<span class="muted">○ offline</span>'}</div>
         <div class="muted" style="font-size:12px">Token: <code>${escapeHtml(a.token)}</code> · ${a.device_id ? "linked to device #" + a.device_id : "unlinked"}</div>
-        <div class="muted" style="font-size:12px">Last seen: ${a.last_seen ? new Date(a.last_seen).toLocaleString() : "-"}</div>
-        <div class="di-actions">
+        <div class="muted" style="font-size:12px">Last seen: ${fmtTime(a.last_seen)}</div>
+        ${a.ips && a.ips.length ? `
+          <div style="margin-top:8px">
+            <div class="muted" style="font-size:11px;margin-bottom:4px">Device IPs (click to add):</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${a.ips.map(ip => `<button class="btn btn-ghost btn-sm" data-add-from-ip="${escapeHtml(ip)}" title="Add device with this IP">＋ ${escapeHtml(ip)}</button>`).join("")}
+            </div>
+          </div>` : ''}
+        <div class="di-actions" style="margin-top:8px">
+          <button class="btn btn-ghost btn-icon-text" data-bootstrap-agent="${a.id}" title="Get setup command">${icon("copy")}<span>Setup</span></button>
           <button class="btn btn-danger btn-icon" data-del-agent="${a.id}" title="Delete agent">${icon("trash")}</button>
         </div>
       </div>`).join("");
@@ -1509,6 +1523,10 @@ async function loadAgents() {
       await api(`/api/agents/${b.dataset.delAgent}`, { method: "DELETE" });
       loadAgents();
     });
+    box.querySelectorAll("[data-add-from-ip]").forEach(b => b.onclick = () => {
+      openModal(null, { host: b.dataset.addFromIp, name: b.dataset.addFromIp, notes: `via agent #${b.closest('.sched-card').querySelector('.sc-name').textContent.trim().split(' ')[0]}` });
+    });
+    box.querySelectorAll("[data-bootstrap-agent]").forEach(b => b.onclick = () => openBootstrap(b.dataset.bootstrapAgent));
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
 document.getElementById("agent-add").onclick = () => {
@@ -1524,12 +1542,36 @@ document.getElementById("agent-save").onclick = async () => {
   const device_id = document.getElementById("agent-device").value || null;
   if (!name) { showToast("Name required", "error"); return; }
   try {
-    await api("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, device_id: device_id ? parseInt(device_id, 10) : null }) });
+    const ag = await api("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, device_id: device_id ? parseInt(device_id, 10) : null }) });
     document.getElementById("agent-modal").classList.add("hidden");
     loadAgents();
-    showToast("Agent created — copy the token to the device script", "ok");
+    openBootstrap(ag.id);
   } catch (e) { showToast(e.message, "error"); }
 };
+
+async function openBootstrap(agentId) {
+  try {
+    const b = await api(`/api/agents/${agentId}/bootstrap`);
+    document.getElementById("bs-oneliner").value = b.oneliner || "";
+    document.getElementById("bs-ps1").value = b.powershell_oneliner || "";
+    document.getElementById("bs-sh").value = b.script_sh || "";
+    document.getElementById("bs-ps1file").value = b.script_ps1 || "";
+    document.getElementById("agent-bootstrap-modal").classList.remove("hidden");
+  } catch (e) { showToast(e.message, "error"); }
+}
+
+document.getElementById("agent-bootstrap-close").onclick = () =>
+  document.getElementById("agent-bootstrap-modal").classList.add("hidden");
+
+// Copy-to-clipboard for the bootstrap textareas.
+document.querySelectorAll("[data-copy]").forEach(btn => {
+  btn.onclick = async () => {
+    const el = document.getElementById(btn.dataset.copy);
+    if (!el) return;
+    try { await navigator.clipboard.writeText(el.value); showToast("Copied", "ok"); }
+    catch { el.select(); document.execCommand("copy"); showToast("Copied", "ok"); }
+  };
+});
 
 // ----------------------------- Terminal (multi-tab) -------------------------
 let tabSeq = 0;
@@ -2013,13 +2055,17 @@ async function loadSettings() {
     set("set-interval", s.monitor_interval);
     setCheck("set-public", s.public_dashboard);
     setCheck("set-oidc", s.oidc_enabled);
-    const tz = document.getElementById("set-timezone");
+    set("set-retention", s.session_retention_days ?? 90);
+    set("set-agent-hb", s.agent_heartbeat ?? 15);
+    set("set-agent-rc", s.agent_reconnect ?? 5);
     if (tz) tz.value = s.timezone || "Asia/Jakarta";
-    // Appearance: reflect saved theme.
+    // Appearance: reflect saved theme (server setting, fallback to localStorage).
     const themeSel = document.getElementById("set-theme");
     if (themeSel) {
-      let saved = "dark";
-      try { saved = localStorage.getItem("shelldeck_theme") || "dark"; } catch (_) {}
+      let saved = s.theme || "dark";
+      if (!["dark", "light", "premium"].includes(saved)) {
+        try { saved = localStorage.getItem("shelldeck_theme") || "dark"; } catch (_) {}
+      }
       themeSel.value = ["dark", "light", "premium"].includes(saved) ? saved : "dark";
       applyBrandLogo(themeSel.value);
     }
@@ -2049,6 +2095,10 @@ document.getElementById("set-save").onclick = async () => {
   public_dashboard: document.getElementById("set-public").checked,
   oidc_enabled: document.getElementById("set-oidc").checked,
   timezone: document.getElementById("set-timezone").value || "Asia/Jakarta",
+  theme: document.getElementById("set-theme").value || "dark",
+  session_retention_days: parseInt(document.getElementById("set-retention").value, 10) ?? 90,
+  agent_heartbeat: parseInt(document.getElementById("set-agent-hb").value, 10) || 15,
+  agent_reconnect: parseInt(document.getElementById("set-agent-rc").value, 10) || 5,
 };
   const tok = document.getElementById("set-tg-token").value.trim();
   if (tok) payload.telegram_token = tok;

@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import SessionLocal, get_db
-from app.models import Device, ScheduledTask, User
+from app.models import Device, ScheduledTask, User, SettingsRow, SessionLog
 from app.routers.bulk import _run_on_device
 from app.schemas import ScheduledTaskCreate, ScheduledTaskOut, ScheduledTaskUpdate
 from app.security import operator_only
@@ -194,6 +194,17 @@ async def scheduler_loop() -> None:
                 ).all()
                 for task in due:
                     await run_task(task, db)
+                # Session-log retention: purge old session records so the DB
+                # doesn't grow unbounded (recordings can be large). Respect the
+                # global setting (0 = keep forever).
+                settings = db.get(SettingsRow, 1)
+                if settings and settings.session_retention_days > 0:
+                    cutoff = now - timedelta(days=settings.session_retention_days)
+                    deleted = db.query(SessionLog).filter(
+                        SessionLog.started_at < cutoff
+                    ).delete()
+                    if deleted:
+                        db.commit()
             finally:
                 db.close()
         except asyncio.CancelledError:

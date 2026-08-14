@@ -210,6 +210,10 @@ class SettingsOut(BaseModel):
     public_dashboard: bool
     oidc_enabled: bool
     timezone: str = "Asia/Jakarta"
+    theme: str = "dark"
+    session_retention_days: int = 90
+    agent_heartbeat: int = 15
+    agent_reconnect: int = 5
 
 
 class SettingsUpdate(BaseModel):
@@ -230,6 +234,10 @@ class SettingsUpdate(BaseModel):
     public_dashboard: bool | None = None
     oidc_enabled: bool | None = None
     timezone: str | None = None
+    theme: str | None = None
+    session_retention_days: int | None = None
+    agent_heartbeat: int | None = None
+    agent_reconnect: int | None = None
 
 
 # ------------------------------- Scheduled tasks ----------------------------

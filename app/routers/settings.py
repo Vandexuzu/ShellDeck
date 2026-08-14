@@ -79,9 +79,19 @@ def update_settings(
             row.timezone = payload.timezone
         except Exception:
             raise HTTPException(status_code=422, detail="Invalid timezone")
+    if payload.theme is not None:
+        if payload.theme not in ("dark", "light", "premium"):
+            raise HTTPException(status_code=422, detail="Invalid theme")
+        row.theme = payload.theme
+    if payload.session_retention_days is not None:
+        row.session_retention_days = max(0, min(payload.session_retention_days, 3650))
+    if payload.agent_heartbeat is not None:
+        row.agent_heartbeat = max(5, min(payload.agent_heartbeat, 300))
+    if payload.agent_reconnect is not None:
+        row.agent_reconnect = max(1, min(payload.agent_reconnect, 120))
     db.commit()
     db.refresh(row)
-    log_audit(db, _, "settings_update", f"monitor_interval={row.monitor_interval} public_dashboard={row.public_dashboard} oidc_enabled={row.oidc_enabled} timezone={row.timezone}")
+    log_audit(db, _, "settings_update", f"monitor_interval={row.monitor_interval} public_dashboard={row.public_dashboard} oidc_enabled={row.oidc_enabled} timezone={row.timezone} theme={row.theme} session_retention_days={row.session_retention_days} agent_heartbeat={row.agent_heartbeat} agent_reconnect={row.agent_reconnect}")
     return row
 
 
