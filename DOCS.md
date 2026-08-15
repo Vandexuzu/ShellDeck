@@ -9,7 +9,8 @@ installation, configuration, API reference, data model, RBAC, and troubleshootin
 
 **ShellDeck** is a self-hosted web panel for managing, monitoring, and SSH-ing into
 your servers from any browser. One Docker Compose file + one SQLite file — no cloud,
-no agent on the target devices (agentless), no cost.
+no mandatory agent on the target devices (agentless by default; optional agents for
+NAT/firewall hosts), no cost.
 
 | Item | Value |
 |------|-------|
@@ -20,8 +21,10 @@ no agent on the target devices (agentless), no cost.
 | DB | SQLite (`data/shelldeck.db`) |
 | Author | Vandexuzu |
 
-Philosophy: **$0, agentless, self-hosted.** ShellDeck connects to devices over
-regular SSH (asyncssh) — target devices need to install nothing.
+Philosophy: **$0, self-hosted.** ShellDeck connects to devices over
+regular SSH (asyncssh) by default — target devices need to install nothing. For hosts
+behind NAT/firewall, an **optional agent** (`agent/client.py`) opens an outbound
+WebSocket tunnel so ShellDeck can still reach it (shell, files, monitoring).
 
 ---
 
@@ -46,13 +49,18 @@ Target device (password / SSH-key / bastion / Tailscale / agent-tunnel)
 ```
 
 **Key points:**
-- **Terminal** runs over a WebSocket (`/api/terminal/{id}`) bridging xterm.js ⇄ a
-  remote PTY via asyncssh. Multi-tab, split panes, survives reload.
+- **Terminal** runs over a WebSocket — `/api/terminal/{id}` (direct SSH) or
+  `/api/agents/terminal/{id}` (through an agent tunnel). Both bridge xterm.js ⇄ a
+  remote PTY. Multi-tab, split panes, survives reload.
 - **Monitor** runs as a background loop: every `monitor_interval` seconds it checks
-  CPU/mem/disk/uptime via SSH; if a device is down it fires an alert.
+  CPU/mem/disk/uptime via SSH (or, for agent-only devices, through the agent tunnel);
+  if a device is down it fires an alert.
 - **Scheduler** runs `ScheduledTask` entries (interval or cron) via parallel SSH.
-- **Agent relay**: a device behind NAT dials *out* over a WebSocket (`/ws`); ShellDeck
-  relays the shell and file manager through that live tunnel — no inbound port needed.
+- **Agent relay**: a device behind NAT dials *out* over a WebSocket (`/api/agents/ws`);
+  ShellDeck relays the shell (`/api/agents/terminal/{id}`), file manager
+  (`/api/agents/fs/{id}`), and monitoring through that live tunnel — no inbound port
+  needed. The agent auto-reports its OS so metrics use the right command set
+  (PowerShell on Windows, `cat/free/df` on Linux).
 
 ---
 
@@ -122,9 +130,9 @@ within 15 minutes → temporary lockout (HTTP 429). Tunable in `app/main.py`
 | `devices` | owner_id, name, host, port, username, auth_method, password_enc (Fernet), private_key_enc (Fernet), bastion_id, tags, tailscale, os, notes, last_seen |
 | `session_logs` | device_id, user_id, started_at, ended_at, transcript, commands, recording (asciinema JSON) |
 | `snippets` | owner_id, name, command, category |
-| `settings` | singleton (id=1): notifications (telegram/discord/ntfy/gotify/slack/email/webhook), monitor_interval, public_dashboard, oidc_enabled |
+| `settings` | singleton (id=1): notifications (telegram/discord/ntfy/gotify/slack/email/webhook), monitor_interval, public_dashboard, oidc_enabled, theme, session_retention_days (0 = keep forever), agent_heartbeat (s), agent_reconnect (s) |
 | `scheduled_tasks` | owner_id, command, device_ids (JSON), interval_minutes, cron, enabled, run_once, run_at, last_run, next_run, last_output |
-| `agents` | owner_id, name, token (shared secret), device_id, connected, last_seen — for NAT relay |
+| `agents` | owner_id, name, token (shared secret), device_id (linked device), connected, last_seen, ips (JSON list of reported interface IPs), os (reported OS: windows/linux/darwin) — for NAT relay |
 | `audit_log` | user_id, username, action (login/login_failed/logout/…), detail, ip, created_at |
 | `topology_snapshots` | scan_time, nodes_json, edges_json, discovered_json |
 
@@ -159,8 +167,12 @@ Add hosts (password / SSH-key), tag them, filter by tag, bastion (jump host), Ta
 auto-discover (`.ts.net`). **No device limit** — only server resources bound it.
 
 ### 7.2 Live Monitor
-Checks CPU/mem/disk/uptime via SSH; cards turn red when a device is down. Interval is
-set in Settings.
+Checks CPU/mem/disk/uptime. For **direct-SSH** devices it uses asyncssh; for
+**agent-only** devices it collects the same metrics *through the agent tunnel*. OS is
+auto-detected: Linux/macOS use `uptime`/`cat /proc/loadavg`/`free`/`df`, **Windows** uses
+PowerShell (Win32_Processor load %, FreePhysicalMemory, Get-PSDrive C, LastBootUpTime) —
+uptime is formatted uniformly (`up 3 days, 8 hours, 51 minutes`). Cards turn red when a
+device is down. Interval is set in Settings.
 
 ### 7.3 In-browser Shell
 Real PTY (xterm.js ⇄ asyncssh over WebSocket). Multi-tab, split panes, survives reload.
@@ -191,8 +203,44 @@ Telegram · Discord · ntfy · Gotify · Slack · Email (SMTP) · custom webhook
 Enable in Settings → Notifications, set the interval, then "Send test".
 
 ### 7.11 Agent Relay (NAT)
-A device behind a firewall dials out (`agent/client.py` → `/ws`). ShellDeck relays the
-shell **and** file manager through that tunnel — no inbound port on the device.
+
+A device behind a firewall dials out (`agent/client.py` → `/api/agents/ws`). ShellDeck
+relays the shell **and** file manager **and** monitoring through that tunnel — no
+inbound port on the device.
+
+**Add an agent:** Agents → Add Agent → copy a **bootstrap helper** (Linux/macOS/Termux
+one-liner, Windows PowerShell one-liner, or standalone `run_agent.sh` / `run_agent.ps1`).
+Each helper injects the server URL, the agent token, and the **heartbeat / reconnect**
+values from Global Settings, so the device connects with zero manual editing:
+
+```powershell
+# Windows example (bootstrap PowerShell one-liner)
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Vandexuzu/ShellDeck/main/agent/client.py' -OutFile shelldeck_agent.py
+pip install websocket-client
+$env:SHELLDECK_URL='https://shelldeck.example.com'; $env:SHELLDECK_AGENT_TOKEN='<token>'; $env:SHELLDECK_HEARTBEAT='15'; $env:SHELLDECK_RECONNECT='5'
+python shelldeck_agent.py
+```
+
+**Agent IP discovery:** on connect the agent reports its local interface IPs. On the
+Agents tab each IP has a **+ Add device** button that pre-fills a new device and
+**auto-links it to that agent's tunnel** — so Shell / Files / Monitoring go through the
+agent, not direct SSH.
+
+**OS auto-detection:** the agent reports its OS (`windows` / `linux` / `darwin`). Devices
+reached only via an agent are monitored *through* the tunnel; Windows devices use
+PowerShell metric commands, Linux/macOS use `cat/free/df`. A failed metric never marks
+the device unreachable — the live tunnel proves reachability.
+
+**Global Settings → Agent:**
+- `agent_heartbeat` (s, default 15) — interval the agent pings the server (keeps idle
+  WebSocket alive behind proxies).
+- `agent_reconnect` (s, default 5) — backoff before retrying after a dropout.
+
+**Global Settings → General:**
+- `theme` — UI appearance (`dark` / `light` / `premium`), stored server-side (not just
+  localStorage) so it follows the admin's choice on every device.
+- `session_retention_days` (default 90, `0` = keep forever) — session-log retention;
+  old `session_logs` rows are purged by the scheduler loop.
 
 ### 7.12 Public Dashboard
 Read-only page at `/public` (no login). Host IPs are masked (e.g. `10.0.0.x`).
@@ -296,7 +344,16 @@ Base: `http://<host>:8000`. All `/api/*` endpoints require an
 `GET /scan?subnet=&ports=` (custom scan, admin-only, audit-logged)
 
 ### Agents (`/api/agents/*`)
-`GET /` · `POST /` (create agent + token) · `DELETE /{agent_id}` · `WebSocket /ws` (tunnel)
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/agents/` | list agents (with `connected`, `ips`, `os`, `device_id`) |
+| POST | `/api/agents/` | create agent + token (`device_id` optional) |
+| PUT | `/api/agents/{agent_id}` | rename / link-unlink to a device (`device_id`) |
+| DELETE | `/api/agents/{agent_id}` | remove agent |
+| GET | `/api/agents/{agent_id}/bootstrap` | copy-paste helpers (one-liner / PowerShell / sh / ps1) |
+| WebSocket | `/api/agents/ws?token=` | outbound tunnel from the device |
+| WebSocket | `/api/agents/terminal/{device_id}` | interactive shell through the agent |
+| POST | `/api/agents/fs/{device_id}` | file manager op (list/read/write/mkdir/delete/stat/exec) through the agent |
 
 ### Public (`/api/public/*`)
 `GET /status` (read-only, IP masked) — if `public_dashboard=true`
@@ -346,7 +403,10 @@ Tests cover auth, RBAC, device CRUD, tags, bulk, docker, settings, alerts, sched
 ## 12. Roadmap
 
 **Shipped:** terminal search, session re-run, command palette, upload progress,
-snippet categories, app identity, Network Topology + custom scan.
+snippet categories, app identity, Network Topology + custom scan, Windows monitoring
+(auto OS detect + PowerShell), Agent IP discovery (+ auto-link), Agent bootstrap helpers,
+agent-aware monitoring & shell (agent-only devices no longer show unreachable), Global
+Settings (theme, session retention, agent heartbeat & reconnect).
 
 **Planned:** resource history graphs, per-device public share links, API bot tokens,
 password reset flow, mobile terminal touch optimisations.
@@ -357,7 +417,7 @@ password reset flow, mobile terminal touch optimisations.
 
 - Discussion: https://t.me/ShellDeck
 - Issues: https://github.com/Vandexuzu/ShellDeck/issues
-- Contributions must keep the **$0, agentless, self-hosted** principle. Run `pytest`
-  before opening a PR.
+- Contributions must keep the **$0, self-hosted** principle (agentless by default,
+  optional agents only for NAT/firewall hosts). Run `pytest` before opening a PR.
 
 **Author:** Vandexuzu · https://github.com/Vandexuzu · MIT License
