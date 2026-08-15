@@ -29,11 +29,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import pty
 import select
 import struct
 import sys
-import termios
 import threading
 import time
 
@@ -42,49 +40,70 @@ try:
 except ImportError:
     sys.exit("Missing dependency: pip install websocket-client")
 
+# POSIX-only modules (PTY/termios/fcntl). Guard so the agent also runs on Windows.
+IS_WINDOWS = sys.platform.startswith("win")
+if not IS_WINDOWS:
+    import pty
+    import termios
+    import fcntl
+
+
 # Heartbeat + reconnect tunables (overridable via env, pushed from server settings).
 HEARTBEAT_INTERVAL = float(os.environ.get("SHELLDECK_HEARTBEAT", "15"))
 RECONNECT_DELAY = float(os.environ.get("SHELLDECK_RECONNECT", "5"))
 
 
-def open_pty_shell() -> tuple[int, int, list]:
-    """Spawn a login shell in a fresh PTY (thread-safe). Returns (master_fd, pid, argv)."""
-    shell = os.environ.get("SHELL", "/bin/bash")
-    master_fd, slave_fd = pty.openpty()
+def _nonblock(fd: int) -> None:
     try:
-        import fcntl
-        flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
-        fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
     except Exception:
         pass
-    pid = os.fork()
-    if pid == 0:
-        os.setsid()
-        os.dup2(slave_fd, 0)
-        os.dup2(slave_fd, 1)
-        os.dup2(slave_fd, 2)
-        if slave_fd > 2:
-            os.close(slave_fd)
-        os.close(master_fd)
-        try:
-            os.execv(shell, [shell, "-i"])
-        except Exception:
-            os._exit(127)
-    os.close(slave_fd)
-    return master_fd, pid, [shell]
 
 
 class Session:
+    """An interactive shell session relayed over the agent WebSocket.
+
+    On POSIX a real PTY is used (arrows/tab-completion/colour all work). On
+    Windows we fall back to a piped `cmd.exe` console (no PTY available), which
+    still relays input/output correctly.
+    """
+
     def __init__(self, ws, cid: int, cols: int, rows: int, init_cmd: str):
         import queue
         self.ws = ws
         self.cid = cid
-        self.master_fd, self.pid, _ = open_pty_shell()
         self.queue: queue.Queue = queue.Queue()
         self.alive = True
+        if not IS_WINDOWS:
+            self._open_posix(init_cmd, cols, rows)
+        else:
+            self._open_windows(init_cmd)
+
+    # ---- POSIX (PTY) -------------------------------------------------------
+    def _open_posix(self, init_cmd: str, cols: int, rows: int) -> None:
+        shell = os.environ.get("SHELL", "/bin/bash")
+        master_fd, slave_fd = pty.openpty()
+        _nonblock(master_fd)
+        pid = os.fork()
+        if pid == 0:
+            os.setsid()
+            os.dup2(slave_fd, 0)
+            os.dup2(slave_fd, 1)
+            os.dup2(slave_fd, 2)
+            if slave_fd > 2:
+                os.close(slave_fd)
+            os.close(master_fd)
+            try:
+                os.execv(shell, [shell, "-i"])
+            except Exception:
+                os._exit(127)
+        os.close(slave_fd)
+        self.master_fd = master_fd
+        self.pid = pid
+        self.proc = None
         try:
             winsize = struct.pack("HHHH", rows, cols, 0, 0)
-            import fcntl
             fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
         except Exception:
             pass
@@ -93,10 +112,10 @@ class Session:
                 os.write(self.master_fd, (init_cmd + "\n").encode())
             except OSError:
                 pass
-        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread = threading.Thread(target=self._run_posix, daemon=True)
         self.thread.start()
 
-    def run(self) -> None:
+    def _run_posix(self) -> None:
         try:
             while self.alive:
                 r, _, _ = select.select([self.master_fd], [], [], 0.1)
@@ -113,7 +132,6 @@ class Session:
                         self.ws.send_text(json.dumps({"t": "data", "cid": self.cid, "data": data.decode(errors="replace")}))
                     except Exception:
                         break
-                # Drain operator input queued from on_message.
                 while not self.queue.empty():
                     try:
                         item = self.queue.get_nowait()
@@ -131,7 +149,6 @@ class Session:
                     elif mtype == "resize":
                         try:
                             winsize = struct.pack("HHHH", item.get("rows", 24), item.get("cols", 80), 0, 0)
-                            import fcntl
                             fcntl.ioctl(self.master_fd, termios.TIOCSWINSZ, winsize)
                         except Exception:
                             pass
@@ -152,6 +169,78 @@ class Session:
                 os.kill(self.pid, signal.SIGTERM)
             except Exception:
                 pass
+
+    # ---- Windows (piped cmd.exe) ------------------------------------------
+    def _open_windows(self, init_cmd: str) -> None:
+        import subprocess
+        comspec = os.environ.get("COMSPEC", "cmd.exe")
+        self.proc = subprocess.Popen(
+            [comspec],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+            bufsize=0,
+        )
+        self.master_fd = None
+        self.pid = self.proc.pid
+        if init_cmd and self.proc.stdin:
+            try:
+                self.proc.stdin.write((init_cmd + "\n").encode("utf-8", errors="replace"))
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                pass
+        self.thread = threading.Thread(target=self._run_windows, daemon=True)
+        self.thread.start()
+
+    def _run_windows(self) -> None:
+        import io
+        try:
+            while self.alive and self.proc and self.proc.stdout:
+                data = self.proc.stdout.read(65536)
+                if not data:
+                    break
+                try:
+                    text = data.decode("utf-8", errors="replace") if isinstance(data, (bytes, bytearray)) else data
+                    self.ws.send_text(json.dumps({"t": "data", "cid": self.cid, "data": text}))
+                except Exception:
+                    break
+                while not self.queue.empty():
+                    try:
+                        item = self.queue.get_nowait()
+                    except Exception:
+                        break
+                    if item is None or item.get("t") == "kill":
+                        self.alive = False
+                        break
+                    if item.get("t") == "data" and self.proc.stdin:
+                        try:
+                            self.proc.stdin.write(item.get("data", "").encode("utf-8", errors="replace"))
+                            self.proc.stdin.flush()
+                        except (OSError, ValueError):
+                            pass
+        finally:
+            try:
+                self.ws.send_text(json.dumps({"t": "exit", "cid": self.cid, "code": 0}))
+            except Exception:
+                pass
+            try:
+                if self.proc:
+                    self.proc.terminate()
+            except Exception:
+                pass
+
+    # ---- shared API --------------------------------------------------------
+    def send(self, item: dict) -> None:
+        self.queue.put(item)
+
+    def resize(self, cols: int, rows: int) -> None:
+        # Only meaningful on POSIX (PTY winsize). Windows console auto-tracks.
+        if not IS_WINDOWS:
+            self.queue.put({"t": "resize", "cols": cols, "rows": rows})
+
+    def kill(self) -> None:
+        self.queue.put({"t": "kill"})
 
 
 class AgentClient:
@@ -234,7 +323,7 @@ class AgentClient:
             with self.lock:
                 sess = self.sessions.get(cid)
             if sess is not None:
-                sess.queue.put(msg)
+                sess.send(msg)
 
     # ----- File-system relay (for devices behind NAT reached via agent) -----
     def _handle_fs(self, ws, msg):
