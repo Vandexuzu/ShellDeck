@@ -87,15 +87,20 @@ def _to_out(device: Device, db: Session | None = None) -> DeviceOut:
         from app.routers.agents import _LIVE
         try:
             agent = db.scalar(select(Agent).where(Agent.device_id == device.id))
-            out.has_agent = bool(agent and agent.token in _LIVE)
+            # True whenever an agent is linked to this device, so the UI routes
+            # Shell/Files through the agent tunnel. The live `_LIVE` check is
+            # reported separately via `agent_connected` for status display.
+            out.has_agent = bool(agent)
+            out.agent_connected = bool(agent and agent.token in _LIVE)
         except Exception:
             out.has_agent = False
+            out.agent_connected = False
     return out
 
 
 @router.get("", response_model=list[DeviceOut])
-def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[Device]:
-    return list(db.scalars(_visible_devices(db, user)))
+def list_devices(db: Session = Depends(get_db), user: User = Depends(get_current_user)) -> list[DeviceOut]:
+    return [_to_out(d, db) for d in db.scalars(_visible_devices(db, user)).all()]
 
 
 @router.post("", response_model=DeviceOut, status_code=status.HTTP_201_CREATED)

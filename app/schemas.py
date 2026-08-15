@@ -95,6 +95,7 @@ class DeviceOut(BaseModel):
     last_seen: datetime | None
     created_at: datetime
     has_agent: bool = False
+    agent_connected: bool = False
 
 
 class SessionOut(BaseModel):
