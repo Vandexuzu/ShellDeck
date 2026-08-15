@@ -2,7 +2,7 @@
 
 **Self-hosted web panel to manage, monitor & SSH into your servers from any browser.**
 
-Open a real terminal in the browser, run commands across hosts at once, transfer files over SFTP, manage Docker, schedule jobs, and get alerts when a device goes down. **$0, agentless, one Docker Compose file.**
+Open a real terminal in the browser, run commands across hosts at once, transfer files over SFTP, manage Docker, schedule jobs, and get alerts when a device goes down. **$0, one Docker Compose file — agentless by default, with optional agents for NAT/firewall hosts.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org)
@@ -10,7 +10,7 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 [![PWA](https://img.shields.io/badge/PWA-installable-purple.svg)](https://github.com/Vandexuzu/ShellDeck)
 [![CI](https://github.com/Vandexuzu/ShellDeck/actions/workflows/ci.yml/badge.svg)](https://github.com/Vandexuzu/ShellDeck/actions/workflows/ci.yml)
 
-> 💸 **No cloud. No agents. No per-seat pricing.** One Compose file + a SQLite file and you're done.
+> 💸 **No cloud. No per-seat pricing. Optional agents (only for hosts behind NAT/firewall).** One Compose file + a SQLite file and you're done.
 > 🔒 Credentials encrypted at rest (Fernet). Every shell session is audit-logged.
 
 ---
@@ -32,6 +32,9 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 | ⏰ **Scheduler**        | Recurring or run-once jobs per device                                                                   |
 | 🔔 **Alerts**           | Telegram · Discord · ntfy · Gotify · Slack · Email · webhook                                            |
 | 🕸 **Agent relay**      | Reach devices behind NAT/firewall — full shell **and** file manager over an outbound WebSocket          |
+| 🪟 **Windows support**  | Auto-detects OS and monitors Windows over PowerShell (CPU / memory / disk / uptime) — no agent needed when reachable, via agent tunnel when not |
+| 🔎 **Agent IP discovery** | Agents report their local interface IPs; one click turns a discovered IP into a device (auto-linked to the agent tunnel) |
+| 🚀 **Agent bootstrap** | Copy-paste one-liner / PowerShell / bash / ps1 that downloads the client and connects — heartbeat & reconnect pulled from global settings |
 | 🌐 **Public dashboard** | Read-only status page at `/public` (no login) — host IPs are masked (e.g. `10.0.0.x`)                   |
 | 🕸 **Network Topology**    | Live LAN scanner: auto-detect subnet, discover hosts, draw an interactive graph (pan/zoom)                |
 | 🔎 **Custom scan**        | Scan any `/24` subnet with custom ports; enriched data: hostname, device type, vendor, MAC, latency, web  |
@@ -97,7 +100,36 @@ Each discovered host is enriched with:
 
 ---
 
-## 🚀 Quick start
+## 🕸 Agents (reach devices behind NAT / firewall)
+
+An **agent** is a tiny Python client (`agent/client.py`) that runs **on the target device** and opens an *outbound* WebSocket to ShellDeck. Because the connection is initiated from the device, no inbound port or port-forward is needed — perfect for CGNAT / Tailscale-only / strict-firewall hosts.
+
+### What an agent gives you
+- **Interactive shell** in the browser (relayed through the tunnel).
+- **File manager** (SFTP-equivalent) over the same tunnel.
+- **Monitoring** (CPU / memory / disk / uptime) collected *through* the agent — the device does **not** need to be SSH-reachable from the server.
+- **Windows support** — the agent runs on Windows (cmd.exe) too; OS is auto-detected so metrics use PowerShell vs. Linux commands.
+
+### Add an agent
+1. **Agents → Add Agent** → give it a name.
+2. Copy one of the **bootstrap helpers** (auto-generated per agent):
+   - **Linux / macOS** one-liner
+   - **Windows PowerShell** one-liner
+   - Standalone `run_agent.sh` / `run_agent.ps1`
+   Each injects the server URL, the agent token, and the **heartbeat / reconnect** values from Global Settings.
+3. Run it on the target device (`pip install websocket-client` first).
+
+### Agent IP discovery
+When the agent connects it reports its local interface IPs. On the **Agents** tab each IP shows a **+ Add device** button that pre-fills a new device and **auto-links it to that agent's tunnel** — so Shell / Files / Monitoring go through the agent, not direct SSH.
+
+### Global settings for agents
+**Settings → Agent**:
+- **Heartbeat (s)** — how often the agent pings the server (keeps idle WebSocket alive behind proxies). Default `15`.
+- **Reconnect (s)** — backoff before the agent retries after a dropout. Default `5`.
+
+> 💡 The agent is *optional*. Devices you can already SSH/SFTP to work agentlessly — agents are only needed for hosts that are unreachable from the ShellDeck server.
+
+---
 
 ```bash
 cp .env.example .env        # set a STRONG SECRET_KEY
@@ -146,7 +178,9 @@ Browser (xterm.js + vanilla JS, PWA)
    │  HTTPS / WebSocket
    ▼
 FastAPI ── asyncssh ──► your devices (agentless)
-   ├─ /api/terminal/{id}   interactive shell
+   ├─ /api/terminal/{id}   interactive shell (direct SSH)
+   ├─ /api/agents/terminal/{id}  interactive shell (via agent tunnel)
+   ├─ /api/agents/fs/{id}  file manager (via agent tunnel)
    ├─ /api/bulk            parallel SSH
    ├─ /api/docker          remote docker CLI
    ├─ /api/files/{id}      SFTP browse/upload/download
@@ -210,6 +244,11 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] App identity (version, author, GitHub link in UI)
 - [x] Network Topology scanner (interactive graph + enriched host table)
 - [x] Custom subnet/port scan with audit logging
+- [x] Windows monitoring (auto OS detect + PowerShell metrics; uniform uptime format)
+- [x] Agent IP discovery (+ auto-link device to agent tunnel)
+- [x] Agent bootstrap helpers (one-liner / PowerShell / sh / ps1 with settings-driven heartbeat & reconnect)
+- [x] Agent-aware monitoring & shell (devices reachable only via agent no longer show unreachable)
+- [x] Global Settings: theme, session-log retention, agent heartbeat & reconnect
 
 **Earlier milestones**
 
