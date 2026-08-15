@@ -64,6 +64,7 @@ class AgentOut(BaseModel):
     device_id: int | None
     connected: bool
     ips: list[str] | None = None
+    os: str | None = None
     last_seen: datetime | None
     created_at: datetime
 
@@ -78,6 +79,7 @@ def list_agents(db: Session = Depends(get_db), user: User = Depends(operator_onl
             "id": a.id, "name": a.name, "token": a.token, "device_id": a.device_id,
             "connected": a.connected,
             "ips": (json.loads(a.ips) if a.ips else None),
+            "os": a.os,
             "last_seen": a.last_seen, "created_at": a.created_at,
         })
     return out
@@ -93,6 +95,7 @@ def create_agent(payload: AgentCreate, db: Session = Depends(get_db), user: User
     return {
         "id": agent.id, "name": agent.name, "token": agent.token, "device_id": agent.device_id,
         "connected": agent.connected, "ips": None,
+        "os": agent.os,
         "last_seen": agent.last_seen, "created_at": agent.created_at,
     }
 
@@ -135,6 +138,7 @@ def update_agent(agent_id: int, payload: AgentUpdate, db: Session = Depends(get_
         "id": agent.id, "name": agent.name, "token": agent.token,
         "device_id": agent.device_id, "connected": agent.connected,
         "ips": json.loads(agent.ips) if agent.ips else None,
+        "os": agent.os,
         "last_seen": agent.last_seen, "created_at": agent.created_at,
     }
 
@@ -289,6 +293,8 @@ async def _route_agent_frame(raw: str) -> None:
                     ag = dbs.scalar(select(Agent).where(Agent.token == token))
                     if ag is not None:
                         ag.ips = json.dumps(reported)
+                        if msg.get("os"):
+                            ag.os = str(msg.get("os"))[:32]
                         dbs.commit()
         except Exception:
             pass

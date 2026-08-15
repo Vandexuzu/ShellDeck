@@ -174,6 +174,7 @@ class Agent(Base):
     last_seen: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     connected: Mapped[bool] = mapped_column(default=False)
     ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of device IPs reported by the agent
+    os: Mapped[str | None] = mapped_column(String(32), nullable=True)  # OS reported by the agent (windows/linux/darwin)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     owner: Mapped["User"] = relationship()

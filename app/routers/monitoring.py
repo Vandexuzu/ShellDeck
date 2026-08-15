@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.models import Device, User
+from app.models import Device, User, Agent
 from app.routers.devices import connect_device, load_credentials, _visible_devices, _can_view
 from app.routers.agents import device_agent_token, agent_exec_relay
 from app.schemas import DeviceStatus
@@ -36,7 +36,10 @@ def _fmt_uptime(days: int, hours: int, minutes: int) -> str:
 
 async def _collect_via_agent(device: Device, db: Session) -> DeviceStatus:
     """Collect metrics for a device reached only through its agent tunnel
-    (no inbound SSH). Runs the same metric commands via the agent exec relay."""
+    (no inbound SSH). Runs the same metric commands via the agent exec relay.
+    Uses the OS reported by the agent itself (not the device's stored `os`,
+    which may be wrong), and never marks the device unreachable just because a
+    single metric command failed — the live tunnel proves reachability."""
     token = device_agent_token(db, device.id)
     if token is None:
         return DeviceStatus(
@@ -44,13 +47,20 @@ async def _collect_via_agent(device: Device, db: Session) -> DeviceStatus:
             reachable=False, message="Agent not connected", tailscale=device.tailscale,
             os=(device.os or None),
         )
+    # Use the agent's reported OS (authoritative for the tunnel endpoint).
     os_kind = (device.os or "").lower()
-    if not os_kind:
-        try:
-            out = await agent_exec_relay(device.id, "uname -s", db, timeout=20)
-            os_kind = "windows" if "MINGW" in out.upper() or "CYGWIN" in out.upper() else "linux"
-        except Exception:
-            os_kind = "linux"
+    try:
+        agent = db.scalar(select(Agent).where(Agent.token == token))
+        if agent and agent.os:
+            os_kind = agent.os.lower()
+    except Exception:
+        pass
+    if not os_kind or os_kind not in ("windows", "linux", "darwin"):
+        os_kind = "linux"
+    reachable = True
+    message = ""
+    cpu_load = mem_pct = disk_pct = None
+    uptime = None
     try:
         if os_kind == "windows":
             ps = (
@@ -65,8 +75,6 @@ async def _collect_via_agent(device: Device, db: Session) -> DeviceStatus:
             import base64
             b64 = base64.b64encode(ps.encode("utf-16-le")).decode()
             out = await agent_exec_relay(device.id, f"powershell -NonInteractive -NoProfile -EncodedCommand {b64}", db, timeout=25)
-            cpu_load = mem_pct = disk_pct = None
-            uptime = None
             if out and "|" in out:
                 parts = out.split("|")
                 try: cpu_load = float(parts[0])
@@ -78,25 +86,35 @@ async def _collect_via_agent(device: Device, db: Session) -> DeviceStatus:
                 try: uptime = _fmt_uptime(int(parts[3]), int(parts[4]), int(parts[5]))
                 except Exception: uptime = None
         else:
-            uptime = (await agent_exec_relay(device.id, "uptime -p", db, timeout=20)).strip() or None
-            load_out = (await agent_exec_relay(device.id, "cat /proc/loadavg", db, timeout=20)).strip()
-            cpu_load = float(load_out.split()[0]) if load_out else None
-            mem = (await agent_exec_relay(device.id, "free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}'", db, timeout=20)).strip()
-            mem_pct = float(mem) if mem else None
-            disk = (await agent_exec_relay(device.id, "df -P / | awk 'NR==2 {gsub(\"%\",\"\"); print $5}'", db, timeout=20)).strip()
-            disk_pct = float(disk) if disk else None
-        return DeviceStatus(
-            id=device.id, name=device.name, host=device.host,
-            reachable=True, cpu_load=cpu_load, mem_used_pct=mem_pct,
-            disk_used_pct=disk_pct, uptime=uptime, tailscale=device.tailscale,
-            os=os_kind,
-        )
+            try:
+                uptime = (await agent_exec_relay(device.id, "uptime -p", db, timeout=20)).strip() or None
+            except Exception:
+                uptime = None
+            try:
+                load_out = (await agent_exec_relay(device.id, "cat /proc/loadavg", db, timeout=20)).strip()
+                cpu_load = float(load_out.split()[0]) if load_out else None
+            except Exception:
+                cpu_load = None
+            try:
+                mem = (await agent_exec_relay(device.id, "free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}'", db, timeout=20)).strip()
+                mem_pct = float(mem) if mem else None
+            except Exception:
+                mem_pct = None
+            try:
+                disk = (await agent_exec_relay(device.id, "df -P / | awk 'NR==2 {gsub(\"%\",\"\"); print $5}'", db, timeout=20)).strip()
+                disk_pct = float(disk) if disk else None
+            except Exception:
+                disk_pct = None
     except Exception as exc:
-        return DeviceStatus(
-            id=device.id, name=device.name, host=device.host,
-            reachable=False, message=f"agent: {exc}"[:200], tailscale=device.tailscale,
-            os=os_kind,
-        )
+        # Tunnel is alive but a relay op failed — keep reachable, note the issue.
+        reachable = True
+        message = f"agent relay warning: {exc}"[:200]
+    return DeviceStatus(
+        id=device.id, name=device.name, host=device.host,
+        reachable=reachable, message=message, cpu_load=cpu_load, mem_used_pct=mem_pct,
+        disk_used_pct=disk_pct, uptime=uptime, tailscale=device.tailscale,
+        os=os_kind,
+    )
 
 
 async def _collect(device: Device, db: Session) -> DeviceStatus:

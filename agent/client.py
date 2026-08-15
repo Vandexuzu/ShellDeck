@@ -285,8 +285,20 @@ class AgentClient:
     def _report_ips(self):
         try:
             ips = self._collect_ips()
-            if ips and self.ws is not None:
-                self.ws.send_text(json.dumps({"t": "ips", "token": self.token, "ips": ips}))
+            payload = {"t": "ips", "token": self.token}
+            if ips:
+                payload["ips"] = ips
+            # Report the agent's own OS so the server monitors it with the right
+            # command set (the device's stored `os` may be wrong/empty).
+            if IS_WINDOWS:
+                payload["os"] = "windows"
+            else:
+                try:
+                    import platform
+                    payload["os"] = platform.system().lower()
+                except Exception:
+                    payload["os"] = "linux"
+            self.ws.send_text(json.dumps(payload))
         except Exception:
             pass
 

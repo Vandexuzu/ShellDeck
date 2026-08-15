@@ -75,6 +75,7 @@ def _migrate_columns() -> None:
             ("snippets", "category", "VARCHAR(64)"),
             ("settings", "timezone", "VARCHAR(64) DEFAULT 'Asia/Jakarta'"),
             ("agents", "ips", "TEXT"),
+            ("agents", "os", "VARCHAR(32)"),
             ("settings", "theme", "VARCHAR(32) DEFAULT 'dark'"),
             ("settings", "session_retention_days", "INTEGER DEFAULT 90"),
             ("settings", "agent_heartbeat", "INTEGER DEFAULT 15"),
