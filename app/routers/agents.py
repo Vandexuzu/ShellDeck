@@ -109,6 +109,36 @@ def delete_agent(agent_id: int, db: Session = Depends(get_db), user: User = Depe
     return {"deleted": agent_id}
 
 
+class AgentUpdate(BaseModel):
+    name: str | None = None
+    device_id: int | None = None  # link/unlink the agent to a device
+
+
+@router.put("/{agent_id}")
+def update_agent(agent_id: int, payload: AgentUpdate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Update an agent — currently supports renaming and linking it to a device
+    (so the device is reached through the agent tunnel instead of direct SSH)."""
+    agent = db.get(Agent, agent_id)
+    if agent is None or agent.owner_id != user.id:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if payload.name is not None:
+        agent.name = payload.name.strip() or agent.name
+    if payload.device_id is not None:
+        # Unlink any other agent currently linked to the same device (one per device).
+        if payload.device_id:
+            for other in db.scalars(select(Agent).where(Agent.device_id == payload.device_id)).all():
+                if other.id != agent.id:
+                    other.device_id = None
+        agent.device_id = payload.device_id or None
+    db.commit()
+    return {
+        "id": agent.id, "name": agent.name, "token": agent.token,
+        "device_id": agent.device_id, "connected": agent.connected,
+        "ips": json.loads(agent.ips) if agent.ips else None,
+        "last_seen": agent.last_seen, "created_at": agent.created_at,
+    }
+
+
 # ------------------------------- Bootstrap helper ---------------------------
 _CLIENT_RAW = "https://raw.githubusercontent.com/Vandexuzu/ShellDeck/main/agent/client.py"
 
@@ -354,6 +384,33 @@ async def agent_fs_relay(device_id: int, req: FsRequest, db: Session) -> object:
     if not resp.get("ok"):
         raise HTTPException(status_code=502, detail="Agent FS error: " + resp.get("err", "unknown"))
     return resp.get("result")
+
+
+async def agent_exec_relay(device_id: int, command: str, db: Session, timeout: int = 30) -> str:
+    """Run a one-shot shell command on the device through its connected agent
+    and return the combined output. Used by server-side monitoring for devices
+    that are only reachable via the agent tunnel (no inbound SSH)."""
+    token = device_agent_token(db, device_id)
+    if token is None:
+        raise HTTPException(status_code=503, detail="Device agent not connected")
+    q = _LIVE.get(token)
+    if q is None:
+        raise HTTPException(status_code=503, detail="Device agent not connected")
+    global _NEXT_CID
+    cid = _NEXT_CID
+    _NEXT_CID += 1
+    loop = asyncio.get_running_loop()
+    fut: asyncio.Future = loop.create_future()
+    _FS_WAIT[cid] = fut
+    await q.put(json.dumps({"t": "fs", "cid": cid, "op": "exec", "data": command}))
+    try:
+        resp = await asyncio.wait_for(fut, timeout=timeout)
+    except asyncio.TimeoutError:
+        _FS_WAIT.pop(cid, None)
+        raise HTTPException(status_code=504, detail="Agent exec timed out")
+    if not resp.get("ok"):
+        raise HTTPException(status_code=502, detail="Agent exec error: " + resp.get("err", "unknown"))
+    return (resp.get("result") or {}).get("output", "")
 
 
 @router.post("/fs/{device_id}")

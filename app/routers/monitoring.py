@@ -12,8 +12,10 @@ from app.config import settings
 from app.db import get_db
 from app.models import Device, User
 from app.routers.devices import connect_device, load_credentials, _visible_devices, _can_view
+from app.routers.agents import device_agent_token, agent_exec_relay
 from app.schemas import DeviceStatus
 from app.security import get_current_user
+
 
 router = APIRouter(prefix="/api/monitor", tags=["monitor"])
 
@@ -32,7 +34,79 @@ def _fmt_uptime(days: int, hours: int, minutes: int) -> str:
     return "up " + ", ".join(parts)
 
 
+async def _collect_via_agent(device: Device, db: Session) -> DeviceStatus:
+    """Collect metrics for a device reached only through its agent tunnel
+    (no inbound SSH). Runs the same metric commands via the agent exec relay."""
+    token = device_agent_token(db, device.id)
+    if token is None:
+        return DeviceStatus(
+            id=device.id, name=device.name, host=device.host,
+            reachable=False, message="Agent not connected", tailscale=device.tailscale,
+            os=(device.os or None),
+        )
+    os_kind = (device.os or "").lower()
+    if not os_kind:
+        try:
+            out = await agent_exec_relay(device.id, "uname -s", db, timeout=20)
+            os_kind = "windows" if "MINGW" in out.upper() or "CYGWIN" in out.upper() else "linux"
+        except Exception:
+            os_kind = "linux"
+    try:
+        if os_kind == "windows":
+            ps = (
+                "$c=(Get-CimInstance Win32_Processor | Measure-Object -Property LoadPercentage -Average).Average; "
+                "$o=Get-CimInstance Win32_OperatingSystem; "
+                "$mp=($o.FreePhysicalMemory/$o.TotalVisibleMemorySize)*100; "
+                "$dp=(Get-PSDrive C | Select-Object -ExpandProperty Used)/"
+                "(Get-PSDrive C | Select-Object -ExpandProperty Used + (Get-PSDrive C | Select-Object -ExpandProperty Free))*100; "
+                "$up=(Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime; "
+                "Write-Output ('{0:0.0}|{1:0.0}|{2:0.0}|{3}|{4}|{5}' -f $c,$mp,$dp,$up.Days,$up.Hours,$up.Minutes)"
+            )
+            import base64
+            b64 = base64.b64encode(ps.encode("utf-16-le")).decode()
+            out = await agent_exec_relay(device.id, f"powershell -NonInteractive -NoProfile -EncodedCommand {b64}", db, timeout=25)
+            cpu_load = mem_pct = disk_pct = None
+            uptime = None
+            if out and "|" in out:
+                parts = out.split("|")
+                try: cpu_load = float(parts[0])
+                except Exception: cpu_load = None
+                try: mem_pct = float(parts[1])
+                except Exception: mem_pct = None
+                try: disk_pct = float(parts[2])
+                except Exception: disk_pct = None
+                try: uptime = _fmt_uptime(int(parts[3]), int(parts[4]), int(parts[5]))
+                except Exception: uptime = None
+        else:
+            uptime = (await agent_exec_relay(device.id, "uptime -p", db, timeout=20)).strip() or None
+            load_out = (await agent_exec_relay(device.id, "cat /proc/loadavg", db, timeout=20)).strip()
+            cpu_load = float(load_out.split()[0]) if load_out else None
+            mem = (await agent_exec_relay(device.id, "free | awk '/Mem:/ {printf \"%.0f\", $3/$2*100}'", db, timeout=20)).strip()
+            mem_pct = float(mem) if mem else None
+            disk = (await agent_exec_relay(device.id, "df -P / | awk 'NR==2 {gsub(\"%\",\"\"); print $5}'", db, timeout=20)).strip()
+            disk_pct = float(disk) if disk else None
+        return DeviceStatus(
+            id=device.id, name=device.name, host=device.host,
+            reachable=True, cpu_load=cpu_load, mem_used_pct=mem_pct,
+            disk_used_pct=disk_pct, uptime=uptime, tailscale=device.tailscale,
+            os=os_kind,
+        )
+    except Exception as exc:
+        return DeviceStatus(
+            id=device.id, name=device.name, host=device.host,
+            reachable=False, message=f"agent: {exc}"[:200], tailscale=device.tailscale,
+            os=os_kind,
+        )
+
+
 async def _collect(device: Device, db: Session) -> DeviceStatus:
+    # Devices reached via a connected agent tunnel are monitored through the
+    # tunnel (no inbound SSH needed) — prefer that path when an agent is live.
+    if device_agent_token(db, device.id):
+        try:
+            return await _collect_via_agent(device, db)
+        except Exception:
+            pass
     try:
         conn, bastion = await connect_device(device, db)
         try:
