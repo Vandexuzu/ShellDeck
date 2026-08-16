@@ -23,7 +23,7 @@ import asyncio
 import json
 import secrets
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
@@ -34,6 +34,7 @@ import time
 
 from app.db import get_db, SessionLocal
 from app.models import Agent, Device, SessionLog, User, SettingsRow
+from app.audit import log_audit
 from app.security import get_user_from_token_raw, operator_only
 
 router = APIRouter(prefix="/api/agents", tags=["agents"])
@@ -164,40 +165,66 @@ def agent_bootstrap(agent_id: int, request: Request, db: Session = Depends(get_d
     rc = settings.agent_reconnect if settings else 5
     env_linux = f"SHELLDECK_URL='{base}' SHELLDECK_AGENT_TOKEN='{token}' SHELLDECK_HEARTBEAT='{hb}' SHELLDECK_RECONNECT='{rc}'"
     env_ps = f"$env:SHELLDECK_URL='{base}'; $env:SHELLDECK_AGENT_TOKEN='{token}'; $env:SHELLDECK_HEARTBEAT='{hb}'; $env:SHELLDECK_RECONNECT='{rc}'"
-    # One-liner for Linux/macOS/Termux (downloads client.py then runs it).
+    # One-liner for Linux / macOS (downloads client.py then runs it in the foreground — good for a quick test).
     oneliner = (
         f"curl -fsSL {_CLIENT_RAW} -o shelldeck_agent.py && "
         f"pip install websocket-client >/dev/null 2>&1; "
         f"{env_linux} python3 shelldeck_agent.py"
     )
-    # Windows PowerShell one-liner.
+    # Windows PowerShell one-liner (foreground quick test).
     ps_oneliner = (
         f"Invoke-WebRequest -Uri '{_CLIENT_RAW}' -OutFile shelldeck_agent.py; "
         f"pip install websocket-client; "
         f"{env_ps}; "
         f"python shelldeck_agent.py"
     )
-    # A standalone shell script the user can copy to the device.
+    # Linux / macOS: install the agent as a permanent systemd service
+    # (auto-starts on boot, restarts on failure — survives terminal close / logout).
+    service = (
+        "[Unit]\n"
+        "Description=ShellDeck Agent\n"
+        "After=network-online.target\n"
+        "Wants=network-online.target\n\n"
+        "[Service]\n"
+        "Type=simple\n"
+        f"Environment=SHELLDECK_URL='{base}'\n"
+        f"Environment=SHELLDECK_AGENT_TOKEN='{token}'\n"
+        f"Environment=SHELLDECK_HEARTBEAT='{hb}'\n"
+        f"Environment=SHELLDECK_RECONNECT='{rc}'\n"
+        "ExecStart=/usr/bin/env python3 /opt/shelldeck_agent.py\n"
+        "Restart=always\n"
+        "RestartSec=5\n\n"
+        "[Install]\n"
+        "WantedBy=multi-user.target\n"
+    )
     script_sh = (
         "#!/usr/bin/env bash\n"
-        "# ShellDeck agent bootstrap — saves as run_agent.sh and: bash run_agent.sh\n"
-        f"export SHELLDECK_URL='{base}'\n"
-        f"export SHELLDECK_AGENT_TOKEN='{token}'\n"
-        f"export SHELLDECK_HEARTBEAT='{hb}'\n"
-        f"export SHELLDECK_RECONNECT='{rc}'\n"
+        "# ShellDeck agent — install as a permanent systemd service (auto-start + restart).\n"
+        "# Usage:  sudo bash install_agent.sh\n"
+        "set -e\n"
+        f"curl -fsSL {_CLIENT_RAW} -o /opt/shelldeck_agent.py\n"
         "pip install --quiet websocket-client\n"
-        f"curl -fsSL {_CLIENT_RAW} -o shelldeck_agent.py\n"
-        "exec python3 shelldeck_agent.py\n"
+        "cat > /etc/systemd/system/shelldeck-agent.service <<'UNIT'\n"
+        + service +
+        "UNIT\n"
+        "systemctl daemon-reload\n"
+        "systemctl enable --now shelldeck-agent\n"
+        "echo 'Installed as systemd service. Check status: systemctl status shelldeck-agent'\n"
     )
+    # Windows: install the agent as a permanent Scheduled Task
+    # (runs at startup, auto-restarts on failure — survives closing PowerShell).
     script_ps1 = (
-        "# ShellDeck agent bootstrap — saves as run_agent.ps1 and: powershell -ExecutionPolicy Bypass -File run_agent.ps1\n"
-        f"$env:SHELLDECK_URL = '{base}'\n"
-        f"$env:SHELLDECK_AGENT_TOKEN = '{token}'\n"
-        f"$env:SHELLDECK_HEARTBEAT = '{hb}'\n"
-        f"$env:SHELLDECK_RECONNECT = '{rc}'\n"
-        "pip install websocket-client\n"
+        "# ShellDeck agent — install as a permanent Scheduled Task (auto-start + restart).\n"
+        "# Run in PowerShell AS ADMINISTRATOR.\n"
         f"Invoke-WebRequest -Uri '{_CLIENT_RAW}' -OutFile shelldeck_agent.py\n"
-        "python shelldeck_agent.py\n"
+        "pip install websocket-client\n"
+        "$exe = (Get-Command python).Source\n"
+        "$act = New-ScheduledTaskAction -Execute $exe -Argument 'shelldeck_agent.py' -WorkingDirectory (Get-Location).Path\n"
+        "$trig = New-ScheduledTaskTrigger -AtStartup\n"
+        "$set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)\n"
+        "Register-ScheduledTask -TaskName 'ShellDeckAgent' -Action $act -Trigger $trig -Settings $set -RunLevel Highest -Force\n"
+        "Start-ScheduledTask -TaskName 'ShellDeckAgent'\n"
+        "Write-Host 'Installed as Scheduled Task (auto-start + restart). Check: taskschd.msc'\n"
     )
     return {
         "agent_id": agent.id,
@@ -420,18 +447,27 @@ async def agent_exec_relay(device_id: int, command: str, db: Session, timeout: i
 
 
 @router.post("/fs/{device_id}")
-async def agent_fs(device_id: int, req: FsRequest, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+async def agent_fs(device_id: int, req: FsRequest, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> Any:
     device = db.get(Device, device_id)
     if device is None:
         raise HTTPException(status_code=404, detail="Device not found")
     if not (user.role == "admin" or device.owner_id == user.id):
         raise HTTPException(status_code=403, detail="Forbidden")
     try:
-        return await agent_fs_relay(device_id, req, db)
+        result = await agent_fs_relay(device_id, req, db)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=500, detail=f"FS relay error: {type(exc).__name__}: {exc}")
+    # Audit destructive / mutating file operations (skip read-only list/read/stat).
+    # Action names mirror app/routers/files.py so the audit trail is consistent.
+    if req.op == "delete":
+        log_audit(db, user, "file_delete", f"via-agent device={device.name} ({device.host}) path={req.path}")
+    elif req.op in ("write", "write_b64"):
+        log_audit(db, user, "file_write", f"via-agent device={device.name} ({device.host}) path={req.path}")
+    elif req.op == "mkdir":
+        log_audit(db, user, "file_mkdir", f"via-agent device={device.name} ({device.host}) path={req.path}")
+    return result
 
 
 # ------------------------------- Terminal over agent (browser side) ---------
@@ -465,6 +501,10 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
         _SESSIONS[cid] = {"browser": websocket, "device_id": device_id, "token": agent_token}
         # Recording buffer: [start_mono, ...events]. First element is the t0 marker.
         _REC[cid] = [time.monotonic()]
+        # Plain-text transcript accumulator (mirrors terminal.py so the Commands and
+        # Raw transcript tabs work for agent sessions too). Built from typed input
+        # (commands) and from "o" events (device output).
+        transcript_buf: list[str] = []
 
         # Audit log entry.
         log = SessionLog(device_id=device.id, user_id=user.id)
@@ -481,6 +521,8 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
         await q.put(json.dumps({"t": "exec", "cid": cid, "cols": 80, "rows": 24, "data": ""}))
 
         async def browser_to_agent() -> None:
+            # Per-session accumulator for the current (unterminated) typed line.
+            cmd_buf = ""
             try:
                 while True:
                     msg = await websocket.receive_text()
@@ -492,14 +534,29 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
                         if buf is not None:
                             buf.append([round(time.monotonic() - buf[0], 3), "i", msg])
                         await agent_relay_stdin(cid, msg)
+                        # Accumulate typed characters so a command is captured even
+                        # when the browser streams one keystroke per WebSocket frame.
+                        if "\x1b" not in msg and msg not in ("\r", "\n"):
+                            cmd_buf += msg
+                        # Record typed command lines (on Enter) for the audit trail.
+                        if "\r" in msg or "\n" in msg:
+                            cmd_buf += msg.replace("\r", "\n")
+                            while "\n" in cmd_buf:
+                                line, cmd_buf = cmd_buf.split("\n", 1)
+                                line = line.strip()
+                                if line:
+                                    log.commands = (log.commands + "\n" + line) if log.commands else line
+                                    db.commit()
+                                    # Echo the typed command into the playback transcript.
+                                    transcript_buf.append("$ " + line + "\n")
             except WebSocketDisconnect:
                 pass
             finally:
                 await agent_end_session(cid)
 
         # The agent->browser direction is handled by _route_agent_frame (pump
-        # in agent_ws) which sends frames straight to this websocket. We just
-        # keep this coroutine alive until the browser disconnects.
+        # in agent_ws) which sends frames straight to this websocket. That pump
+        # also appends "o" events to _REC; we mirror them into the transcript.
         try:
             await browser_to_agent()
         finally:
@@ -510,6 +567,14 @@ async def agent_terminal(websocket: WebSocket, device_id: int, token: str | None
                     events = buf[1:]
                     rec = {"version": 2, "width": 80, "height": 24, "events": events}
                     log.recording = json.dumps(rec)
+                    # Build the plain-text transcript from the recorded events so the
+                    # Raw transcript tab is populated for agent sessions (not just SSH).
+                    for ev in events:
+                        if len(ev) >= 3 and ev[1] == "o":
+                            transcript_buf.append(ev[2])
+                    full = "".join(transcript_buf)
+                    if full:
+                        log.transcript = (log.transcript + full) if log.transcript else full
                     db.commit()
                 except Exception:  # noqa: BLE001
                     pass

@@ -324,7 +324,7 @@ body {
 /* icon buttons */
 .ic { width: 16px; height: 16px; flex: none; }
 .btn-icon { padding: 8px; }
-.btn-icon-text .ic { width: 15px; height: 15px; }
+.btn-icon-text .ic { width: 18px; height: 18px; }
 .btn-icon-xs { padding: 5px; border-radius: 6px; }
 .btn-icon-xs .ic { width: 14px; height: 14px; }
 .side-nav-item { display: flex; align-items: center; gap: 10px; }

@@ -2,6 +2,7 @@
 const API = "";
 let token = localStorage.getItem("shelldeck_token") || "";
 let currentDevices = [];
+let pendingAgentId = null;  // agent to link when adding a device from its discovered IP
 // Whether the current user may *see / view* a device (status, docker read, etc.).
 // Writes (shell, sftp, docker actions) are still enforced server-side by
 // operator_only, so viewers are view-only everywhere despite returning true here.
@@ -97,7 +98,7 @@ const ICONS = {
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
   x: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',
-  save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
+  save: '<path d="M19 21H5a2 0 0 1-2-2V5a2 0 0 1 2-2h11l5 5v11a2 0 0 1-2 2Z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/><path d="M9 3v4h6"/>',
   check: '<polyline points="20 6 9 17 4 12"/>',
   copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
@@ -262,6 +263,11 @@ function openModal(id = null, opts = {}) {
   modal.classList.remove("hidden");
   document.getElementById("modal-title").textContent = id ? "Edit Device" : "Add Device";
   document.getElementById("device-id").value = id || "";
+  // When adding a device from an agent's discovered IP, remember which agent to
+  // link it to (so connectivity goes through the tunnel, not direct SSH).
+  pendingAgentId = opts.agentId || null;
+  const agentNote = document.getElementById("agent-link-note");
+  if (agentNote) agentNote.classList.toggle("hidden", !pendingAgentId);
   if (!id) document.getElementById("device-form").reset();
   if (!id && opts.host) {
     document.getElementById("f-host").value = opts.host;
@@ -575,9 +581,18 @@ document.getElementById("modal-test").onclick = async () => {
     if (id) {
       res = await api(`/api/devices/${id}/test`, { method: "GET" });
     } else {
-      // Create temporary device, test, then delete it.
+      // Create temporary device, test, then delete it. If we're adding from an
+      // agent's discovered IP, link the agent first so the test goes through
+      // the tunnel (not a direct SSH attempt that would fail behind NAT).
       const created = await api("/api/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (pendingAgentId) {
+        try { await api(`/api/agents/${pendingAgentId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_id: created.id }) }); } catch (_) {}
+      }
       res = await api(`/api/devices/${created.id}/test`, { method: "GET" });
+      // Unlink + remove the temporary device (final link happens on real save).
+      if (pendingAgentId) {
+        try { await api(`/api/agents/${pendingAgentId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_id: null }) }); } catch (_) {}
+      }
       await api(`/api/devices/${created.id}`, { method: "DELETE" });
     }
     if (res.ok) showToast("✅ " + res.message, "ok");
@@ -622,7 +637,14 @@ document.getElementById("device-form").onsubmit = async (e) => {
   };
   try {
     if (id) await api(`/api/devices/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    else await api("/api/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    else {
+      const created = await api("/api/devices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      // If added from an agent's discovered IP, link the device to that agent so
+      // all access (shell, file manager) goes through the tunnel.
+      if (pendingAgentId) {
+        try { await api(`/api/agents/${pendingAgentId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device_id: created.id }) }); } catch (_) {}
+      }
+    }
     closeModal(); loadDevices(); loadStatus();
     showToast("Saved", "ok");
   } catch (err) {
@@ -1524,7 +1546,15 @@ async function loadAgents() {
       loadAgents();
     });
     box.querySelectorAll("[data-add-from-ip]").forEach(b => b.onclick = () => {
-      openModal(null, { host: b.dataset.addFromIp, name: b.dataset.addFromIp, notes: `via agent #${b.closest('.sched-card').querySelector('.sc-name').textContent.trim().split(' ')[0]}` });
+      const card = b.closest('.sched-card');
+      const agentId = card.querySelector('[data-bootstrap-agent]')?.dataset.bootstrapAgent
+        || card.querySelector('[data-del-agent]')?.dataset.delAgent;
+      openModal(null, {
+        host: b.dataset.addFromIp,
+        name: b.dataset.addFromIp,
+        notes: `via agent ${card.querySelector('.sc-name').textContent.trim().split(' ')[0]}`,
+        agentId: agentId ? +agentId : null,
+      });
     });
     box.querySelectorAll("[data-bootstrap-agent]").forEach(b => b.onclick = () => openBootstrap(b.dataset.bootstrapAgent));
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
@@ -2016,7 +2046,7 @@ document.getElementById("sched-import").onclick = async () => {
       .catch(e => showToast(e.message, "error"));
   } catch (e) { showToast("Invalid JSON", "error"); }
 };
-document.getElementById("sched-cancel").onclick = () => document.getElementById("sched-modal").classList.add("hidden");
+document.getElementById("sched-cancel").onclick = () => { document.getElementById("sched-modal").classList.add("hidden"); loadScheduled(); };
 document.getElementById("sched-save").onclick = async () => {
   const name = document.getElementById("sched-name").value.trim();
   const command = document.getElementById("sched-command").value.trim();
@@ -2058,7 +2088,7 @@ async function loadSettings() {
     set("set-retention", s.session_retention_days ?? 90);
     set("set-agent-hb", s.agent_heartbeat ?? 15);
     set("set-agent-rc", s.agent_reconnect ?? 5);
-    if (tz) tz.value = s.timezone || "Asia/Jakarta";
+    set("set-timezone", s.timezone || "Asia/Jakarta");
     // Appearance: reflect saved theme (server setting, fallback to localStorage).
     const themeSel = document.getElementById("set-theme");
     if (themeSel) {
@@ -2317,7 +2347,13 @@ async function fetchRecording(id) {
   return await api(`/api/devices/sessions/${id}/recording`);
 }
 function playStep() {
-  if (!spPlaying || spIdx >= spEvents.length) { spPlaying = false; return; }
+  if (!spPlaying || spIdx >= spEvents.length) {
+    spPlaying = false;
+    // Playback finished (or was stopped) — restore the play icon.
+    const pb = document.getElementById("sp-play");
+    if (pb) pb.innerHTML = icon("play");
+    return;
+  }
   const [delay, type, data] = spEvents[spIdx++];
   if (type === "o") spTerm.write(data);
   const d = Math.max(0, (delay || 0) / (spSpeed || 1)) * 1000;
@@ -2328,6 +2364,10 @@ document.getElementById("sp-play").onclick = () => {
   spPlaying = !spPlaying;
   if (spPlaying) playStep();
   else if (spTimer) clearTimeout(spTimer);
+  // Swap the icon between play and pause so the button reflects state.
+  document.getElementById("sp-play").innerHTML = spPlaying
+    ? icon("pause")
+    : icon("play");
 };
 document.getElementById("sp-restart").onclick = () => {
   spIdx = 0; spTerm.reset(); spPlaying = true; playStep();

@@ -208,9 +208,12 @@ A device behind a firewall dials out (`agent/client.py` → `/api/agents/ws`). S
 relays the shell **and** file manager **and** monitoring through that tunnel — no
 inbound port on the device.
 
-**Add an agent:** Agents → Add Agent → copy a **bootstrap helper** (Linux/macOS/Termux
-one-liner, Windows PowerShell one-liner, or standalone `run_agent.sh` / `run_agent.ps1`).
-Each helper injects the server URL, the agent token, and the **heartbeat / reconnect**
+**Add an agent:** Agents → Add Agent → copy a **bootstrap helper**. For a quick test
+use the Linux/macOS or Windows PowerShell **one-liner** (runs in the foreground). For a
+**permanent** install use the `script_sh` (installs a systemd service on Linux/macOS)
+or `script_ps1` (installs a Scheduled Task on Windows) — both auto-start on boot and
+restart on failure, so the agent survives closing the terminal / logging out. Each
+helper injects the server URL, the agent token, and the **heartbeat / reconnect**
 values from Global Settings, so the device connects with zero manual editing:
 
 ```powershell
