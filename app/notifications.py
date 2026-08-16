@@ -121,6 +121,36 @@ async def send_webhook(url: str, text: str) -> bool:
         return False
 
 
+def _is_internal_url(url: str) -> bool:
+    """Block webhook/notification URLs that resolve to private, loopback,
+    link-local or reserved ranges (SSRF guard — prevents a setting pointing
+    e.g. at 169.254.169.254 cloud metadata or an internal service)."""
+    import ipaddress as _ip
+    import socket as _socket
+    from urllib.parse import urlparse
+
+    try:
+        host = (urlparse(url).hostname or "").strip().lower()
+    except Exception:
+        return True
+    if not host:
+        return True
+    try:
+        ips = {_ip.ip_address(host)}
+    except ValueError:
+        try:
+            ips = {
+                _ip.ip_address(info[4][0] if isinstance(info[4], (tuple, list)) else str(info[4]))
+                for info in _socket.getaddrinfo(host, None)
+            }
+        except (_socket.gaierror, UnicodeError, ValueError):
+            return True
+    return any(
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast
+        for ip in ips
+    )
+
+
 async def notify(message: str, db: Session) -> None:
     """Send a notification through whichever channels are configured."""
     s = _get_settings(db)
@@ -129,15 +159,15 @@ async def notify(message: str, db: Session) -> None:
     token = decrypt(s.telegram_token_enc) if s.telegram_token_enc else ""
     if token and s.telegram_chat_id:
         await send_telegram(token, s.telegram_chat_id, message)
-    if s.discord_webhook:
+    if s.discord_webhook and not _is_internal_url(s.discord_webhook):
         await send_discord(s.discord_webhook, message)
-    if s.ntfy_url:
+    if s.ntfy_url and not _is_internal_url(s.ntfy_url):
         await send_ntfy(s.ntfy_url, message)
-    if s.gotify_url:
+    if s.gotify_url and not _is_internal_url(s.gotify_url):
         await send_gotify(s.gotify_url, message)
-    if s.slack_webhook:
+    if s.slack_webhook and not _is_internal_url(s.slack_webhook):
         await send_slack(s.slack_webhook, message)
-    if s.webhook_url:
+    if s.webhook_url and not _is_internal_url(s.webhook_url):
         await send_webhook(s.webhook_url, message)
     if s.email_to:
         pw = decrypt(s.email_pass_enc) if s.email_pass_enc else ""

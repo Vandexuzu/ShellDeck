@@ -170,7 +170,8 @@ async def upload_file(
     if file.size and file.size > MAX_UPLOAD:
         raise HTTPException(status_code=413, detail="File too large (max 50 MB)")
     target_dir = path.rstrip("/") or "/"
-    dest = f"{target_dir}/{file.filename}" if target_dir != "/" else f"/{file.filename}"
+    safe_name = os.path.basename(file.filename or "") or "upload"
+    dest = f"{target_dir}/{safe_name}" if target_dir != "/" else f"/{safe_name}"
     try:
         async with sftp_for(device, db) as sftp:
             try:
