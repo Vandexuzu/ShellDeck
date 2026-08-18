@@ -22,15 +22,15 @@ from __future__ import annotations
 import asyncio
 import json
 import secrets
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Optional, Any
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from pydantic import BaseModel
-from sqlalchemy import select
-from sqlalchemy.orm import Session
-from datetime import datetime, timezone
-import time
 
 from app.db import get_db, SessionLocal
 from app.models import Agent, Device, SessionLog, User, SettingsRow
@@ -67,13 +67,18 @@ class AgentOut(BaseModel):
     ips: list[str] | None = None
     os: str | None = None
     last_seen: datetime | None
-    created_at: datetime
+    created_at: datetime | None
+    pending: bool = False
 
 
 # ------------------------------- REST --------------------------------------
 @router.get("", response_model=list[AgentOut])
 def list_agents(db: Session = Depends(get_db), user: User = Depends(operator_only)) -> list[dict]:
-    agents = list(db.scalars(select(Agent).where(Agent.owner_id == user.id).order_by(Agent.name)))
+    agents = list(db.scalars(
+        select(Agent)
+        .where((Agent.owner_id == user.id) | (Agent.pending == True))  # type: ignore[comparison-overlap]
+        .order_by(Agent.name)
+    ))
     out = []
     for a in agents:
         out.append({
@@ -82,6 +87,7 @@ def list_agents(db: Session = Depends(get_db), user: User = Depends(operator_onl
             "ips": (json.loads(a.ips) if a.ips else None),
             "os": a.os,
             "last_seen": a.last_seen, "created_at": a.created_at,
+            "pending": a.pending,
         })
     return out
 
@@ -89,7 +95,13 @@ def list_agents(db: Session = Depends(get_db), user: User = Depends(operator_onl
 @router.post("", response_model=AgentOut, status_code=status.HTTP_201_CREATED)
 def create_agent(payload: AgentCreate, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     token = secrets.token_urlsafe(24)
-    agent = Agent(owner_id=user.id, name=payload.name, token=token, device_id=payload.device_id)
+    agent = Agent(
+        owner_id=user.id,
+        name=payload.name,
+        token=token,
+        device_id=payload.device_id,
+        install_slug=secrets.token_urlsafe(16),
+    )
     db.add(agent)
     db.commit()
     db.refresh(agent)
@@ -97,7 +109,116 @@ def create_agent(payload: AgentCreate, db: Session = Depends(get_db), user: User
         "id": agent.id, "name": agent.name, "token": agent.token, "device_id": agent.device_id,
         "connected": agent.connected, "ips": None,
         "os": agent.os,
-        "last_seen": agent.last_seen, "created_at": agent.created_at,
+        "last_seen": agent.last_seen, "created_at": agent.created_at, "pending": agent.pending,
+    }
+
+
+# ------------------------------- Self-enrollment ----------------------------
+# A device runs the generic install.sh (which carries only the revocable enroll
+# secret, never a per-device token). On first run the agent POSTs here to mint a
+# per-device token, then connects. The agent lands as `pending` (owner_id NULL)
+# until an operator claims it from the UI.
+_ENROLL_FAILS: dict[str, list[float]] = defaultdict(list)
+_ENROLL_WINDOW = 600      # 10 minutes
+_ENROLL_MAX_FAILS = 20    # lock an IP after this many bad-secret attempts
+_ENROLL_CAP_PER_OWNER = 50  # max pending (unclaimed) agents per owner
+
+
+class AgentEnroll(BaseModel):
+    secret: str                       # the revocable enroll secret
+    name: str | None = None          # optional device label from the client
+    os: str | None = None            # optional OS hint
+
+
+@router.post("/enroll", status_code=status.HTTP_201_CREATED)
+def enroll_agent(payload: AgentEnroll, request: Request, db: Session = Depends(get_db)) -> dict:
+    ip = request.client.host if request.client else "unknown"
+    now = time.time()
+    _ENROLL_FAILS[ip] = [t for t in _ENROLL_FAILS[ip] if now - t < _ENROLL_WINDOW]
+    if len(_ENROLL_FAILS[ip]) >= _ENROLL_MAX_FAILS:
+        raise HTTPException(status_code=429, detail="Too many enrollment attempts. Try again later.")
+
+    row = db.get(SettingsRow, 1)
+    if not row or not row.enroll_secret or not secrets.compare_digest(payload.secret, row.enroll_secret):
+        _ENROLL_FAILS[ip].append(now)
+        # Audit failed enrollment attempts (wrong/leaked secret) for threat visibility.
+        try:
+            log_audit(db, None, "agent_enroll_failed", f"invalid_secret ip={ip} name={payload.name or '?'}")
+        except Exception:
+            pass
+        raise HTTPException(status_code=401, detail="Invalid enrollment secret")
+
+    owner_id = row.enroll_owner_id
+    if owner_id is None:
+        # No owner configured (e.g. secret seeded before any user existed). Fall
+        # back to the first admin so the agent is claimable rather than orphaned.
+        from app.models import User
+        owner = db.scalar(select(User).where(User.role == "admin").order_by(User.id)) or db.get(User, 1)
+        owner_id = owner.id if owner else None
+
+    # Cap unclaimed (pending) agents to avoid secret-leak spam filling the table.
+    pending_count = db.scalar(
+        select(func.count(Agent.id)).where(Agent.pending == True, Agent.owner_id == owner_id)  # type: ignore[comparison-overlap]
+    ) or 0
+    if pending_count >= _ENROLL_CAP_PER_OWNER:
+        raise HTTPException(status_code=429, detail="Too many pending agents. Claim or delete existing ones first.")
+
+    token = secrets.token_urlsafe(24)
+    name = (payload.name or "enrolled-device").strip()[:128] or "enrolled-device"
+    agent = Agent(
+        owner_id=owner_id,            # NULL if no owner at all -> still claimable by any operator
+        name=name,
+        token=token,
+        os=payload.os,
+        pending=True,
+        install_slug=secrets.token_urlsafe(16),
+    )
+    db.add(agent)
+    db.commit()
+    db.refresh(agent)
+    # Audit: self-enrollment is an unauthenticated, security-relevant event — record
+    # it with the enroll name + source IP so admins can trace who joined.
+    log_audit(
+        db, None, "agent_enroll",
+        f"agent={agent.id} name={name} os={payload.os or '?'} owner={owner_id} ip={ip}",
+        ip=ip,
+    )
+    return {
+        "id": agent.id,
+        "token": agent.token,         # the per-device token — sent once, client persists it locally
+        "name": agent.name,
+        "pending": True,
+    }
+
+
+class AgentClaim(BaseModel):
+    name: str | None = None
+
+
+@router.post("/{agent_id}/claim", response_model=AgentOut)
+def claim_agent(agent_id: int, payload: AgentClaim, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
+    """Claim a pending (self-enrolled) agent: assign it to the claiming operator
+    and clear the pending flag so it becomes a normal, owned agent."""
+    agent = db.get(Agent, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if not agent.pending:
+        raise HTTPException(status_code=409, detail="Agent is already claimed")
+    # If the agent had no owner (no admin at seed time), set it now; otherwise it
+    # stays owned by its enroll_owner but is now actively managed by this operator.
+    agent.owner_id = user.id
+    agent.pending = False
+    if payload.name and payload.name.strip():
+        agent.name = payload.name.strip()[:128]
+    db.commit()
+    log_audit(db, user, "agent_claim", f"agent={agent.id} name={agent.name}")
+    db.refresh(agent)
+    return {
+        "id": agent.id, "name": agent.name, "token": agent.token, "device_id": agent.device_id,
+        "connected": agent.connected,
+        "ips": (json.loads(agent.ips) if agent.ips else None),
+        "os": agent.os,
+        "last_seen": agent.last_seen, "created_at": agent.created_at, "pending": agent.pending,
     }
 
 
@@ -106,8 +227,17 @@ def delete_agent(agent_id: int, db: Session = Depends(get_db), user: User = Depe
     agent = db.get(Agent, agent_id)
     if agent is None or agent.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Agent not found")
-    _LIVE.pop(agent.token, None)
+    # If the agent is currently connected, nudge its server-side reader loop to
+    # terminate (push the sentinel). The loop's finally closes the socket with the
+    # "revoked" reason so the device-side client drops its local token and
+    # re-enrolls itself — no manual file deletion needed (this is the UI "Reset").
+    q = _LIVE.pop(agent.token, None)
     _LIVE_WS.pop(agent.token, None)
+    if q is not None:
+        try:
+            q.put_nowait(None)
+        except Exception:
+            pass
     db.delete(agent)
     db.commit()
     return {"deleted": agent_id}
@@ -150,93 +280,37 @@ _CLIENT_RAW = "https://raw.githubusercontent.com/Vandexuzu/ShellDeck/main/agent/
 
 @router.get("/{agent_id}/bootstrap")
 def agent_bootstrap(agent_id: int, request: Request, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
-    """Return copy-paste helpers so a user can configure the agent client on the
-    target device in seconds (no manual editing of client.py / env vars)."""
+    """Return a single one-liner that installs the agent on the target device.
+
+    The token is injected by the server, so the user never has to copy-paste it.
+    """
     agent = db.get(Agent, agent_id)
     if agent is None or agent.owner_id != user.id:
         raise HTTPException(status_code=404, detail="Agent not found")
-    # Derive the public base URL from the incoming request (scheme + host).
     base = f"{request.url.scheme}://{request.url.netloc}"
-    ws_base = base.replace("http://", "ws://").replace("https://", "wss://")
     token = agent.token
-    # Pull agent tuning from global settings so the bootstrap reflects admin config.
     settings = db.get(SettingsRow, 1)
     hb = settings.agent_heartbeat if settings else 15
     rc = settings.agent_reconnect if settings else 5
-    env_linux = f"SHELLDECK_URL='{base}' SHELLDECK_AGENT_TOKEN='{token}' SHELLDECK_HEARTBEAT='{hb}' SHELLDECK_RECONNECT='{rc}'"
-    env_ps = f"$env:SHELLDECK_URL='{base}'; $env:SHELLDECK_AGENT_TOKEN='{token}'; $env:SHELLDECK_HEARTBEAT='{hb}'; $env:SHELLDECK_RECONNECT='{rc}'"
-    # One-liner for Linux / macOS (downloads client.py then runs it in the foreground — good for a quick test).
-    oneliner = (
-        f"curl -fsSL {_CLIENT_RAW} -o shelldeck_agent.py && "
-        f"pip install websocket-client >/dev/null 2>&1; "
-        f"{env_linux} python3 shelldeck_agent.py"
+    # One-liner: download installer, inject token via env, pipe to bash. No manual copy-paste.
+    install_sh = (
+        f"curl -fsSL {base}/install.sh | "
+        f"SHELLDECK_URL='{base}' SHELLDECK_AGENT_TOKEN='{token}' "
+        f"SHELLDECK_HEARTBEAT='{hb}' SHELLDECK_RECONNECT='{rc}' bash"
     )
-    # Windows PowerShell one-liner (foreground quick test).
-    ps_oneliner = (
-        f"Invoke-WebRequest -Uri '{_CLIENT_RAW}' -OutFile shelldeck_agent.py; "
-        f"pip install websocket-client; "
-        f"{env_ps}; "
-        f"python shelldeck_agent.py"
-    )
-    # Linux / macOS: install the agent as a permanent systemd service
-    # (auto-starts on boot, restarts on failure — survives terminal close / logout).
-    service = (
-        "[Unit]\n"
-        "Description=ShellDeck Agent\n"
-        "After=network-online.target\n"
-        "Wants=network-online.target\n\n"
-        "[Service]\n"
-        "Type=simple\n"
-        f"Environment=SHELLDECK_URL='{base}'\n"
-        f"Environment=SHELLDECK_AGENT_TOKEN='{token}'\n"
-        f"Environment=SHELLDECK_HEARTBEAT='{hb}'\n"
-        f"Environment=SHELLDECK_RECONNECT='{rc}'\n"
-        "ExecStart=/usr/bin/env python3 /opt/shelldeck_agent.py\n"
-        "Restart=always\n"
-        "RestartSec=5\n\n"
-        "[Install]\n"
-        "WantedBy=multi-user.target\n"
-    )
-    script_sh = (
-        "#!/usr/bin/env bash\n"
-        "# ShellDeck agent — install as a permanent systemd service (auto-start + restart).\n"
-        "# Usage:  sudo bash install_agent.sh\n"
-        "set -e\n"
-        f"curl -fsSL {_CLIENT_RAW} -o /opt/shelldeck_agent.py\n"
-        "pip install --quiet websocket-client\n"
-        "cat > /etc/systemd/system/shelldeck-agent.service <<'UNIT'\n"
-        + service +
-        "UNIT\n"
-        "systemctl daemon-reload\n"
-        "systemctl enable --now shelldeck-agent\n"
-        "echo 'Installed as systemd service. Check status: systemctl status shelldeck-agent'\n"
-    )
-    # Windows: install the agent as a permanent Scheduled Task
-    # (runs at startup, auto-restarts on failure — survives closing PowerShell).
-    script_ps1 = (
-        "# ShellDeck agent — install as a permanent Scheduled Task (auto-start + restart).\n"
-        "# Run in PowerShell AS ADMINISTRATOR.\n"
-        f"Invoke-WebRequest -Uri '{_CLIENT_RAW}' -OutFile shelldeck_agent.py\n"
-        "pip install websocket-client\n"
-        "$exe = (Get-Command python).Source\n"
-        "$act = New-ScheduledTaskAction -Execute $exe -Argument 'shelldeck_agent.py' -WorkingDirectory (Get-Location).Path\n"
-        "$trig = New-ScheduledTaskTrigger -AtStartup\n"
-        "$set = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)\n"
-        "Register-ScheduledTask -TaskName 'ShellDeckAgent' -Action $act -Trigger $trig -Settings $set -RunLevel Highest -Force\n"
-        "Start-ScheduledTask -TaskName 'ShellDeckAgent'\n"
-        "Write-Host 'Installed as Scheduled Task (auto-start + restart). Check: taskschd.msc'\n"
+    install_ps1 = (
+        f"Invoke-WebRequest -Uri '{base}/install.ps1' -OutFile install.ps1; "
+        f"$env:SHELLDECK_URL='{base}'; $env:SHELLDECK_AGENT_TOKEN='{token}'; "
+        f"$env:SHELLDECK_HEARTBEAT='{hb}'; $env:SHELLDECK_RECONNECT='{rc}'; .\\install.ps1"
     )
     return {
         "agent_id": agent.id,
         "name": agent.name,
         "url": base,
-        "ws_url": f"{ws_base}/api/agents/ws?token={token}",
+        "ws_url": f"{base.replace('http://', 'ws://').replace('https://', 'wss://')}/api/agents/ws?token={token}",
         "token": token,
-        "client_url": _CLIENT_RAW,
-        "oneliner": oneliner,
-        "powershell_oneliner": ps_oneliner,
-        "script_sh": script_sh,
-        "script_ps1": script_ps1,
+        "install_sh": install_sh,
+        "install_ps1": install_ps1,
     }
 
 
@@ -247,11 +321,27 @@ async def agent_ws(websocket: WebSocket, token: str | None = Query(default=None)
     db = next(get_db())
     try:
         if not token:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.accept()
+            # Tell the client (via app frame) it was revoked so it self-re-enrolls.
+            # Hold the socket open briefly so the frame is delivered before the
+            # close (otherwise websocket-client may process the close first and the
+            # client never learns it was revoked -> loops with the stale token).
+            try:
+                await websocket.send_text(json.dumps({"t": "revoked"}))
+                await asyncio.sleep(1.5)
+            except Exception:
+                pass
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="revoked")
             return
         agent = db.scalar(select(Agent).where(Agent.token == token))
         if agent is None:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            await websocket.accept()
+            try:
+                await websocket.send_text(json.dumps({"t": "revoked"}))
+                await asyncio.sleep(1.5)
+            except Exception:
+                pass
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="revoked")
             return
         await websocket.accept()
         queue: asyncio.Queue = asyncio.Queue()
@@ -277,6 +367,20 @@ async def agent_ws(websocket: WebSocket, token: str | None = Query(default=None)
             while True:
                 frame = await queue.get()
                 if frame is None:
+                    # Sentinel pushed by delete_agent() — the operator reset/removed
+                    # this agent. Notify the client via an app frame (reliable across
+                    # websocket-client versions) then hold the socket open briefly so
+                    # the frame is delivered before closing, so it drops its local
+                    # token and re-enrolls itself.
+                    try:
+                        await websocket.send_text(json.dumps({"t": "revoked"}))
+                        await asyncio.sleep(1.5)
+                    except Exception:
+                        pass
+                    try:
+                        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="revoked")
+                    except Exception:
+                        pass
                     break
                 try:
                     await websocket.send_text(frame)

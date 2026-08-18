@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 from app.config import settings
 from app.db import init_db
+from app.models import SettingsRow
 from app.routers import (
     auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled, public, agents, backup, oidc, home,
 )
@@ -101,6 +103,56 @@ app.include_router(home.router)
 
 # Static frontend (served at web root).
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")
+
+# Agent installer artifacts (served generically so `curl .../install.sh | bash`
+# needs NO token/secret on the cmdline — the per-device token is requested by the
+# agent itself at first run via POST /api/agents/enroll).
+AGENT_DIR = Path(__file__).parent.parent / "agent"
+
+
+def _install_settings(db) -> "SettingsRow | None":
+    return db.get(SettingsRow, 1)
+
+
+def _render_installer(template_name: str, base: str, secret: str, hb: str, rc: str) -> str:
+    tpl = (AGENT_DIR / template_name).read_text()
+    return (
+        tpl.replace("__URL__", base)
+        .replace("__SECRET__", secret)
+        .replace("__HB__", hb)
+        .replace("__RC__", rc)
+    )
+
+
+@app.get("/install.sh")
+def install_sh(request: Request):
+    from app.db import get_db
+    db = next(get_db())
+    row = _install_settings(db)
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    secret = row.enroll_secret if row and row.enroll_secret else ""
+    hb = str(row.agent_heartbeat if row else 15)
+    rc = str(row.agent_reconnect if row else 5)
+    script = _render_installer("install.sh", base, secret, hb, rc)
+    return Response(script, media_type="text/x-shellscript")
+
+
+@app.get("/install.ps1")
+def install_ps1(request: Request):
+    from app.db import get_db
+    db = next(get_db())
+    row = _install_settings(db)
+    base = f"{request.url.scheme}://{request.url.netloc}"
+    secret = row.enroll_secret if row and row.enroll_secret else ""
+    hb = str(row.agent_heartbeat if row else 15)
+    rc = str(row.agent_reconnect if row else 5)
+    script = _render_installer("install.ps1", base, secret, hb, rc)
+    return Response(script, media_type="text/plain")
+
+
+@app.get("/agent_client")
+def agent_client():
+    return FileResponse(AGENT_DIR / "client.py", media_type="text/plain")
 
 
 @app.get("/")

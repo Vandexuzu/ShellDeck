@@ -1525,10 +1525,10 @@ async function loadAgents() {
     if (!agents.length) { box.innerHTML = "<p class='muted'>No agents yet. Create one to connect NAT-traversed devices.</p>"; return; }
     box.innerHTML = agents.map(a => `
       <div class="sched-card">
-        <div class="sc-name">${escapeHtml(a.name)} ${a.connected ? '<span style="color:var(--ok)">● online</span>' : '<span class="muted">○ offline</span>'}</div>
-        <div class="muted" style="font-size:12px">Token: <code>${escapeHtml(a.token)}</code> · ${a.device_id ? "linked to device #" + a.device_id : "unlinked"}</div>
+        <div class="sc-name">${escapeHtml(a.name)} ${a.connected ? '<span style="color:var(--ok)">● online</span>' : '<span class="muted">○ offline</span>'}${a.pending ? ' <span class="badge badge-warn">PENDING</span>' : ''}</div>
+        <div class="muted" style="font-size:12px">${a.pending ? 'Self-enrolled — awaiting claim' : `Token: <code>${escapeHtml(a.token.slice(0, 4))}••••••••${escapeHtml(a.token.slice(-4))}</code> · ${a.device_id ? 'linked to device #' + a.device_id : 'unlinked'}`}</div>
         <div class="muted" style="font-size:12px">Last seen: ${fmtTime(a.last_seen)}</div>
-        ${a.ips && a.ips.length ? `
+        ${a.ips && a.ips.length && !a.pending && !a.device_id ? `
           <div style="margin-top:8px">
             <div class="muted" style="font-size:11px;margin-bottom:4px">Device IPs (click to add):</div>
             <div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -1536,7 +1536,8 @@ async function loadAgents() {
             </div>
           </div>` : ''}
         <div class="di-actions" style="margin-top:8px">
-          <button class="btn btn-ghost btn-icon-text" data-bootstrap-agent="${a.id}" title="Get setup command">${icon("copy")}<span>Setup</span></button>
+          ${a.pending ? `<button class="btn btn-primary btn-icon-text" data-claim-agent="${a.id}" title="Claim this agent">${icon("check")}<span>Claim</span></button>` : `
+          <button class="btn btn-ghost btn-icon-text" data-reset-agent="${a.id}" title="Reset: unbind device & force re-enroll">${icon("refresh")}<span>Reset</span></button>`}
           <button class="btn btn-danger btn-icon" data-del-agent="${a.id}" title="Delete agent">${icon("trash")}</button>
         </div>
       </div>`).join("");
@@ -1545,10 +1546,26 @@ async function loadAgents() {
       await api(`/api/agents/${b.dataset.delAgent}`, { method: "DELETE" });
       loadAgents();
     });
+    // Reset = unbind the device and force it to re-enroll. The running agent gets
+    // a "revoked" WS close, drops its local token, and re-enrolls itself — no
+    // manual file deletion on the device required.
+    box.querySelectorAll("[data-reset-agent]").forEach(b => b.onclick = async () => {
+      if (!await showConfirm("Reset this agent? The device will be unbound and must re-enroll (reappears as PENDING).", "Reset agent")) return;
+      await api(`/api/agents/${b.dataset.resetAgent}`, { method: "DELETE" });
+      showToast("Agent reset — device will re-enroll automatically", "ok");
+      loadAgents();
+    });
+    box.querySelectorAll("[data-claim-agent]").forEach(b => b.onclick = async () => {
+      const name = prompt("Name this agent (optional):", "");
+      try {
+        await api(`/api/agents/${b.dataset.claimAgent}/claim`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name || null }) });
+        showToast("Agent claimed", "ok");
+        loadAgents();
+      } catch (e) { showToast(e.message, "error"); }
+    });
     box.querySelectorAll("[data-add-from-ip]").forEach(b => b.onclick = () => {
       const card = b.closest('.sched-card');
-      const agentId = card.querySelector('[data-bootstrap-agent]')?.dataset.bootstrapAgent
-        || card.querySelector('[data-del-agent]')?.dataset.delAgent;
+      const agentId = card.querySelector('[data-del-agent]')?.dataset.delAgent;
       openModal(null, {
         host: b.dataset.addFromIp,
         name: b.dataset.addFromIp,
@@ -1556,38 +1573,18 @@ async function loadAgents() {
         agentId: agentId ? +agentId : null,
       });
     });
-    box.querySelectorAll("[data-bootstrap-agent]").forEach(b => b.onclick = () => openBootstrap(b.dataset.bootstrapAgent));
   } catch (e) { box.innerHTML = `<p style='color:var(--danger)'>${e.message}</p>`; }
 }
-document.getElementById("agent-add").onclick = () => {
-  const sel = document.getElementById("agent-device");
-  if (currentDevices && currentDevices.length) {
-    sel.innerHTML = '<option value="">— none —</option>' + currentDevices.map(d => `<option value="${d.id}">${escapeHtml(d.name)} #${d.id}</option>`).join("");
-  }
-  document.getElementById("agent-modal").classList.remove("hidden");
-};
-document.getElementById("agent-cancel").onclick = () => document.getElementById("agent-modal").classList.add("hidden");
-document.getElementById("agent-save").onclick = async () => {
-  const name = document.getElementById("agent-name").value.trim();
-  const device_id = document.getElementById("agent-device").value || null;
-  if (!name) { showToast("Name required", "error"); return; }
-  try {
-    const ag = await api("/api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, device_id: device_id ? parseInt(device_id, 10) : null }) });
-    document.getElementById("agent-modal").classList.add("hidden");
-    loadAgents();
-    openBootstrap(ag.id);
-  } catch (e) { showToast(e.message, "error"); }
-};
+document.getElementById("agent-setup").onclick = () => openGenericInstall();
 
-async function openBootstrap(agentId) {
-  try {
-    const b = await api(`/api/agents/${agentId}/bootstrap`);
-    document.getElementById("bs-oneliner").value = b.oneliner || "";
-    document.getElementById("bs-ps1").value = b.powershell_oneliner || "";
-    document.getElementById("bs-sh").value = b.script_sh || "";
-    document.getElementById("bs-ps1file").value = b.script_ps1 || "";
-    document.getElementById("agent-bootstrap-modal").classList.remove("hidden");
-  } catch (e) { showToast(e.message, "error"); }
+// Open the generic self-enrollment installer command (no per-device token — the
+// agent mints its own token on first run). Shown from the header and from each
+// agent's Setup button.
+function openGenericInstall() {
+  const origin = location.origin;
+  document.getElementById("bs-install-sh").value = `curl -fsSL ${origin}/install.sh | bash`;
+  document.getElementById("bs-install-ps1").value = `Invoke-WebRequest -Uri '${origin}/install.ps1' -OutFile install.ps1; .\\install.ps1`;
+  document.getElementById("agent-bootstrap-modal").classList.remove("hidden");
 }
 
 document.getElementById("agent-bootstrap-close").onclick = () =>
@@ -2107,6 +2104,31 @@ async function loadSettings() {
     const ep = document.getElementById("set-email-pass"); if (ep) ep.value = "";
   } catch (e) { showToast(e.message, "error"); }
 }
+document.getElementById("set-enroll-copy").onclick = async () => {
+  try {
+    const cmd = `curl -fsSL ${location.origin}/install.sh | bash`;
+    await navigator.clipboard.writeText(cmd);
+    showToast("Install command copied: " + cmd, "ok");
+  } catch { showToast("Copy failed", "error"); }
+};
+document.getElementById("set-enroll-rotate").onclick = async () => {
+  if (!currentUser || currentUser.role !== "admin") { showToast("Only admins can do this", "error"); return; }
+  if (!await showConfirm("Rotate the enrollment secret? Existing pending agents keep their tokens; new installs will need the new command.", "Rotate secret")) return;
+  try {
+    await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enroll_secret_action: "rotate" }) });
+    showToast("Enrollment secret rotated. Re-copy the install command.", "ok");
+    // Refresh the install endpoint so a re-copy picks up the new secret.
+    await api("/install.sh");
+  } catch (e) { showToast(e.message, "error"); }
+};
+document.getElementById("set-enroll-revoke").onclick = async () => {
+  if (!currentUser || currentUser.role !== "admin") { showToast("Only admins can do this", "error"); return; }
+  if (!await showConfirm("Revoke the enrollment secret? New self-enrollments will be rejected until you rotate it again.", "Revoke secret")) return;
+  try {
+    await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enroll_secret_action: "revoke" }) });
+    showToast("Enrollment secret revoked.", "ok");
+  } catch (e) { showToast(e.message, "error"); }
+};
 document.getElementById("set-save").onclick = async () => {
   if (!currentUser || currentUser.role !== "admin") { showToast("Only admins can change system settings", "error"); return; }
   const payload = {

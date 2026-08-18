@@ -549,6 +549,14 @@
             <label>Agent reconnect delay (seconds)
               <input id="set-agent-rc" class="input" type="number" value="5" min="1" max="120" style="max-width:160px" />
             </label>
+            <hr style="border-color:var(--border);margin:14px 0" />
+            <h3>Self-enrollment (one-line install)</h3>
+            <p class="muted" style="font-size:12px;margin:0 0 10px">Devices run the generic installer with no token on the command line. They self-enroll and appear as <b>PENDING</b> agents you claim here. Rotate or revoke the enrollment secret any time.</p>
+            <button id="set-enroll-copy" type="button" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span>Copy install command</span></button>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button id="set-enroll-rotate" type="button" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg><span>Rotate secret</span></button>
+              <button id="set-enroll-revoke" type="button" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg><span>Revoke secret</span></button>
+            </div>
           </div>
         </details>
 
@@ -874,69 +882,40 @@
       <div id="view-agents" class="hidden">
         <div class="content-head">
           <h1>Agents</h1>
-          <button id="agent-add" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+          <button id="agent-setup" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" />
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg><span>New agent</span></button>
+              <path d="M12 5v14M5 12h14" />
+            </svg><span>Setup agent</span></button>
         </div>
         <p class="muted" style="padding-left:18px;padding-right:18px;">Reverse-tunnel agents let devices behind
-          NAT/firewall connect outward to ShellDeck. Run the agent script on the device with its token.</p>
+          NAT/firewall connect outward to ShellDeck. Run the one-line installer on the device — it self-enrolls and
+          appears here as <b>PENDING</b>; click <b>Claim</b> to take ownership. No token is ever exposed on the command line.</p>
         <div id="agent-list" class="agent-list"></div>
-        <div id="agent-modal" class="modal hidden">
-          <div class="modal-card">
-            <form id="agent-form" class="user-form">
-          <h3>New agent</h3>
-          <label>Name <input id="agent-name" class="input" /></label>
-          <label>Link to device (optional)
-            <select id="agent-device" class="input">
-              <option value="">— none —</option>
-            </select>
-          </label>
-          <div class="modal-actions">
-            <button id="agent-cancel" type="button" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg><span>Cancel</span></button>
-            <button id="agent-save" type="button" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10" />
-                <polyline points="16 9 11 14 8 11" />
-              </svg><span>Create</span></button>
-          </div>
-            </form>
-          </div>
-        </div>
 
         <!-- Agent bootstrap helper (setup command for the client side) -->
         <div id="agent-bootstrap-modal" class="modal hidden">
           <div class="modal-card">
             <h3>Setup agent on the device</h3>
-            <p class="muted" style="font-size:13px;margin:0 0 12px">Run this on the target device. It auto-downloads the client and connects — no editing needed.</p>
-            <label style="font-weight:600">Linux / macOS (copy &amp; paste)</label>
-            <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px">
-              <textarea id="bs-oneliner" class="input" rows="3" readonly style="font-family:monospace;font-size:12px"></textarea>
-              <button class="btn btn-ghost btn-icon" data-copy="bs-oneliner" title="Copy">📋</button>
+            <p class="muted" style="font-size:13px;margin:0 0 12px">Run this on the target device. The agent self-enrolls — no token is ever shown or typed. It appears here as <b>PENDING</b>; click <b>Claim</b> to take ownership.</p>
+            <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12px">
+              <div style="font-weight:600;margin-bottom:6px">Prerequisites on the target device</div>
+              <ul style="margin:0;padding-left:18px;color:var(--muted);line-height:1.6">
+                <li><b>Python 3.7+</b> (with <code>pip</code>/<code>pip3</code>)</li>
+                <li>Python package: <code style="color:var(--accent)">websocket-client</code> — installed automatically by the installer script</li>
+                <li>Outbound network access to the ShellDeck server on port 80/443 (WebSocket)</li>
+                <li>Linux/macOS: <code>python3</code> on <code>PATH</code>; Windows: run PowerShell <b>as Administrator</b></li>
+              </ul>
             </div>
-            <label style="font-weight:600">Windows PowerShell (copy &amp; paste)</label>
+            <label style="font-weight:600">Linux / macOS</label>
             <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px">
-              <textarea id="bs-ps1" class="input" rows="3" readonly style="font-family:monospace;font-size:12px"></textarea>
-              <button class="btn btn-ghost btn-icon" data-copy="bs-ps1" title="Copy">📋</button>
+              <textarea id="bs-install-sh" class="input" rows="3" readonly style="font-family:monospace;font-size:12px"></textarea>
+              <button class="btn btn-ghost btn-icon" data-copy="bs-install-sh" title="Copy">📋</button>
             </div>
-            <details>
-              <summary style="cursor:pointer;color:var(--accent)">Or save as a script file</summary>
-              <label style="font-weight:600;margin-top:8px;display:block">run_agent.sh (Linux/macOS)</label>
-              <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px">
-                <textarea id="bs-sh" class="input" rows="6" readonly style="font-family:monospace;font-size:12px"></textarea>
-                <button class="btn btn-ghost btn-icon" data-copy="bs-sh" title="Copy">📋</button>
-              </div>
-              <label style="font-weight:600;display:block">run_agent.ps1 (Windows)</label>
-              <div style="display:flex;gap:8px;align-items:flex-start">
-                <textarea id="bs-ps1file" class="input" rows="6" readonly style="font-family:monospace;font-size:12px"></textarea>
-                <button class="btn btn-ghost btn-icon" data-copy="bs-ps1file" title="Copy">📋</button>
-              </div>
-            </details>
+            <label style="font-weight:600">Windows PowerShell (run as Administrator)</label>
+            <div style="display:flex;gap:8px;align-items:flex-start">
+              <textarea id="bs-install-ps1" class="input" rows="3" readonly style="font-family:monospace;font-size:12px"></textarea>
+              <button class="btn btn-ghost btn-icon" data-copy="bs-install-ps1" title="Copy">📋</button>
+            </div>
             <div class="modal-actions">
               <button id="agent-bootstrap-close" class="btn btn-primary btn-icon-text"><span>Done</span></button>
             </div>

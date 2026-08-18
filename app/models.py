@@ -127,6 +127,11 @@ class SettingsRow(Base):
     session_retention_days: Mapped[int] = mapped_column(Integer, default=90)  # purge SessionLog older than N days (0 = keep forever)
     agent_heartbeat: Mapped[int] = mapped_column(Integer, default=15)  # agent heartbeat interval (seconds)
     agent_reconnect: Mapped[int] = mapped_column(Integer, default=5)   # agent reconnect delay (seconds)
+    # Self-enrollment (pending + claim). A device can register itself by POSTing
+    # this secret to /api/agents/enroll; it lands as a `pending` agent owned by
+    # `enroll_owner_id`, then an operator claims it from the UI. Revocable here.
+    enroll_secret: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
+    enroll_owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, default=None)
 
 
 class ScheduledTask(Base):
@@ -175,7 +180,11 @@ class Agent(Base):
     connected: Mapped[bool] = mapped_column(default=False)
     ips: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list of device IPs reported by the agent
     os: Mapped[str | None] = mapped_column(String(32), nullable=True)  # OS reported by the agent (windows/linux/darwin)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    install_slug: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)  # random slug for /install/<slug>.sh (hides token from CLI)
+    # Self-enrollment state: a pending agent (owner_id is NULL until claimed) was
+    # created by an enroll request, not by an operator. The operator claims it.
+    pending: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=_utcnow)
 
     owner: Mapped["User"] = relationship()
 

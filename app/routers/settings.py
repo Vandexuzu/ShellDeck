@@ -1,6 +1,8 @@
 """App settings — admin-only. Currently exposes notification configuration."""
 from __future__ import annotations
 
+import secrets
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -89,6 +91,11 @@ def update_settings(
         row.agent_heartbeat = max(5, min(payload.agent_heartbeat, 300))
     if payload.agent_reconnect is not None:
         row.agent_reconnect = max(1, min(payload.agent_reconnect, 120))
+    if payload.enroll_secret_action == "rotate":
+        row.enroll_secret = secrets.token_urlsafe(24)
+        row.enroll_owner_id = _.id
+    elif payload.enroll_secret_action == "revoke":
+        row.enroll_secret = None
     db.commit()
     db.refresh(row)
     log_audit(db, _, "settings_update", f"monitor_interval={row.monitor_interval} public_dashboard={row.public_dashboard} oidc_enabled={row.oidc_enabled} timezone={row.timezone} theme={row.theme} session_retention_days={row.session_retention_days} agent_heartbeat={row.agent_heartbeat} agent_reconnect={row.agent_reconnect}")

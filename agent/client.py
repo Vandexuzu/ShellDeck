@@ -38,7 +38,11 @@ import time
 try:
     import websocket
 except ImportError:
-    sys.exit("Missing dependency: pip install websocket-client")
+    sys.exit(
+        "Missing dependency: websocket-client\n"
+        "  Install with:  pip install websocket-client\n"
+        "  or (Debian/Ubuntu):  apt-get install python3-websocket"
+    )
 
 # POSIX-only modules (PTY/termios/fcntl). Guard so the agent also runs on Windows.
 IS_WINDOWS = sys.platform.startswith("win")
@@ -244,12 +248,19 @@ class Session:
 
 
 class AgentClient:
-    def __init__(self, url: str, token: str):
-        self.url = url
+    def __init__(self, url: str, token: str, secret: str = "", name: str = ""):
+        self.url = url                       # WS url used for the live tunnel
+        # Base HTTP url (for enroll/POST) — derived from the WS url but converted
+        # back to http(s); never mutated by the reconnect loop.
+        base = url.split("?")[0].rsplit("/api/agents/ws", 1)[0]
+        self.base_url = base.replace("ws://", "http://").replace("wss://", "https://")
         self.token = token
+        self.secret = secret
+        self.name = name
         self.ws = None
         self.sessions: dict[int, Session] = {}
         self.lock = threading.Lock()
+        self.needs_reauth = False
 
     def _collect_ips(self) -> list[str]:
         """Return the device's local interface IP addresses (IPv4), skipping
@@ -317,6 +328,18 @@ class AgentClient:
                 time.sleep(HEARTBEAT_INTERVAL)
         threading.Thread(target=_hb, daemon=True).start()
 
+    def on_close(self, ws, status_code, reason):
+        # Server closes with reason="revoked" when this agent's token was reset/
+        # deleted from the UI. Drop the local token and re-enroll automatically so
+        # the operator doesn't have to SSH in and delete files by hand.
+        # (websocket-client 1.9.0 doesn't reliably deliver `reason`, so the primary
+        # signal is the {"t":"revoked"} app frame handled in on_message; this is a
+        # secondary guard for libraries that do deliver it.)
+        print(f"[agent] disconnected (code={status_code} reason={reason!r}).")
+        if reason == "revoked":
+            _delete_stored_token()
+            self.needs_reauth = True
+
     def on_message(self, ws, raw):
         try:
             msg = json.loads(raw)
@@ -324,6 +347,11 @@ class AgentClient:
             return
         t = msg.get("t")
         cid = msg.get("cid")
+        if t == "revoked":
+            # Server reset/removed this agent. Drop the local token and re-enroll.
+            _delete_stored_token()
+            self.needs_reauth = True
+            return
         if t == "exec":
             with self.lock:
                 if cid in self.sessions:
@@ -421,26 +449,164 @@ class AgentClient:
                 self.ws = websocket.WebSocketApp(
                     self.url,
                     on_open=self.on_open,
-                    on_close=lambda ws, *a: print("[agent] disconnected."),
+                    on_close=self.on_close,
                     on_message=self.on_message,
                 )
                 self.ws.run_forever()
             except Exception as e:
                 print("[agent] error:", e)
+            # Server revoked our token (Reset from the UI): drop it and re-enroll to
+            # mint a fresh token, then continue the loop with the new credentials.
+            if self.needs_reauth:
+                self.needs_reauth = False
+                secret = self.secret or os.environ.get("SHELLDECK_ENROLL_SECRET", "")
+                new_token = _enroll_or_load(self.base_url, secret, self.name) if secret else ""
+                if new_token:
+                    self.token = new_token
+                    self.url = self.base_url.rstrip("/").replace("http://", "ws://").replace("https://", "wss://") + "/api/agents/ws?token=" + new_token
+                    print("[agent] re-enrolled with a new token.")
+                else:
+                    print("[agent] re-enroll failed (no enroll secret available); will retry on next reconnect.")
             print("[agent] reconnecting in 5s ...")
             time.sleep(RECONNECT_DELAY)
 
 
 def main() -> None:
+    # Load a local shelldeck-agent.env (written by install.sh/install.ps1) into the
+    # environment. Windows scheduled tasks don't pass env files like systemd's
+    # EnvironmentFile, so this keeps the agent working even if --url/--enroll-secret
+    # aren't passed explicitly.
+    try:
+        _envfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shelldeck-agent.env")
+        if os.path.exists(_envfile):
+            with open(_envfile, "r", encoding="utf-8", errors="replace") as _f:
+                for _line in _f:
+                    _line = _line.strip()
+                    if not _line or _line.startswith("#") or "=" not in _line:
+                        continue
+                    _k, _v = _line.split("=", 1)
+                    # Strip whitespace, quotes, and stray CR/LF so Windows CRLF/.env
+                    # quirks never corrupt values (e.g. a trailing \r would break URLs).
+                    _k = _k.strip().strip("'\"").strip()
+                    _v = _v.strip().strip("'\"").strip()
+                    if _k and _v:
+                        os.environ.setdefault(_k, _v)
+    except Exception:
+        pass
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=os.environ.get("SHELLDECK_URL", "http://127.0.0.1:8000"))
     ap.add_argument("--token", default=os.environ.get("SHELLDECK_AGENT_TOKEN", ""))
+    # Self-enrollment: the generic install.sh ships only a revocable enroll
+    # secret (never a per-device token). On first run with --enroll-secret the
+    # agent mints a per-device token via POST /api/agents/enroll, persists it
+    # locally, and connects. Subsequent runs reuse the stored token.
+    ap.add_argument("--enroll-secret", default=os.environ.get("SHELLDECK_ENROLL_SECRET", ""))
+    ap.add_argument("--name", default=os.environ.get("SHELLDECK_AGENT_NAME", ""))
     args = ap.parse_args()
-    if not args.token:
-        sys.exit("Set SHELLDECK_AGENT_TOKEN (or --token).")
-    ws_url = args.url.rstrip("/").replace("http://", "ws://").replace("https://", "wss://") + "/api/agents/ws?token=" + args.token
+
+    # Defense in depth: strip stray shell quotes that some launchers (e.g. a
+    # PowerShell -Argument string) pass through literally into the value.
+    args.url = args.url.strip().strip("'\"").strip()
+    args.token = args.token.strip().strip("'\"").strip()
+    args.enroll_secret = args.enroll_secret.strip().strip("'\"").strip()
+    args.name = args.name.strip().strip("'\"").strip()
+
+    # Resolve the per-device token: explicit --token, or mint one via self-enroll.
+    # If enrollment fails (network/DNS/secret), keep retrying instead of dying so
+    # the systemd unit's restart loop eventually connects once the issue clears.
+    token = args.token
+    while not token:
+        if args.enroll_secret:
+            token = _enroll_or_load(args.url, args.enroll_secret, args.name)
+        if token:
+            break
+        print(f"[agent] token unavailable; retrying in {RECONNECT_DELAY:.0f}s ...")
+        time.sleep(RECONNECT_DELAY)
+
+    # FIX: build the WS URL from the *resolved* token, not the empty --token arg.
+    ws_url = args.url.rstrip("/").replace("http://", "ws://").replace("https://", "wss://") + "/api/agents/ws?token=" + token
     print(f"[agent] connecting to {args.url} ...")
-    AgentClient(ws_url, args.token).run()
+    AgentClient(ws_url, token, secret=args.enroll_secret, name=args.name).run()
+
+
+def _delete_stored_token() -> None:
+    """Remove the locally persisted enrollment token (used on a server-forced reset)."""
+    import os as _os
+    store = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".shelldeck_token")
+    try:
+        _os.remove(store)
+        print("[agent] removed local token (will re-enroll).")
+    except OSError:
+        pass
+
+
+def _enroll_or_load(url: str, secret: str, name: str) -> str:
+    """Self-enroll: mint a per-device token once, then persist it on disk so the
+    token is never re-sent and never sits in the process list / shell history.
+    Returns the token string, or '' on failure (caller decides whether to retry)."""
+    import os as _os
+    import traceback
+    import urllib.error
+    import urllib.request
+
+    # Persist next to this script; only the local root/owner can read it.
+    store = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), ".shelldeck_token")
+    try:
+        with open(store, "r") as f:
+            saved = f.read().strip()
+        if saved:
+            print("[agent] reusing stored enrollment token.")
+            return saved
+    except Exception:
+        pass
+
+    body = json.dumps({"secret": secret, "name": name or "", "os": _platform_os()}).encode("utf-8")
+    req = urllib.request.Request(
+        url.rstrip("/") + "/api/agents/enroll",
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            # Some fronting proxies / WAFs (e.g. Cloudflare) reject requests whose
+            # User-Agent is the default "Python-urllib" with 403. Send a browser-like
+            # UA (plus X-Requested-With) so the enroll POST is treated as legitimate.
+            "User-Agent": "ShellDeck-Agent/1.0",
+            "X-Requested-With": "ShellDeck-Agent",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        tok = data.get("token", "")
+        if not tok:
+            print("[agent] enrollment failed: server returned no token.")
+            return ""
+        try:
+            with open(store, "w") as f:
+                f.write(tok)
+            _os.chmod(store, 0o600)
+        except Exception:
+            pass
+        print("[agent] enrolled successfully; token stored locally.")
+        return tok
+    except urllib.error.HTTPError as e:
+        print(f"[agent] enrollment rejected ({e.code}): {e.read().decode('utf-8', 'replace')}")
+        return ""
+    except Exception as e:
+        print(f"[agent] enrollment error: {e}")
+        traceback.print_exc()
+        return ""
+
+
+def _platform_os() -> str:
+    if IS_WINDOWS:
+        return "windows"
+    try:
+        import platform
+        return platform.system().lower()
+    except Exception:
+        return "linux"
 
 
 if __name__ == "__main__":

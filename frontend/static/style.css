@@ -556,6 +556,7 @@ body {
 .home-row .sub { color: var(--muted); }
 .home-row .badge { font-size: 10px; padding: 2px 6px; border-radius: 6px; background: var(--primary); color: #fff; }
 .home-row .badge.off { background: var(--muted); }
+.badge-warn { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: rgba(245,158,11,.18); color: #f59e0b; font-weight: 600; letter-spacing: .03em; }
 .home-empty { color: var(--muted); font-size: 12px; padding: 8px; }
 
 

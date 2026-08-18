@@ -215,6 +215,8 @@ class SettingsOut(BaseModel):
     session_retention_days: int = 90
     agent_heartbeat: int = 15
     agent_reconnect: int = 5
+    enroll_secret: str | None = None
+    enroll_owner_id: int | None = None
 
 
 class SettingsUpdate(BaseModel):
@@ -239,6 +241,7 @@ class SettingsUpdate(BaseModel):
     session_retention_days: int | None = None
     agent_heartbeat: int | None = None
     agent_reconnect: int | None = None
+    enroll_secret_action: str | None = None  # "rotate" | "revoke" | None (leave as-is)
 
 
 # ------------------------------- Scheduled tasks ----------------------------
