@@ -110,8 +110,30 @@ An **agent** is a tiny Python client (`agent/client.py`) that runs **on the targ
 - **Monitoring** (CPU / memory / disk / uptime) collected *through* the agent — the device does **not** need to be SSH-reachable from the server.
 - **Windows support** — the agent runs on Windows (cmd.exe) too; OS is auto-detected so metrics use PowerShell vs. Linux commands.
 
-### Add an agent
-1. **Agents → Add Agent** → give it a name.
+### Self-enrollment (no per-device token on the cmdline)
+The agent installs from a **single generic one-liner** that carries only the server URL + a *revocable* enrollment secret — never a per-device token:
+
+```bash
+# Linux / macOS (installs a systemd service, auto-starts on boot, restarts on failure)
+curl -fsSL https://shelldeck.example.com/install.sh | bash
+```
+```powershell
+# Windows (installs a Scheduled Task, runs at startup, restarts on failure)
+Invoke-WebRequest -Uri 'https://shelldeck.example.com/install.ps1' -OutFile install.ps1; .\install.ps1
+```
+
+On first run the agent **mints its own per-device token** via `POST /api/agents/enroll` (validated against the enrollment secret), stores it locally (`0600`), and connects. The token is never in the URL, cmdline, shell history, or `ps` — it lives only on the device and in the server DB.
+
+> The enrollment secret is **rotatable** from Settings (rotate / revoke). Rotating issues a new secret; the old one stops working. Old tokens stay valid until the agent is reset.
+
+### Claim flow
+A freshly enrolled agent shows up as **PENDING** (badge) on the Agents tab. An operator **Claims** it (optionally renames) to take ownership; only then can its discovered IPs be turned into linked devices.
+
+### Reset (unbind without touching the device)
+The **Reset** button on a claimed agent deletes it server-side and sends the live WebSocket a `revoked` signal. The running agent **drops its local token and re-enrolls itself** — it reappears as PENDING automatically. No SSH, no manual file deletion on the device.
+
+### Add an agent (legacy / manual)
+1. **Agents → Add Agent** → give it a name (this path is now optional; self-enrollment is preferred).
 2. Copy one of the **bootstrap helpers** (auto-generated per agent):
    - **Linux / macOS** one-liner
    - **Windows PowerShell** one-liner
@@ -120,7 +142,7 @@ An **agent** is a tiny Python client (`agent/client.py`) that runs **on the targ
 3. Run it on the target device (`pip install websocket-client` first).
 
 ### Agent IP discovery
-When the agent connects it reports its local interface IPs. On the **Agents** tab each IP shows a **+ Add device** button that pre-fills a new device and **auto-links it to that agent's tunnel** — so Shell / Files / Monitoring go through the agent, not direct SSH.
+When the agent connects it reports its local interface IPs. On the **Agents** tab each IP shows a **+ Add device** button that pre-fills a new device and **auto-links it to that agent's tunnel** — so Shell / Files / Monitoring go through the agent, not direct SSH. (The button is hidden while the agent is PENDING or already linked to a device.)
 
 ### Global settings for agents
 **Settings → Agent**:
@@ -128,6 +150,7 @@ When the agent connects it reports its local interface IPs. On the **Agents** ta
 - **Reconnect (s)** — backoff before the agent retries after a dropout. Default `5`.
 
 > 💡 The agent is *optional*. Devices you can already SSH/SFTP to work agentlessly — agents are only needed for hosts that are unreachable from the ShellDeck server.
+
 
 ---
 
@@ -249,6 +272,9 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Agent bootstrap helpers (one-liner / PowerShell / sh / ps1 with settings-driven heartbeat & reconnect)
 - [x] Agent-aware monitoring & shell (devices reachable only via agent no longer show unreachable)
 - [x] Global Settings: theme, session-log retention, agent heartbeat & reconnect
+- [x] Agent self-enrollment (generic install scripts, no per-device token on the cmdline)
+- [x] Agent pending/claim flow + one-click Reset (auto re-enroll)
+- [x] Agent install scripts hardened for Windows (ProgramData, ASCII .env, no literal quotes)
 
 **Earlier milestones**
 

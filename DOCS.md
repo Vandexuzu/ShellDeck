@@ -132,7 +132,7 @@ within 15 minutes → temporary lockout (HTTP 429). Tunable in `app/main.py`
 | `snippets` | owner_id, name, command, category |
 | `settings` | singleton (id=1): notifications (telegram/discord/ntfy/gotify/slack/email/webhook), monitor_interval, public_dashboard, oidc_enabled, theme, session_retention_days (0 = keep forever), agent_heartbeat (s), agent_reconnect (s) |
 | `scheduled_tasks` | owner_id, command, device_ids (JSON), interval_minutes, cron, enabled, run_once, run_at, last_run, next_run, last_output |
-| `agents` | owner_id, name, token (shared secret), device_id (linked device), connected, last_seen, ips (JSON list of reported interface IPs), os (reported OS: windows/linux/darwin) — for NAT relay |
+| `agents` | owner_id, name, token (per-device secret minted on enroll), pending (bool — true until claimed), device_id (linked device), connected, last_seen, ips (JSON list of reported interface IPs), os (reported OS: windows/linux/darwin) — for NAT relay |
 | `audit_log` | user_id, username, action (login/login_failed/logout/…), detail, ip, created_at |
 | `topology_snapshots` | scan_time, nodes_json, edges_json, discovered_json |
 
@@ -208,26 +208,43 @@ A device behind a firewall dials out (`agent/client.py` → `/api/agents/ws`). S
 relays the shell **and** file manager **and** monitoring through that tunnel — no
 inbound port on the device.
 
-**Add an agent:** Agents → Add Agent → copy a **bootstrap helper**. For a quick test
-use the Linux/macOS or Windows PowerShell **one-liner** (runs in the foreground). For a
-**permanent** install use the `script_sh` (installs a systemd service on Linux/macOS)
-or `script_ps1` (installs a Scheduled Task on Windows) — both auto-start on boot and
-restart on failure, so the agent survives closing the terminal / logging out. Each
-helper injects the server URL, the agent token, and the **heartbeat / reconnect**
-values from Global Settings, so the device connects with zero manual editing:
+**Self-enrollment (preferred):** install from a single generic script that carries only
+the server URL + a *revocable* enrollment secret — never a per-device token:
 
-```powershell
-# Windows example (bootstrap PowerShell one-liner)
-Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/Vandexuzu/ShellDeck/main/agent/client.py' -OutFile shelldeck_agent.py
-pip install websocket-client
-$env:SHELLDECK_URL='https://shelldeck.example.com'; $env:SHELLDECK_AGENT_TOKEN='<token>'; $env:SHELLDECK_HEARTBEAT='15'; $env:SHELLDECK_RECONNECT='5'
-python shelldeck_agent.py
+```bash
+# Linux / macOS → installs a systemd service (auto-start on boot, restart on failure)
+curl -fsSL https://shelldeck.example.com/install.sh | bash
 ```
+```powershell
+# Windows → installs a Scheduled Task (runs at startup, restart on failure)
+Invoke-WebRequest -Uri 'https://shelldeck.example.com/install.ps1' -OutFile install.ps1; .\install.ps1
+```
+
+On first run the agent **mints its own per-device token** via
+`POST /api/agents/enroll` (validated against the enrollment secret), stores it locally
+(`chmod 600`), and connects. The token is never in the URL, cmdline, shell history, or
+`ps` — it lives only on the device and in the server DB. The enrollment secret is
+**rotatable** from Settings (rotate issues a new secret; revoke disables enrollment);
+old per-device tokens stay valid until the agent is reset.
+
+**Claim flow:** a freshly enrolled agent is `pending=true` and shows a **PENDING** badge.
+An operator **Claims** it (optionally renames) to take ownership; only then can its
+discovered IPs be turned into linked devices.
+
+**Reset (unbind without touching the device):** the **Reset** button deletes the agent
+server-side and sends the live WebSocket a `revoked` frame. The running agent drops its
+local token and **re-enrolls itself** — it reappears as PENDING automatically. No SSH or
+manual file deletion required on the device.
+
+**Manual / legacy add:** Agents → Add Agent → copy a **bootstrap helper** (one-liner /
+PowerShell / `run_agent.sh` / `run_agent.ps1`). Each injects the server URL, the
+per-device agent token, and the heartbeat / reconnect values from Global Settings.
 
 **Agent IP discovery:** on connect the agent reports its local interface IPs. On the
 Agents tab each IP has a **+ Add device** button that pre-fills a new device and
 **auto-links it to that agent's tunnel** — so Shell / Files / Monitoring go through the
-agent, not direct SSH.
+agent, not direct SSH. (The button is hidden while the agent is PENDING or already linked
+to a device.)
 
 **OS auto-detection:** the agent reports its OS (`windows` / `linux` / `darwin`). Devices
 reached only via an agent are monitored *through* the tunnel; Windows devices use
@@ -349,10 +366,12 @@ Base: `http://<host>:8000`. All `/api/*` endpoints require an
 ### Agents (`/api/agents/*`)
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/agents/` | list agents (with `connected`, `ips`, `os`, `device_id`) |
-| POST | `/api/agents/` | create agent + token (`device_id` optional) |
+| GET | `/api/agents/` | list agents (with `connected`, `ips`, `os`, `device_id`, `pending`) |
+| POST | `/api/agents/enroll` | self-enroll: `{"name","enroll_secret"}` → mints a per-device token; rate-limited (20 fails / 10 min / IP), capped at 50 pending per owner |
+| POST | `/api/agents/{agent_id}/claim` | claim a pending agent (operator takes ownership, clears `pending`) |
+| POST | `/api/agents/` | create agent + token (legacy/manual, `device_id` optional) |
 | PUT | `/api/agents/{agent_id}` | rename / link-unlink to a device (`device_id`) |
-| DELETE | `/api/agents/{agent_id}` | remove agent |
+| DELETE | `/api/agents/{agent_id}` | remove agent (also revokes a live tunnel → triggers client re-enroll) |
 | GET | `/api/agents/{agent_id}/bootstrap` | copy-paste helpers (one-liner / PowerShell / sh / ps1) |
 | WebSocket | `/api/agents/ws?token=` | outbound tunnel from the device |
 | WebSocket | `/api/agents/terminal/{device_id}` | interactive shell through the agent |
@@ -409,7 +428,9 @@ Tests cover auth, RBAC, device CRUD, tags, bulk, docker, settings, alerts, sched
 snippet categories, app identity, Network Topology + custom scan, Windows monitoring
 (auto OS detect + PowerShell), Agent IP discovery (+ auto-link), Agent bootstrap helpers,
 agent-aware monitoring & shell (agent-only devices no longer show unreachable), Global
-Settings (theme, session retention, agent heartbeat & reconnect).
+Settings (theme, session retention, agent heartbeat & reconnect), **Agent
+self-enrollment (generic install scripts, no per-device token on the cmdline),
+pending/claim flow, and one-click Reset (auto re-enroll)**.
 
 **Planned:** resource history graphs, per-device public share links, API bot tokens,
 password reset flow, mobile terminal touch optimisations.
