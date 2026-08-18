@@ -15,6 +15,7 @@ from app.config import settings
 from app.db import get_db
 from app.models import Device, User
 from app.routers.devices import connect_device, load_credentials, _can_view, _can_access
+from app.routers.agents import device_agent_token, agent_exec_relay
 from app.schemas import DockerContainer, DockerAction, DockerRun
 from app.security import get_current_user, operator_only
 from app.audit import log_audit
@@ -24,6 +25,24 @@ router = APIRouter(prefix="/api/docker", tags=["docker"])
 
 async def _run(device: Device, command: str, db: Session, timeout: int = 30) -> tuple[str, str, int]:
     """Return (stdout, stderr, exit_status) from a command run on the device."""
+    conn, bastion = await connect_device(device, db)
+    try:
+        result = await conn.run(command, check=False, timeout=timeout)
+        return result.stdout or "", result.stderr or "", result.exit_status or 0
+    finally:
+        conn.close()
+        if bastion is not None:
+            bastion.close()
+
+
+async def _run_smart(device: Device, command: str, db: Session, timeout: int = 30) -> tuple[str, str, int]:
+    """Run a command on the device, preferring a live agent tunnel when the device
+    is only reachable via the agent (no inbound SSH). Falls back to direct SSH."""
+    token = device_agent_token(db, device.id)
+    if token is not None:
+        out, code = await agent_exec_relay(device.id, command, db, timeout=timeout, capture_code=True)
+        return out, "", code
+    return await _run(device, command, db, timeout=timeout)
     conn, bastion = await connect_device(device, db)
     try:
         result = await conn.run(command, check=False, timeout=timeout)
@@ -62,7 +81,7 @@ async def list_containers(device_id: int, db: Session = Depends(get_db), user: U
     if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     fmt = "{{json .}}"
-    stdout, stderr, code = await _run(
+    stdout, stderr, code = await _run_smart(
         device,
         f"docker ps -a --format '{fmt}'",
         db,
@@ -81,7 +100,7 @@ async def container_logs(device_id: int, container_id: str, lines: int = 200, db
     # guard against shell injection in container id
     if not container_id.replace("_", "").replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="Invalid container id")
-    stdout, stderr, code = await _run(device, f"docker logs --tail {int(lines)} {container_id}", db, timeout=30)
+    stdout, stderr, code = await _run_smart(device, f"docker logs --tail {int(lines)} {container_id}", db, timeout=30)
     if code != 0:
         raise HTTPException(status_code=502, detail=f"docker logs failed: {stderr.strip()}")
     return {"container_id": container_id, "logs": stdout}
@@ -98,7 +117,7 @@ async def container_action(device_id: int, body: DockerAction, db: Session = Dep
     if body.action not in ("start", "stop", "restart", "pause", "unpause", "kill", "remove"):
         raise HTTPException(status_code=400, detail="Action must be start|stop|restart|pause|unpause|kill|remove")
     extra = " -f" if body.action == "remove" else ""
-    stdout, stderr, code = await _run(device, f"docker {body.action} {cid}{extra}", db, timeout=60)
+    stdout, stderr, code = await _run_smart(device, f"docker {body.action} {cid}{extra}", db, timeout=60)
     if code != 0:
         raise HTTPException(status_code=502, detail=f"docker {body.action} failed: {stderr.strip()}")
     log_audit(db, user, "docker_action", f"device={device.name} container={cid} action={body.action}")
@@ -111,7 +130,7 @@ async def container_stats(device_id: int, db: Session = Depends(get_db), user: U
     if device is None or not _can_view(db, device, user):
         raise HTTPException(status_code=404, detail="Device not found")
     # `docker stats --no-stream` gives a one-shot snapshot (no live streaming needed).
-    stdout, stderr, code = await _run(
+    stdout, stderr, code = await _run_smart(
         device,
         "docker stats --no-stream --format '{{.Name}}\\t{{.CPUPerc}}\\t{{.MemPerc}}'",
         db,
@@ -144,6 +163,21 @@ async def docker_run(device_id: int, body: DockerRun, db: Session = Depends(get_
         args = shlex.split(cmd)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Bad command: {exc}")
+    token = device_agent_token(db, device.id)
+    if token is not None:
+        # Device reachable only via the agent tunnel: run through the relay.
+        # The agent exec runs in a PTY, so pty requests are satisfied natively.
+        docker_cmd = "docker " + shlex.join(args)
+        try:
+            out, code = await agent_exec_relay(device.id, docker_cmd, db, timeout=120, capture_code=True)
+        except HTTPException as exc:
+            raise
+        return {
+            "command": "docker " + cmd,
+            "stdout": out,
+            "stderr": "",
+            "exit_status": code,
+        }
     conn, bastion = await connect_device(device, db)
     try:
         # `conn.run` only accepts a single command string (keyword-only options after),

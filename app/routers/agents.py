@@ -523,10 +523,15 @@ async def agent_fs_relay(device_id: int, req: FsRequest, db: Session) -> object:
     return resp.get("result")
 
 
-async def agent_exec_relay(device_id: int, command: str, db: Session, timeout: int = 30) -> str:
+async def agent_exec_relay(device_id: int, command: str, db: Session, timeout: int = 30, capture_code: bool = False):
     """Run a one-shot shell command on the device through its connected agent
     and return the combined output. Used by server-side monitoring for devices
-    that are only reachable via the agent tunnel (no inbound SSH)."""
+    that are only reachable via the agent tunnel (no inbound SSH).
+
+    When ``capture_code`` is True the exit status is appended as a trailing
+    ``SD_EXIT=<n>`` line and a ``(stdout, code)`` tuple is returned instead of
+    the raw string — used by the Docker manager so it can detect command failures.
+    """
     token = device_agent_token(db, device_id)
     if token is None:
         raise HTTPException(status_code=503, detail="Device agent not connected")
@@ -539,7 +544,8 @@ async def agent_exec_relay(device_id: int, command: str, db: Session, timeout: i
     loop = asyncio.get_running_loop()
     fut: asyncio.Future = loop.create_future()
     _FS_WAIT[cid] = fut
-    await q.put(json.dumps({"t": "fs", "cid": cid, "op": "exec", "data": command}))
+    exec_cmd = command + "; echo \"SD_EXIT=$?\"" if capture_code else command
+    await q.put(json.dumps({"t": "fs", "cid": cid, "op": "exec", "data": exec_cmd}))
     try:
         resp = await asyncio.wait_for(fut, timeout=timeout)
     except asyncio.TimeoutError:
@@ -547,7 +553,24 @@ async def agent_exec_relay(device_id: int, command: str, db: Session, timeout: i
         raise HTTPException(status_code=504, detail="Agent exec timed out")
     if not resp.get("ok"):
         raise HTTPException(status_code=502, detail="Agent exec error: " + resp.get("err", "unknown"))
-    return (resp.get("result") or {}).get("output", "")
+    out = (resp.get("result") or {}).get("output", "")
+    if not capture_code:
+        return out
+    # Split off the SD_EXIT=<n> marker. The agent runs `<cmd>; echo "SD_EXIT=$?"`,
+    # but stderr ordering can place the marker anywhere in the combined stream, so
+    # scan every line (not just the last) and remove the matching one.
+    code = 0
+    kept = []
+    for ln in out.split("\n"):
+        if ln.startswith("SD_EXIT="):
+            try:
+                code = int(ln.split("=", 1)[1].strip())
+            except (ValueError, IndexError):
+                code = 0
+            continue
+        kept.append(ln)
+    out = "\n".join(kept).rstrip("\n")
+    return (out, code)
 
 
 @router.post("/fs/{device_id}")

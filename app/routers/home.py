@@ -60,10 +60,10 @@ async def _cached_docker_count(d: Device, db: Session) -> dict:
 
 
 async def _run_docker_safe(d: Device, db: Session) -> tuple[str, str, int]:
-    from app.routers.docker import _run
+    from app.routers.docker import _run_smart
 
     try:
-        return await _run(d, "docker ps -a --format '{{.State}}'", db, timeout=8)
+        return await _run_smart(d, "docker ps -a --format '{{.State}}'", db, timeout=8)
     except Exception:
         return "", "", 1
 
