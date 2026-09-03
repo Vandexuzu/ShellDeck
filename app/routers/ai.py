@@ -24,11 +24,20 @@ router = APIRouter(prefix="/api/ai", tags=["ai"])
 
 
 def get_device_or_404(device_id: int, user: User, db: Session) -> Device:
-    """Get device owned by user or raise 404."""
-    device = db.query(Device).filter(
-        Device.id == device_id,
-        Device.owner_id == user.id
-    ).first()
+    """Get device accessible by user or raise 404.
+    
+    Admin can access all devices. Other users can only access their own devices.
+    """
+    if user.role == "admin":
+        # Admin can access any device
+        device = db.query(Device).filter(Device.id == device_id).first()
+    else:
+        # Non-admin users can only access their own devices
+        device = db.query(Device).filter(
+            Device.id == device_id,
+            Device.owner_id == user.id
+        ).first()
+    
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -1,12 +1,20 @@
-```
-# Dependencies
-node_modules/
+```gitignore
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 
-# Build artifacts
-dist/
-build/
-*.min.js
-*.bundle.js
+# Dependencies
+.venv/
+venv/
+env/
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
 
 # Editor/IDE files
 .vscode/
@@ -15,27 +23,13 @@ build/
 *.swo
 *.tmp
 
-# Logs
-*.log
-
-# Environment
-.env
-.env.local
-*.env.*
-
 # Coverage reports
-coverage/
+.coverage
 htmlcov/
-*.coverage
+coverage/
 
-# Python specific
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.so
-.coverage.*
-.tox/
-.nox/
+# Distribution artifacts
+dist/
+build/
+*.egg-info/
 ```
