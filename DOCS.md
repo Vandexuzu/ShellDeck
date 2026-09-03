@@ -287,6 +287,66 @@ Install to phone home screen; mobile UI (cards + bottom nav, swipeable). The mob
 terminal has an on-screen keyboard (Ctrl/Alt/Shift + a–z row). Every menu has a
 consistent header (14px padding, border-bottom, min-height 52px).
 
+### 7.16 AI Copilot
+
+ShellDeck includes an integrated AI assistant that helps you work faster and safer with
+your servers. The AI never executes commands automatically — you always review and
+confirm before running.
+
+**Providers supported:**
+- **OpenAI** (GPT-4o-mini, GPT-4o, GPT-3.5-turbo)
+- **Anthropic** (Claude 3 Haiku, Claude 3 Sonnet, Claude 3 Opus)
+- **Ollama** (local LLMs like Llama 3.1, Mistral, Phi-3 — privacy-first, no API costs)
+
+**Features:**
+
+| Mode | Description | Example |
+|------|-------------|---------|
+| **Diagnose Error** | Paste an error message or log snippet; AI analyzes context and suggests fixes | `Permission denied (publickey)` → suggests checking SSH key permissions, agent forwarding |
+| **Generate Command** | Describe what you want in plain English; AI writes the exact bash command | "Find all files larger than 100MB" → `find / -type f -size +100M -exec ls -lh {} \;` |
+| **Explain Command** | Paste a complex command; AI breaks down what each part does | `tar -czvf archive.tar.gz --exclude='.git' .` → explains flags and exclusion |
+| **Write Script** | Describe a multi-step task; AI generates a complete bash script with comments | "Backup database, compress, upload to S3, delete local copy" → full script with error handling |
+
+**Quick Actions Panel:**
+The AI chat interface includes 4 one-click action buttons at the top:
+1. 🔍 **Diagnose Error** — Pre-fills prompt for error analysis
+2. ⚡ **Generate Command** — Pre-fills prompt for command generation
+3. 📖 **Explain Command** — Pre-fills prompt for command explanation
+4. 📝 **Write Script** — Pre-fills prompt for script writing
+
+**Chat History:**
+- Conversations are saved per-device for context continuity
+- Filter history by device from the AI panel
+- Clear chat with confirmation dialog
+- History stored in SQLite (`ai_chats` table) with encrypted API keys
+
+**Security & Safety:**
+- **Human-in-the-loop**: AI never auto-executes; you must click "Run" or "Copy"
+- **Command sanitization**: Dangerous patterns (rm -rf /, dd, mkfs) trigger warnings
+- **Risk analysis**: AI flags potentially destructive commands with severity levels
+- **Data minimization**: Only relevant server context is sent to the LLM
+- **Local LLM option**: Use Ollama for complete privacy (no data leaves your network)
+- **Encrypted API keys**: Keys stored with Fernet encryption, rotated on settings change
+
+**Context Awareness:**
+When analyzing errors or generating commands, the AI can access:
+- Device OS (Linux/Windows/macOS)
+- Current user context
+- Recent terminal output (when explicitly shared)
+- Device tags and metadata
+
+**Usage Flow:**
+1. Open a device terminal or dashboard
+2. Click the 🤖 **AI Assistant** button (top-right)
+3. Select a Quick Action or type your question
+4. Review the AI's response
+5. Click **Copy** to clipboard or **Run** to execute directly (with confirmation)
+
+**Cost Control:**
+- OpenAI/Anthropic: Pay-per-token (GPT-4o-mini is ~$0.15 per million input tokens)
+- Ollama: Free, runs locally (requires ~8GB RAM for 8B models)
+- Rate limiting: 10 requests/minute per user to prevent runaway costs
+
 ---
 
 ## 8. API Reference
@@ -386,6 +446,23 @@ Base: `http://<host>:8000`. All `/api/*` endpoints require an
 ### Backup (`/api/backup/*`)
 `GET /export` (export DB) · `GET /inventory/{fmt}` (device inventory)
 
+### AI Copilot (`/api/ai/*`)
+| Method | Path | Notes |
+|--------|------|-------|
+| POST | `/api/ai/chat` | Send a message to the AI assistant; returns response with context |
+| GET | `/api/ai/history` | List chat history (filter by device_id) |
+| DELETE | `/api/ai/history/{chat_id}` | Clear a specific chat or all chats |
+| POST | `/api/ai/diagnostic/analyze` | Analyze an error message; returns structured diagnosis with severity, explanation, suggested commands |
+| POST | `/api/ai/command/explain` | Explain a command; returns breakdown of flags, arguments, and safety notes |
+| POST | `/api/ai/command/generate` | Generate command from natural language description |
+| POST | `/api/ai/script/write` | Generate multi-line bash script from description |
+
+All AI endpoints require `LLM_ENABLED=true` in environment. Responses include:
+- `response`: The AI's text response
+- `suggested_commands`: Array of shell commands (if applicable)
+- `risk_level`: low/medium/high/critical for safety assessment
+- `context_used`: What server context was included in the prompt
+
 ---
 
 ## 9. Timezone (important note)
@@ -419,6 +496,9 @@ Tests cover auth, RBAC, device CRUD, tags, bulk, docker, settings, alerts, sched
 | 2FA not showing | Ensure TOTP secret is set (`/api/auth/2fa/setup`) |
 | File unreadable in Docker | Check `./data` volume is mounted |
 | Public dashboard 403 | Set `public_dashboard=true` in Settings |
+| AI Copilot not responding | Verify `LLM_ENABLED=true` and valid API key in `.env`; check LLM provider status |
+| AI returns errors | Ensure network connectivity to LLM provider; for Ollama, verify `LLM_BASE_URL` is reachable |
+| High AI latency | Try a smaller/faster model (e.g., `gpt-4o-mini` instead of `gpt-4o`); use local Ollama for faster responses |
 
 ---
 
@@ -430,7 +510,9 @@ snippet categories, app identity, Network Topology + custom scan, Windows monito
 agent-aware monitoring & shell (agent-only devices no longer show unreachable), Global
 Settings (theme, session retention, agent heartbeat & reconnect), **Agent
 self-enrollment (generic install scripts, no per-device token on the cmdline),
-pending/claim flow, and one-click Reset (auto re-enroll)**.
+pending/claim flow, and one-click Reset (auto re-enroll)**, **AI Copilot** (natural-language
+command generation, error diagnosis, script writing, command explanation with multi-provider
+support: OpenAI/Anthropic/Ollama).
 
 **Planned:** resource history graphs, per-device public share links, API bot tokens,
 password reset flow, mobile terminal touch optimisations.

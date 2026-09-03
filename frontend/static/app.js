@@ -138,7 +138,7 @@ async function ensureAuth() {
 function switchTab(name) {
   try { localStorage.setItem("shelldeck_view", name); } catch (_) {}
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit"].forEach(v => {
+  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit", "ai-assistant"].forEach(v => {
     const el = document.getElementById("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
   });
@@ -154,6 +154,7 @@ function switchTab(name) {
   if (name === "settings") { loadSettings(); refreshTotpStatus(); }
   if (name === "topology") loadTopology();
   if (name === "home") loadHome();
+  if (name === "ai-assistant") loadAIAssistant();
   if (name === "terminal") {
     // The terminal view was just shown — re-fit every open pane so terminals
     // restored while the view was hidden (e.g. from localStorage at boot) pick
@@ -1210,6 +1211,7 @@ function buildPaletteItems() {
     { label: "Settings", icon: "settings", run: () => switchTab("settings") },
     { label: "Users", icon: "users", run: () => switchTab("users") },
     { label: "Agents", icon: "users", run: () => switchTab("agents") },
+    { label: "AI Assistant", icon: "sparkles", run: () => switchTab("ai-assistant") },
   ];
   for (const d of (currentDevices || [])) {
     items.push({ label: `Open terminal: ${d.name}`, icon: "terminal", run: () => openTerminal(d.id, d.name, null, true) });
@@ -2639,3 +2641,293 @@ document.getElementById("files-device").onchange = loadFiles;
     }
   } catch (_) {}
 })();
+
+// ----------------------------- AI Assistant ----------------------------------
+let aiCurrentDeviceId = null;
+let aiChatLoading = false;
+
+async function loadAIAssistant() {
+  const container = document.getElementById("view-ai-assistant");
+  if (!container) return;
+
+  // Check if AI is enabled
+  try {
+    const settings = await api("/api/ai/settings");
+    
+    container.innerHTML = `
+      <div style="padding:20px;max-width:900px;margin:0 auto;">
+        ${!settings.is_configured || !settings.enabled ? `
+          <div class="card" style="text-align:center;padding:40px;">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:64px;height:64px;color:var(--muted);margin-bottom:16px;">
+              <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <h2 style="margin:0 0 8px">AI Assistant Not Configured</h2>
+            <p class="muted" style="margin:0 0 20px">Configure your LLM provider in Settings to enable AI-powered command generation and diagnostics.</p>
+            <button class="btn btn-primary" onclick="switchTab('settings'); document.querySelector('[data-tab=settings]').click(); setTimeout(() => document.getElementById('set-ai-enabled')?.scrollIntoView({behavior:'smooth'}), 100);">
+              Go to Settings
+            </button>
+          </div>
+        ` : `
+          <div style="display:flex;gap:16px;align-items:flex-start;">
+            <div style="flex:1;min-width:0;">
+              <div class="card" style="padding:0;overflow:hidden;">
+                <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <h2 style="margin:0;font-size:18px;">AI Chat Assistant</h2>
+                    <p class="muted" style="margin:4px 0 0;font-size:13px;">Get help with Linux commands, diagnostics, and server management</p>
+                  </div>
+                  <div style="display:flex;gap:8px;">
+                    <select id="ai-device-context" class="input" style="width:200px;" title="Optional: include device context">
+                      <option value="">No device context</option>
+                      ${currentDevices.map(d => `<option value="${d.id}" ${d.id === aiCurrentDeviceId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+                    </select>
+                    <button id="ai-clear-chat" class="btn btn-ghost btn-icon" title="Clear chat">
+                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div id="ai-chat-messages" style="height:400px;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
+                  <div class="muted" style="text-align:center;padding:40px 20px;">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                    </svg>
+                    <p>Start a conversation with the AI assistant</p>
+                    <p style="font-size:12px;margin-top:8px;">Ask about commands, troubleshoot errors, or get help with server management</p>
+                  </div>
+                </div>
+                <div style="padding:16px;border-top:1px solid var(--border);">
+                  <form id="ai-chat-form" style="display:flex;gap:8px;">
+                    <input id="ai-chat-input" class="input" placeholder="Describe what you want to do..." style="flex:1;" autocomplete="off" />
+                    <button type="submit" class="btn btn-primary" id="ai-send-btn" disabled>
+                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="22" y1="2" x2="11" y2="13"/>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                      </svg>
+                      Send
+                    </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <div style="width:280px;flex-shrink:0;">
+              <div class="card" style="padding:16px;">
+                <h3 style="margin:0 0 12px;font-size:14px;">Quick Actions</h3>
+                <div style="display:flex;flex-direction:column;gap:8px;">
+                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('diagnose')">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                    Diagnose Error
+                  </button>
+                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('generate')">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                      <polyline points="16 18 22 12 16 6"/>
+                      <polyline points="8 6 2 12 8 18"/>
+                    </svg>
+                    Generate Command
+                  </button>
+                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('explain')">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    Explain Command
+                  </button>
+                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('script')">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                      <polyline points="16 18 22 12 16 6"/>
+                      <polyline points="8 6 2 12 8 18"/>
+                      <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    </svg>
+                    Write Script
+                  </button>
+                </div>
+                <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                  <h3 style="margin:0 0 8px;font-size:14px;">Recent Chats</h3>
+                  <div id="ai-recent-chats" class="muted" style="font-size:12px;">
+                    <p>Loading...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        `}
+      </div>
+    `;
+
+    if (!settings.is_configured || !settings.enabled) return;
+
+    // Setup event listeners
+    const form = document.getElementById("ai-chat-form");
+    const input = document.getElementById("ai-chat-input");
+    const sendBtn = document.getElementById("ai-send-btn");
+    const deviceSelect = document.getElementById("ai-device-context");
+    const clearBtn = document.getElementById("ai-clear-chat");
+
+    input.addEventListener("input", () => {
+      sendBtn.disabled = !input.value.trim();
+    });
+
+    deviceSelect.addEventListener("change", () => {
+      aiCurrentDeviceId = deviceSelect.value ? parseInt(deviceSelect.value) : null;
+      loadAIChatHistory();
+    });
+
+    clearBtn.addEventListener("click", async () => {
+      if (!await showConfirm("Clear all chat messages?", "Clear Chat")) return;
+      document.getElementById("ai-chat-messages").innerHTML = `
+        <div class="muted" style="text-align:center;padding:40px 20px;">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <p>Chat cleared. Start a new conversation!</p>
+        </div>
+      `;
+      await loadAIChatHistory();
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const message = input.value.trim();
+      if (!message || aiChatLoading) return;
+
+      aiChatLoading = true;
+      sendBtn.disabled = true;
+      input.value = "";
+
+      // Add user message to chat
+      addAIMessage(message, "user");
+
+      try {
+        const response = await api("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: message,
+            device_id: aiCurrentDeviceId,
+          }),
+        });
+
+        addAIMessage(response.response, "assistant");
+      } catch (err) {
+        addAIMessage(`Error: ${err.message}`, "assistant");
+        showToast(err.message, "error");
+      } finally {
+        aiChatLoading = false;
+        sendBtn.disabled = !input.value.trim();
+      }
+    });
+
+    // Load chat history
+    await loadAIChatHistory();
+  } catch (err) {
+    console.error("Failed to load AI assistant:", err);
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:40px;">
+        <p class="muted">Failed to load AI assistant: ${escapeHtml(err.message)}</p>
+      </div>
+    `;
+  }
+}
+
+function addAIMessage(content, role) {
+  const messagesContainer = document.getElementById("ai-chat-messages");
+  if (!messagesContainer) return;
+
+  // Remove placeholder if exists
+  const placeholder = messagesContainer.querySelector(".muted");
+  if (placeholder) placeholder.remove();
+
+  const msgDiv = document.createElement("div");
+  msgDiv.style.cssText = `display:flex;gap:12px;${role === "user" ? "flex-direction:row-reverse;" : ""}`;
+  
+  msgDiv.innerHTML = `
+    <div style="width:32px;height:32px;border-radius:50%;background:${role === "user" ? "var(--primary)" : "var(--surface)"};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      ${role === "user" ? `
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="width:18px;height:18px;">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+      ` : `
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:18px;height:18px;">
+          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      `}
+    </div>
+    <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;white-space:pre-wrap;word-break:break-word;">
+      ${escapeHtml(content)}
+    </div>
+  `;
+
+  messagesContainer.appendChild(msgDiv);
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+async function loadAIChatHistory() {
+  try {
+    const params = new URLSearchParams();
+    if (aiCurrentDeviceId) params.append("device_id", aiCurrentDeviceId.toString());
+    params.append("limit", "50");
+
+    const messages = await api(`/api/ai/chat/history?${params.toString()}`);
+    
+    const messagesContainer = document.getElementById("ai-chat-messages");
+    if (!messagesContainer) return;
+
+    // Clear existing messages (except loading indicator if present)
+    messagesContainer.innerHTML = "";
+
+    if (messages.length === 0) {
+      messagesContainer.innerHTML = `
+        <div class="muted" style="text-align:center;padding:40px 20px;">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <p>No chat history. Start a conversation!</p>
+        </div>
+      `;
+      return;
+    }
+
+    // Render messages
+    messages.forEach(msg => {
+      addAIMessage(msg.content, msg.role);
+    });
+
+    // Scroll to bottom
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+  } catch (err) {
+    console.error("Failed to load chat history:", err);
+  }
+}
+
+function aiQuickAction(action) {
+  const input = document.getElementById("ai-chat-input");
+  if (!input) return;
+
+  let prompt = "";
+  switch (action) {
+    case "diagnose":
+      prompt = "I'm getting an error on my server. Here's the error message: ";
+      break;
+    case "generate":
+      prompt = "Generate a shell command to: ";
+      break;
+    case "explain":
+      prompt = "Explain what this command does: ";
+      break;
+    case "script":
+      prompt = "Write a bash script that: ";
+      break;
+  }
+
+  input.value = prompt;
+  input.focus();
+  // Trigger input event to enable send button
+  input.dispatchEvent(new Event("input"));
+}

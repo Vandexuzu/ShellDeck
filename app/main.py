@@ -12,7 +12,7 @@ from app.config import settings
 from app.db import init_db
 from app.models import SettingsRow
 from app.routers import (
-    auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled, public, agents, backup, oidc, home,
+    auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled, public, agents, backup, oidc, home, ai,
 )
 from app.notifications import monitor_loop
 from app.routers.scheduled import scheduler_loop
@@ -100,6 +100,7 @@ app.include_router(agents.router)
 app.include_router(backup.router)
 app.include_router(oidc.router)
 app.include_router(home.router)
+app.include_router(ai.router)
 
 # Static frontend (served at web root).
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")

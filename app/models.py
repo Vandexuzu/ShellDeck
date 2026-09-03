@@ -224,3 +224,36 @@ class TopologySnapshot(Base):
 
     def discovered(self) -> list[dict]:
         return _json.loads(self.discovered_json or "[]")
+
+
+class AIChatMessage(Base):
+    """AI chat conversation history."""
+
+    __tablename__ = "ai_chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    device_id: Mapped[int | None] = mapped_column(ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
+    role: Mapped[str] = mapped_column(String(16), default="user")  # user | assistant | system
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+    user: Mapped["User"] = relationship()
+    device: Mapped["Device | None"] = relationship()
+
+
+class AISettingsRow(Base):
+    """AI/LLM configuration settings."""
+
+    __tablename__ = "ai_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    enabled: Mapped[bool] = mapped_column(default=False)
+    provider: Mapped[str] = mapped_column(String(32), default="openai")  # openai | anthropic | ollama
+    api_key_enc: Mapped[str] = mapped_column(Text, default="")  # encrypted API key
+    api_base_url: Mapped[str] = mapped_column(Text, default="")  # custom base URL (for Ollama/proxy)
+    model: Mapped[str] = mapped_column(String(64), default="gpt-4o-mini")
+    max_tokens: Mapped[int] = mapped_column(Integer, default=1024)
+    temperature: Mapped[float] = mapped_column(Integer, default=7)  # stored as int (0-10), divide by 10
+    context_window: Mapped[int] = mapped_column(Integer, default=10)  # number of messages to include in context
+    system_prompt: Mapped[str] = mapped_column(Text, default="You are a helpful Linux system administration assistant. Help users with shell commands, diagnostics, and server management tasks. Always prioritize safety and explain what commands do before suggesting them.")
