@@ -2,12 +2,20 @@
 from __future__ import annotations
 
 import json
+import os
 import httpx
+import logging
 from typing import Literal
 
 from app.config import encrypt, decrypt
 from app.db import get_db
 from app.models import AISettingsRow, AIChatMessage, Device, User
+
+logger = logging.getLogger(__name__)
+
+# Timeout configuration (seconds)
+LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "60"))  # Default 60s
+CONNECT_TIMEOUT = int(os.getenv("LLM_CONNECT_TIMEOUT", "10"))  # Default 10s
 
 
 class AIClientError(Exception):
@@ -136,16 +144,26 @@ Please tailor your responses to this specific system.
             "temperature": settings.temperature / 10.0,
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(timeout=LLM_TIMEOUT, connect=CONNECT_TIMEOUT)
+            ) as client:
                 response = await client.post(url, headers=headers, json=payload)
                 response.raise_for_status()
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
-            except httpx.HTTPStatusError as e:
-                raise AIClientError(f"OpenAI API error: {e.response.status_code}") from e
-            except Exception as e:
-                raise AIClientError(f"OpenAI request failed: {str(e)}") from e
+        except httpx.ConnectError as e:
+            logger.error(f"Connection failed to OpenAI provider: {str(e)}")
+            raise AIClientError(f"Cannot connect to LLM provider. Check URL and network connectivity.") from e
+        except httpx.TimeoutException as e:
+            logger.error(f"Request timed out to OpenAI provider: {str(e)}")
+            raise AIClientError(f"Request timed out after {LLM_TIMEOUT}s. Try smaller context or faster model.") from e
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error from OpenAI provider: {e.response.status_code} - {e.response.text[:200]}")
+            raise AIClientError(f"LLM provider returned error {e.response.status_code}: {e.response.text[:200]}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error calling OpenAI provider: {str(e)}", exc_info=True)
+            raise AIClientError(f"Internal error processing AI request: {str(e)}") from e
 
     async def _call_anthropic(
         self,
@@ -182,16 +200,26 @@ Please tailor your responses to this specific system.
             "max_tokens": settings.max_tokens,
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(timeout=LLM_TIMEOUT, connect=CONNECT_TIMEOUT)
+            ) as client:
                 response = await client.post(url, headers=headers, json=payload)
                 response.raise_for_status()
                 data = response.json()
                 return data["content"][0]["text"]
-            except httpx.HTTPStatusError as e:
-                raise AIClientError(f"Anthropic API error: {e.response.status_code}") from e
-            except Exception as e:
-                raise AIClientError(f"Anthropic request failed: {str(e)}") from e
+        except httpx.ConnectError as e:
+            logger.error(f"Connection failed to Anthropic provider: {str(e)}")
+            raise AIClientError(f"Cannot connect to Anthropic. Check URL and network connectivity.") from e
+        except httpx.TimeoutException as e:
+            logger.error(f"Request timed out to Anthropic provider: {str(e)}")
+            raise AIClientError(f"Request timed out after {LLM_TIMEOUT}s. Try smaller context or faster model.") from e
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error from Anthropic provider: {e.response.status_code} - {e.response.text[:200]}")
+            raise AIClientError(f"Anthropic returned error {e.response.status_code}: {e.response.text[:200]}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error calling Anthropic provider: {str(e)}", exc_info=True)
+            raise AIClientError(f"Internal error processing AI request: {str(e)}") from e
 
     async def _call_ollama(
         self,
@@ -212,16 +240,26 @@ Please tailor your responses to this specific system.
             }
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            try:
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(timeout=LLM_TIMEOUT, connect=CONNECT_TIMEOUT)
+            ) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 data = response.json()
                 return data["message"]["content"]
-            except httpx.HTTPStatusError as e:
-                raise AIClientError(f"Ollama API error: {e.response.status_code}") from e
-            except Exception as e:
-                raise AIClientError(f"Ollama request failed: {str(e)}") from e
+        except httpx.ConnectError as e:
+            logger.error(f"Connection failed to Ollama: {str(e)}")
+            raise AIClientError(f"Cannot connect to Ollama. Ensure it's running at {base_url}") from e
+        except httpx.TimeoutException as e:
+            logger.error(f"Request timed out to Ollama: {str(e)}")
+            raise AIClientError(f"Ollama request timed out after {LLM_TIMEOUT}s. Try smaller context or faster model.") from e
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP error from Ollama: {e.response.status_code} - {e.response.text[:200]}")
+            raise AIClientError(f"Ollama returned error {e.response.status_code}: {e.response.text[:200]}") from e
+        except Exception as e:
+            logger.error(f"Unexpected error calling Ollama: {str(e)}", exc_info=True)
+            raise AIClientError(f"Internal error processing AI request: {str(e)}") from e
 
     def save_message(
         self,
