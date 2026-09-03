@@ -15,6 +15,8 @@ from app.schemas_ai import (
     AISettingsOut,
     AICommandRequest,
     AICommandResponse,
+    AIDiagnosticRequest,
+    AIDiagnosticResponse,
 )
 from app.routers.auth import get_current_user
 
