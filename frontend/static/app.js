@@ -2098,6 +2098,29 @@ async function loadSettings() {
       themeSel.value = ["dark", "light", "premium"].includes(saved) ? saved : "dark";
       applyBrandLogo(themeSel.value);
     }
+    // Load AI Copilot settings
+    try {
+      const ai = await api("/api/ai/settings");
+      setCheck("set-ai-enabled", ai.enabled);
+      set("set-ai-provider", ai.provider || "openai");
+      set("set-ai-model", ai.model || "gpt-4o-mini");
+      set("set-ai-base", ai.api_base_url || "");
+      set("set-ai-max-tokens", ai.max_tokens ?? 1024);
+      set("set-ai-temp", ai.temperature ?? 0.7);  // already 0.0-1.0 from backend
+      set("set-ai-context", ai.context_window ?? 10);
+      set("set-ai-system", ai.system_prompt || "");
+      // Never echo API key back
+    } catch (ae) {
+      // AI settings not available, use defaults
+      setCheck("set-ai-enabled", false);
+      set("set-ai-provider", "openai");
+      set("set-ai-model", "gpt-4o-mini");
+      set("set-ai-base", "");
+      set("set-ai-max-tokens", 1024);
+      set("set-ai-temp", 0.7);
+      set("set-ai-context", 10);
+      set("set-ai-system", "You are a helpful Linux system administration assistant. Help users with shell commands, diagnostics, and server management tasks. Always prioritize safety and explain what commands do before suggesting them.");
+    }
     // Profile: show who is logged in.
     const uEl = document.getElementById("set-username");
     if (uEl && currentUser) uEl.textContent = `${currentUser.username} (${currentUser.role})`;
@@ -2158,8 +2181,22 @@ document.getElementById("set-save").onclick = async () => {
   if (tok) payload.telegram_token = tok;
   const ep = document.getElementById("set-email-pass").value.trim();
   if (ep) payload.email_password = ep;
+  // AI Copilot settings
+  const aiPayload = {
+    enabled: document.getElementById("set-ai-enabled").checked,
+    provider: document.getElementById("set-ai-provider").value,
+    model: document.getElementById("set-ai-model").value.trim(),
+    api_base_url: document.getElementById("set-ai-base").value.trim(),
+    max_tokens: parseInt(document.getElementById("set-ai-max-tokens").value, 10) || 1024,
+    temperature: parseFloat(document.getElementById("set-ai-temp").value) || 0.7,  // already 0.0-1.0
+    context_window: parseInt(document.getElementById("set-ai-context").value, 10) || 10,
+    system_prompt: document.getElementById("set-ai-system").value.trim(),
+  };
+  const aiKey = document.getElementById("set-ai-key").value.trim();
+  if (aiKey) aiPayload.api_key = aiKey;
   try {
     await api("/api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    await api("/api/ai/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(aiPayload) });
     showToast("Settings saved", "ok");
   } catch (e) { showToast(e.message, "error"); }
 };
