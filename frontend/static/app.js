@@ -2692,7 +2692,7 @@ async function loadAIAssistant() {
     const settings = await api("/api/ai/settings");
     
     container.innerHTML = `
-      <div style="padding:20px;max-width:900px;margin:0 auto;">
+      <div style="padding:16px;max-width:1200px;margin:0 auto;">
         ${!settings.is_configured || !settings.enabled ? `
           <div class="card" style="text-align:center;padding:40px;">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:64px;height:64px;color:var(--muted);margin-bottom:16px;">
@@ -2706,28 +2706,40 @@ async function loadAIAssistant() {
             </button>
           </div>
         ` : `
-          <div style="display:flex;gap:16px;align-items:flex-start;">
-            <div style="flex:1;min-width:0;">
-              <div class="card" style="padding:0;overflow:hidden;">
-                <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-                  <div>
-                    <h2 style="margin:0;font-size:18px;">AI Chat Assistant</h2>
-                    <p class="muted" style="margin:4px 0 0;font-size:13px;">Get help with Linux commands, diagnostics, and server management</p>
-                  </div>
-                  <div style="display:flex;gap:8px;">
-                    <select id="ai-device-context" class="input" style="width:200px;" title="Optional: include device context">
-                      <option value="">No device context</option>
-                      ${currentDevices.map(d => `<option value="${d.id}" ${d.id === aiCurrentDeviceId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
-                    </select>
-                    <button id="ai-clear-chat" class="btn btn-ghost btn-icon" title="Clear chat">
-                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/>
-                      </svg>
-                    </button>
-                  </div>
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <!-- Header -->
+            <div class="card" style="padding:16px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+                <div>
+                  <h2 style="margin:0;font-size:18px;">AI Chat Assistant</h2>
+                  <p class="muted" style="margin:4px 0 0;font-size:13px;">Get help with Linux commands, diagnostics, and server management</p>
                 </div>
-                <div id="ai-chat-messages" style="height:400px;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
-                  <div class="muted" style="text-align:center;padding:40px 20px;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                  <select id="ai-device-context" class="input" style="width:180px;max-width:100%;" title="Optional: include device context">
+                    <option value="">No device context</option>
+                    ${currentDevices.map(d => `<option value="${d.id}" ${d.id === aiCurrentDeviceId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
+                  </select>
+                  <button id="ai-clear-chat" class="btn btn-ghost btn-icon" title="Clear chat">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14z"/>
+                    </svg>
+                  </button>
+                  <button id="ai-quick-toggle" class="btn btn-ghost btn-icon" title="Quick Actions" style="display:none;">
+                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Main Content Area -->
+            <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;">
+              <!-- Chat Area -->
+              <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:500px;">
+                <div id="ai-chat-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
+                  <div class="muted" style="text-align:center;padding:40px 20px;margin:auto;">
                     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
@@ -2737,53 +2749,55 @@ async function loadAIAssistant() {
                 </div>
                 <div style="padding:16px;border-top:1px solid var(--border);">
                   <form id="ai-chat-form" style="display:flex;gap:8px;">
-                    <input id="ai-chat-input" class="input" placeholder="Describe what you want to do..." style="flex:1;" autocomplete="off" />
-                    <button type="submit" class="btn btn-primary" id="ai-send-btn" disabled>
+                    <input id="ai-chat-input" class="input" placeholder="Describe what you want to do..." style="flex:1;min-width:0;" autocomplete="off" />
+                    <button type="submit" class="btn btn-primary" id="ai-send-btn" disabled style="white-space:nowrap;">
                       <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="22" y1="2" x2="11" y2="13"/>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"/>
                       </svg>
-                      Send
+                      <span style="display:none;@media(min-width:600px){display:inline;}">Send</span>
                     </button>
                   </form>
                 </div>
               </div>
-            </div>
-            <div style="width:280px;flex-shrink:0;">
-              <div class="card" style="padding:16px;">
-                <h3 style="margin:0 0 12px;font-size:14px;">Quick Actions</h3>
-                <div style="display:flex;flex-direction:column;gap:8px;">
-                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('diagnose')">
-                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
-                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                    </svg>
-                    Diagnose Error
-                  </button>
-                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('generate')">
-                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
-                      <polyline points="16 18 22 12 16 6"/>
-                      <polyline points="8 6 2 12 8 18"/>
-                    </svg>
-                    Generate Command
-                  </button>
-                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('explain')">
-                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
-                      <circle cx="12" cy="12" r="10"/>
-                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                      <line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
-                    Explain Command
-                  </button>
-                  <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('script')">
-                    <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
-                      <polyline points="16 18 22 12 16 6"/>
-                      <polyline points="8 6 2 12 8 18"/>
-                      <rect x="3" y="3" width="18" height="18" rx="2"/>
-                    </svg>
-                    Write Script
-                  </button>
+              
+              <!-- Sidebar (Quick Actions + Recent Chats) -->
+              <div id="ai-sidebar" class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px;">
+                <div>
+                  <h3 style="margin:0 0 12px;font-size:14px;">Quick Actions</h3>
+                  <div style="display:flex;flex-direction:column;gap:8px;">
+                    <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('diagnose')">
+                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                      </svg>
+                      Diagnose Error
+                    </button>
+                    <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('generate')">
+                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                        <polyline points="16 18 22 12 16 6"/>
+                        <polyline points="8 6 2 12 8 18"/>
+                      </svg>
+                      Generate Command
+                    </button>
+                    <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('explain')">
+                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                        <line x1="12" y1="17" x2="12.01" y2="17"/>
+                      </svg>
+                      Explain Command
+                    </button>
+                    <button class="btn btn-ghost" style="justify-content:flex-start;text-align:left;" onclick="aiQuickAction('script')">
+                      <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+                        <polyline points="16 18 22 12 16 6"/>
+                        <polyline points="8 6 2 12 8 18"/>
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                      </svg>
+                      Write Script
+                    </button>
+                  </div>
                 </div>
-                <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+                <div style="border-top:1px solid var(--border);padding-top:16px;">
                   <h3 style="margin:0 0 8px;font-size:14px;">Recent Chats</h3>
                   <div id="ai-recent-chats" class="muted" style="font-size:12px;">
                     <p>Loading...</p>
@@ -2797,6 +2811,27 @@ async function loadAIAssistant() {
     `;
 
     if (!settings.is_configured || !settings.enabled) return;
+
+    // Mobile responsiveness handling
+    const quickToggle = document.getElementById("ai-quick-toggle");
+    const sidebar = document.getElementById("ai-sidebar");
+    
+    function handleResize() {
+      if (window.innerWidth < 768) {
+        sidebar.style.display = "none";
+        quickToggle.style.display = "inline-flex";
+      } else {
+        sidebar.style.display = "flex";
+        quickToggle.style.display = "none";
+      }
+    }
+    
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    
+    quickToggle.addEventListener("click", () => {
+      sidebar.style.display = sidebar.style.display === "none" ? "flex" : "none";
+    });
 
     // Setup event listeners
     const form = document.getElementById("ai-chat-form");
