@@ -2735,7 +2735,7 @@ async function loadAIAssistant() {
             </div>
             
             <!-- Main Content Area -->
-            <div style="display:grid;grid-template-columns:1fr 280px;gap:16px;">
+            <div id="ai-main-grid" style="display:grid;grid-template-columns:1fr;gap:16px;">
               <!-- Chat Area -->
               <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:500px;">
                 <div id="ai-chat-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
@@ -2817,12 +2817,17 @@ async function loadAIAssistant() {
     const sidebar = document.getElementById("ai-sidebar");
     
     function handleResize() {
+      const grid = document.getElementById("ai-main-grid");
       if (window.innerWidth < 768) {
         sidebar.style.display = "none";
+        sidebar.classList.remove("show");
         quickToggle.style.display = "inline-flex";
+        if (grid) grid.style.gridTemplateColumns = "1fr";
       } else {
         sidebar.style.display = "flex";
+        sidebar.classList.remove("show");
         quickToggle.style.display = "none";
+        if (grid) grid.style.gridTemplateColumns = "1fr 280px";
       }
     }
     
@@ -2830,7 +2835,7 @@ async function loadAIAssistant() {
     window.addEventListener("resize", handleResize);
     
     quickToggle.addEventListener("click", () => {
-      sidebar.style.display = sidebar.style.display === "none" ? "flex" : "none";
+      sidebar.classList.toggle("show");
     });
 
     // Setup event listeners
