@@ -2914,6 +2914,55 @@ function addAIMessage(content, role) {
   const placeholder = messagesContainer.querySelector(".muted");
   if (placeholder) placeholder.remove();
 
+  // Detect device configuration JSON action
+  let configAction = null;
+  if (role === "assistant") {
+    const match = content.match(/\{[\s\S]*?"action"\s*:\s*"configure_device"[\s\S]*?\}/);
+    if (match) {
+      try {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.action === "configure_device" && parsed.device_id && parsed.changes) {
+          configAction = parsed;
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Build config action HTML outside template literal
+  let configHtml = '';
+  if (configAction) {
+    const changesList = Object.entries(configAction.changes)
+      .map(([k,v]) => `<li><code>${escapeHtml(k)}</code>: ${escapeHtml(String(v))}</li>`)
+      .join('');
+    const explanationHtml = configAction.explanation
+      ? `<div class="ai-device-explanation">${escapeHtml(configAction.explanation)}</div>`
+      : '';
+    configHtml = `
+      <div class="ai-device-action">
+        <div class="ai-device-action-header">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+          </svg>
+          <span>Device Configuration</span>
+        </div>
+        <div class="ai-device-action-body">
+          <div><strong>Device ID:</strong> ${configAction.device_id}</div>
+          <div><strong>Changes:</strong></div>
+          <ul class="ai-device-changes">${changesList}</ul>
+          ${explanationHtml}
+        </div>
+        <div class="ai-device-action-footer">
+          <button class="btn btn-primary btn-sm" onclick='applyDeviceConfig(${configAction.device_id}, ${JSON.stringify(JSON.stringify(configAction.changes))})'>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            Apply Changes
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   const msgDiv = document.createElement("div");
   msgDiv.style.cssText = `display:flex;gap:12px;${role === "user" ? "flex-direction:row-reverse;" : ""}`;
   
@@ -2932,12 +2981,29 @@ function addAIMessage(content, role) {
       `}
     </div>
     <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;white-space:pre-wrap;word-break:break-word;">
-      ${escapeHtml(content)}
+      ${role === "user" ? escapeHtml(content) : escapeHtml(content)}
+      ${configHtml}
     </div>
   `;
 
   messagesContainer.appendChild(msgDiv);
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+async function applyDeviceConfig(deviceId, changesJson) {
+  const changes = JSON.parse(changesJson);
+  if (!await showConfirm(`Apply configuration changes to device ${deviceId}?\n\n${Object.entries(changes).map(([k,v])=>`${k}: ${v}`).join('\n')}`, "Confirm Device Configuration")) return;
+  try {
+    await api(`/api/devices/${deviceId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+    showToast("Device configuration updated successfully", "success");
+    loadDevices();
+  } catch (err) {
+    showToast("Failed to update device: " + err.message, "error");
+  }
 }
 
 async function loadAIChatHistory() {
