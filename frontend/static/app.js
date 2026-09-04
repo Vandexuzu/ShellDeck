@@ -3127,18 +3127,20 @@ async function loadAIRecentChats() {
   if (!container) return;
   
   try {
-    const messages = await api("/api/ai/chat/history?limit=10");
+    const messages = await api("/api/ai/chat/history?limit=50");
     
-    if (!messages.length) {
+    // Only show user messages as recent chats
+    const userMessages = messages.filter(m => m.role === "user").slice(0, 10);
+    
+    if (!userMessages.length) {
       container.innerHTML = `<p class="muted" style="font-size:12px;">No recent chats</p>`;
       return;
     }
     
-    // Group by date
     const today = new Date().toDateString();
     const yesterday = new Date(Date.now() - 86400000).toDateString();
     
-    container.innerHTML = messages.map(msg => {
+    container.innerHTML = userMessages.map(msg => {
       const d = new Date(msg.created_at);
       const dateStr = d.toDateString() === today ? "Today" 
                     : d.toDateString() === yesterday ? "Yesterday"

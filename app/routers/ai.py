@@ -241,7 +241,6 @@ async def clear_chat_history(
 async def save_execution_result(
     request: dict,
     current_user: User = Depends(get_current_user),
-    ai_service: AIService = Depends(get_ai_service),
     db: Session = Depends(get_db),
 ):
     """Save command execution result to chat history."""
