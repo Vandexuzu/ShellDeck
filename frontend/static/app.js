@@ -2851,15 +2851,25 @@ async function loadAIAssistant() {
 
     clearBtn.addEventListener("click", async () => {
       if (!await showConfirm("Clear all chat messages?", "Clear Chat")) return;
-      document.getElementById("ai-chat-messages").innerHTML = `
-        <div class="muted" style="text-align:center;padding:40px 20px;">
-          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          <p>Chat cleared. Start a new conversation!</p>
-        </div>
-      `;
-      await loadAIChatHistory();
+      try {
+        const params = new URLSearchParams();
+        if (aiCurrentDeviceId) params.append("device_id", aiCurrentDeviceId.toString());
+        
+        await api(`/api/ai/chat/history?${params.toString()}`, { method: "DELETE" });
+        
+        document.getElementById("ai-chat-messages").innerHTML = `
+          <div class="muted" style="text-align:center;padding:40px 20px;">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+            <p>Chat cleared. Start a new conversation!</p>
+          </div>
+        `;
+        await loadAIRecentChats();
+        showToast("Chat history cleared", "success");
+      } catch (err) {
+        showToast("Failed to clear chat: " + err.message, "error");
+      }
     });
 
     form.addEventListener("submit", async (e) => {
@@ -2896,6 +2906,7 @@ async function loadAIAssistant() {
 
     // Load chat history
     await loadAIChatHistory();
+    await loadAIRecentChats();
   } catch (err) {
     console.error("Failed to load AI assistant:", err);
     container.innerHTML = `
@@ -3074,6 +3085,44 @@ async function executeAICommand(deviceId, commandJson) {
     addAIMessage(output, "assistant");
   } catch (err) {
     addAIMessage(`✗ Execution failed: ${err.message}`, "assistant");
+  }
+}
+
+async function loadAIRecentChats() {
+  const container = document.getElementById("ai-recent-chats");
+  if (!container) return;
+  
+  try {
+    const messages = await api("/api/ai/chat/history?limit=10");
+    
+    if (!messages.length) {
+      container.innerHTML = `<p class="muted" style="font-size:12px;">No recent chats</p>`;
+      return;
+    }
+    
+    // Group by date
+    const today = new Date().toDateString();
+    const yesterday = new Date(Date.now() - 86400000).toDateString();
+    
+    container.innerHTML = messages.map(msg => {
+      const d = new Date(msg.created_at);
+      const dateStr = d.toDateString() === today ? "Today" 
+                    : d.toDateString() === yesterday ? "Yesterday"
+                    : d.toLocaleDateString();
+      const preview = msg.content.substring(0, 40) + (msg.content.length > 40 ? "..." : "");
+      
+      return `
+        <div class="ai-recent-item" style="padding:8px;border-radius:6px;cursor:pointer;transition:background 0.2s;" 
+             onmouseover="this.style.background='var(--surface)'" 
+             onmouseout="this.style.background='transparent'"
+             onclick="document.getElementById('ai-chat-input').value='${escapeHtml(msg.content.replace(/'/g, "\\'"))}'; document.getElementById('ai-chat-input').dispatchEvent(new Event('input'));">
+          <div style="font-size:11px;color:var(--muted);">${dateStr}</div>
+          <div style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(preview)}</div>
+        </div>
+      `;
+    }).join('');
+  } catch (err) {
+    container.innerHTML = `<p class="muted" style="font-size:12px;">Failed to load</p>`;
   }
 }
 

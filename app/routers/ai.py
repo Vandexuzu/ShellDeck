@@ -217,6 +217,26 @@ async def get_chat_history(
     return list(reversed(messages))
 
 
+@router.delete("/chat/history")
+async def clear_chat_history(
+    device_id: int | None = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Clear chat history for the current user."""
+    from app.models import AIChatMessage
+    from sqlalchemy import delete
+    
+    query = delete(AIChatMessage).where(AIChatMessage.user_id == current_user.id)
+    if device_id is not None:
+        query = query.where(AIChatMessage.device_id == device_id)
+    
+    result = db.execute(query)
+    db.commit()
+    
+    return {"deleted": result.rowcount}
+
+
 @router.post("/command/generate", response_model=AICommandResponse)
 async def generate_command(
     request: AICommandRequest,
