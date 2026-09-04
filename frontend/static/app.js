@@ -3188,7 +3188,9 @@ async function loadAIChatHistory() {
 
     // Render messages
     messages.forEach(msg => {
-      addAIMessage(msg.content, msg.role);
+      // Detect HTML content (execution results contain <pre> tags)
+      const isHtml = /<(pre|code)[\s>]/.test(msg.content);
+      addAIMessage(msg.content, msg.role, isHtml);
     });
 
     // Scroll to bottom
