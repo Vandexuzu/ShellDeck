@@ -3049,7 +3049,7 @@ function addAIMessage(content, role) {
       `}
     </div>
     <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;word-break:break-word;">
-      ${displayContent ? (role === "user" ? escapeHtml(displayContent) : renderMarkdown(displayContent)) : ''}
+      ${displayContent ? escapeHtml(displayContent) : ''}
       ${configHtml}
       ${execHtml}
     </div>
