@@ -1003,6 +1003,42 @@ async def _probe_reachable(device: Device, db: Session) -> bool:
         return False
 
 
+@router.post("/{device_id}/execute")
+async def execute_command(
+    device_id: int,
+    payload: dict,
+    db: Session = Depends(get_db),
+    user: User = Depends(operator_only),
+) -> dict:
+    """Execute a single command on a device via SSH and return output."""
+    device = _owned(db, device_id, user)
+    if not _can_access(db, device, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Cannot access this device")
+    
+    command = payload.get("command", "").strip()
+    if not command:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Command is required")
+    
+    # ponytail: single command execution, no interactive shell
+    # For long-running commands, user should use terminal view instead
+    try:
+        conn, bastion = await connect_device(device, db)
+        try:
+            result = await conn.run(command, check=False, timeout=30)
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode,
+            }
+        finally:
+            conn.close()
+            if bastion:
+                bastion.close()
+    except Exception as exc:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Execution failed: {exc}")
+
+
 @router.get("/{device_id}/test")
 async def test_connection(device_id: int, db: Session = Depends(get_db), user: User = Depends(operator_only)) -> dict:
     """Probe connectivity to a device and return reachability + error detail.

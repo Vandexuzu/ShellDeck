@@ -2914,21 +2914,35 @@ function addAIMessage(content, role) {
   const placeholder = messagesContainer.querySelector(".muted");
   if (placeholder) placeholder.remove();
 
-  // Detect device configuration JSON action
+  // Detect JSON actions (execute_command or configure_device)
   let configAction = null;
+  let execAction = null;
   if (role === "assistant") {
-    const match = content.match(/\{[\s\S]*?"action"\s*:\s*"configure_device"[\s\S]*?\}/);
-    if (match) {
+    // Try execute_command first
+    const execMatch = content.match(/\{[\s\S]*?"action"\s*:\s*"execute_command"[\s\S]*?\}/);
+    if (execMatch) {
       try {
-        const parsed = JSON.parse(match[0]);
-        if (parsed.action === "configure_device" && parsed.device_id && parsed.changes) {
-          configAction = parsed;
+        const parsed = JSON.parse(execMatch[0]);
+        if (parsed.action === "execute_command" && parsed.device_id && parsed.command) {
+          execAction = parsed;
         }
       } catch (e) {}
     }
+    // Try configure_device
+    if (!execAction) {
+      const match = content.match(/\{[\s\S]*?"action"\s*:\s*"configure_device"[\s\S]*?\}/);
+      if (match) {
+        try {
+          const parsed = JSON.parse(match[0]);
+          if (parsed.action === "configure_device" && parsed.device_id && parsed.changes) {
+            configAction = parsed;
+          }
+        } catch (e) {}
+      }
+    }
   }
 
-  // Build config action HTML outside template literal
+  // Build config action HTML
   let configHtml = '';
   if (configAction) {
     const changesList = Object.entries(configAction.changes)
@@ -2963,6 +2977,37 @@ function addAIMessage(content, role) {
     `;
   }
 
+  // Build execute command action HTML
+  let execHtml = '';
+  if (execAction) {
+    const explanationHtml = execAction.explanation
+      ? `<div class="ai-device-explanation">${escapeHtml(execAction.explanation)}</div>`
+      : '';
+    execHtml = `
+      <div class="ai-device-action">
+        <div class="ai-device-action-header">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;">
+            <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+          <span>Execute Command</span>
+        </div>
+        <div class="ai-device-action-body">
+          <div><strong>Device ID:</strong> ${execAction.device_id}</div>
+          <div><strong>Command:</strong> <code>${escapeHtml(execAction.command)}</code></div>
+          ${explanationHtml}
+        </div>
+        <div class="ai-device-action-footer">
+          <button class="btn btn-primary btn-sm" onclick='executeAICommand(${execAction.device_id}, ${JSON.stringify(JSON.stringify(execAction.command))})'>
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            Run Command
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   const msgDiv = document.createElement("div");
   msgDiv.style.cssText = `display:flex;gap:12px;${role === "user" ? "flex-direction:row-reverse;" : ""}`;
   
@@ -2983,6 +3028,7 @@ function addAIMessage(content, role) {
     <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;white-space:pre-wrap;word-break:break-word;">
       ${role === "user" ? escapeHtml(content) : escapeHtml(content)}
       ${configHtml}
+      ${execHtml}
     </div>
   `;
 
@@ -3003,6 +3049,31 @@ async function applyDeviceConfig(deviceId, changesJson) {
     loadDevices();
   } catch (err) {
     showToast("Failed to update device: " + err.message, "error");
+  }
+}
+
+async function executeAICommand(deviceId, commandJson) {
+  const command = JSON.parse(commandJson);
+  if (!await showConfirm(`Execute command on device ${deviceId}?\n\n$ ${command}`, "Confirm Command Execution")) return;
+  
+  // Show loading state
+  showToast("Executing command...", "info");
+  
+  try {
+    const result = await api(`/api/devices/${deviceId}/execute`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command }),
+    });
+    
+    // Display result in AI chat
+    const output = result.success 
+      ? `✓ Command executed successfully\n\n${result.stdout}`
+      : `✗ Command failed (exit code ${result.returncode})\n\n${result.stderr || result.stdout}`;
+    
+    addAIMessage(output, "assistant");
+  } catch (err) {
+    addAIMessage(`✗ Execution failed: ${err.message}`, "assistant");
   }
 }
 
