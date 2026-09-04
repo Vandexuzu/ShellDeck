@@ -2922,7 +2922,7 @@ async function loadAIAssistant() {
   }
 }
 
-function addAIMessage(content, role) {
+function addAIMessage(content, role, isHtml = false) {
   const messagesContainer = document.getElementById("ai-chat-messages");
   if (!messagesContainer) return;
 
@@ -2933,7 +2933,7 @@ function addAIMessage(content, role) {
   // Detect JSON actions (execute_command or configure_device)
   let configAction = null;
   let execAction = null;
-  if (role === "assistant") {
+  if (role === "assistant" && !isHtml) {
     // Try execute_command first
     const execMatch = content.match(/\{[\s\S]*?"action"\s*:\s*"execute_command"[\s\S]*?\}/);
     if (execMatch) {
@@ -2999,6 +2999,11 @@ function addAIMessage(content, role) {
     const explanationHtml = execAction.explanation
       ? `<div class="ai-device-explanation">${escapeHtml(execAction.explanation)}</div>`
       : '';
+    
+    // Check if already executed (persist across refresh)
+    const execKey = `exec_${execAction.device_id}_${btoa(execAction.command).substring(0, 20)}`;
+    const isExecuted = localStorage.getItem(execKey) === '1';
+    
     execHtml = `
       <div class="ai-device-action">
         <div class="ai-device-action-header">
@@ -3013,11 +3018,8 @@ function addAIMessage(content, role) {
           ${explanationHtml}
         </div>
         <div class="ai-device-action-footer">
-          <button id="exec-btn-${Date.now()}" class="btn btn-primary btn-sm" onclick='executeAICommand(${execAction.device_id}, ${JSON.stringify(JSON.stringify(execAction.command))}, this)'>
-            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
-              <polygon points="5 3 19 12 5 21 5 3"/>
-            </svg>
-            Run Command
+          <button id="exec-btn-${Date.now()}" class="btn ${isExecuted ? 'btn-ghost' : 'btn-primary'} btn-sm" ${isExecuted ? 'disabled' : ''} onclick='executeAICommand(${execAction.device_id}, ${JSON.stringify(JSON.stringify(execAction.command))}, this)'>
+            ${isExecuted ? '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Executed' : '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Command'}
           </button>
         </div>
       </div>
@@ -3049,7 +3051,7 @@ function addAIMessage(content, role) {
       `}
     </div>
     <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;word-break:break-word;">
-      ${displayContent ? escapeHtml(displayContent) : ''}
+      ${displayContent ? (isHtml ? displayContent : escapeHtml(displayContent)) : ''}
       ${configHtml}
       ${execHtml}
     </div>
@@ -3085,6 +3087,10 @@ async function executeAICommand(deviceId, commandJson, btn) {
     btn.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Executed';
   }
   
+  // Mark as executed in localStorage
+  const execKey = `exec_${deviceId}_${btoa(command).substring(0, 20)}`;
+  localStorage.setItem(execKey, '1');
+  
   // Show loading state
   showToast("Executing command...", "info");
   
@@ -3095,12 +3101,12 @@ async function executeAICommand(deviceId, commandJson, btn) {
       body: JSON.stringify({ command }),
     });
     
-    // Display result in AI chat
+    // Display result in AI chat with proper formatting
     const output = result.success 
-      ? `✓ Command executed successfully\n\n${result.stdout}`
-      : `✗ Command failed (exit code ${result.returncode})\n\n${result.stderr || result.stdout}`;
+      ? `✓ Command executed successfully\n\n<pre style="background:var(--bg);padding:12px;border-radius:6px;overflow-x:auto;margin:8px 0;"><code>${escapeHtml(result.stdout || '(no output)')}</code></pre>`
+      : `✗ Command failed (exit code ${result.returncode})\n\n<pre style="background:var(--bg);padding:12px;border-radius:6px;overflow-x:auto;margin:8px 0;"><code>${escapeHtml(result.stderr || result.stdout || '(no output)')}</code></pre>`;
     
-    addAIMessage(output, "assistant");
+    addAIMessage(output, "assistant", true);
   } catch (err) {
     addAIMessage(`✗ Execution failed: ${err.message}`, "assistant");
   }
