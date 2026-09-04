@@ -57,8 +57,11 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
         try:
             conn, bastion = await connect_device(device, db)
         except Exception as exc:  # noqa: BLE001
-            await websocket.send_text(f"\r\n\x1b[31m[connection failed] {exc}\x1b[0m\r\n")
-            await websocket.close()
+            try:
+                await websocket.send_text(f"\r\n\x1b[31m[connection failed] {exc}\x1b[0m\r\n")
+                await websocket.close()
+            except WebSocketDisconnect:
+                pass
             return
 
         # Audit log entry.
@@ -78,9 +81,12 @@ async def terminal(websocket: WebSocket, device_id: int, token: str | None = Que
                 term_size=(cols, rows, cols * 8, rows * 16),
             )
         except Exception as exc:  # noqa: BLE001
-            await websocket.send_text(f"\r\n\x1b[31m[shell failed] {exc}\x1b[0m\r\n")
-            conn.close()
-            await websocket.close()
+            try:
+                await websocket.send_text(f"\r\n\x1b[31m[shell failed] {exc}\x1b[0m\r\n")
+                conn.close()
+                await websocket.close()
+            except WebSocketDisconnect:
+                conn.close()
             return
 
         shell = process  # SSHClientProcess: stdin/stdout are the live shell
