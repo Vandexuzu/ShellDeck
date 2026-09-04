@@ -3013,7 +3013,7 @@ function addAIMessage(content, role) {
           ${explanationHtml}
         </div>
         <div class="ai-device-action-footer">
-          <button class="btn btn-primary btn-sm" onclick='executeAICommand(${execAction.device_id}, ${JSON.stringify(JSON.stringify(execAction.command))})'>
+          <button id="exec-btn-${Date.now()}" class="btn btn-primary btn-sm" onclick='executeAICommand(${execAction.device_id}, ${JSON.stringify(JSON.stringify(execAction.command))}, this)'>
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
               <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
@@ -3075,9 +3075,15 @@ async function applyDeviceConfig(deviceId, changesJson) {
   }
 }
 
-async function executeAICommand(deviceId, commandJson) {
+async function executeAICommand(deviceId, commandJson, btn) {
   const command = JSON.parse(commandJson);
   if (!await showConfirm(`Execute command on device ${deviceId}?\n\n$ ${command}`, "Confirm Command Execution")) return;
+  
+  // Disable button to prevent re-execution
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Executed';
+  }
   
   // Show loading state
   showToast("Executing command...", "info");
