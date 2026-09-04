@@ -41,6 +41,7 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 | 🪜 **Bastion**          | Tunnel SSH through a jump host automatically                                                            |
 | 📲 **PWA**              | Install to phone home screen; mobile UI (cards + bottom nav)                                            |
 | 🔐 **2FA**              | TOTP / 2FA (RFC 6238, no external dependency); OIDC SSO (Google / GitHub / corporate)                   |
+| 🤖 **AI Copilot**       | Natural-language command generation, error diagnosis, script writing, command explanation (OpenAI/Anthropic/Ollama) |
 
 ---
 
@@ -228,8 +229,42 @@ SQLite  (users · devices · snippets · scheduled_tasks · session_logs · sett
 | `HOST` / `PORT`               | `0.0.0.0` / `8000`         | Bind (Docker)                                                                                                              |
 | `SSH_IGNORE_KNOWN_HOSTS`      | `true`                     | Homelab-friendly; set `false` for stricter security                                                                        |
 | `OIDC_AUTO_PROVISION`         | `false`                    | When `true`, first SSO login auto-creates a viewer account. Leave `false` so only pre-existing users can sign in via OIDC. |
+| `LLM_ENABLED`                 | `false`                    | Enable AI Copilot features. Set to `true` to use AI assistant.                                                             |
+| `LLM_PROVIDER`                | `openai`                   | AI provider: `openai`, `anthropic`, or `ollama` (local).                                                                   |
+| `LLM_API_KEY`                 | ``                         | API key for OpenAI/Anthropic. Not needed for Ollama (local).                                                               |
+| `LLM_MODEL`                   | `gpt-4o-mini`              | Model name (e.g., `gpt-4o-mini`, `claude-3-haiku`, `llama3.1`).                                                            |
+| `LLM_BASE_URL`                | ``                         | Custom API endpoint (for Ollama: `http://host.docker.internal:11434/v1`).                                                  |
 
 > **Brute-force protection:** failed logins are throttled per client IP — 10 failures within 15 minutes triggers a temporary lockout (HTTP 429). Tune in `app/main.py` (`_LOGIN_WINDOW` / `_LOGIN_MAX_FAILS`).
+
+### 🤖 AI Copilot Configuration
+
+Enable the AI assistant by setting these environment variables:
+
+```bash
+# .env
+LLM_ENABLED=true
+LLM_PROVIDER=openai          # or 'anthropic', 'ollama'
+LLM_API_KEY=sk-your-key-here # not needed for Ollama
+LLM_MODEL=gpt-4o-mini        # or 'claude-3-haiku', 'llama3.1'
+LLM_BASE_URL=                # optional, for custom endpoints
+```
+
+**For local LLM with Ollama:**
+```bash
+LLM_ENABLED=true
+LLM_PROVIDER=ollama
+LLM_MODEL=llama3.1
+LLM_BASE_URL=http://host.docker.internal:11434/v1
+```
+
+The AI Copilot provides:
+- **Diagnose Error** — Paste an error message and get instant analysis with suggested fixes
+- **Generate Command** — Describe what you want in plain English, get the exact bash command
+- **Explain Command** — Paste a complex command to understand what it does
+- **Write Script** — Generate multi-line bash scripts from descriptions
+
+All AI suggestions require **human confirmation** before execution (no auto-run for safety).
 
 ### Alerts (Settings → Notifications)
 
@@ -275,6 +310,11 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] Agent self-enrollment (generic install scripts, no per-device token on the cmdline)
 - [x] Agent pending/claim flow + one-click Reset (auto re-enroll)
 - [x] Agent install scripts hardened for Windows (ProgramData, ASCII .env, no literal quotes)
+- [x] **AI Copilot** (natural-language command generation, error diagnosis, script writing, command explanation)
+- [x] **AI Chat History** (per-device conversation history with clear/reset)
+- [x] **AI Quick Actions** (Diagnose Error, Generate Command, Explain Command, Write Script)
+- [x] **AI Multi-Provider** (OpenAI, Anthropic, Ollama — local LLM support for privacy)
+- [x] **AI Security** (human-in-the-loop, command sanitization, risk analysis, safety warnings)
 
 **Earlier milestones**
 

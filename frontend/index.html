@@ -141,6 +141,12 @@
             <path d="M12 5v14" />
             <circle cx="12" cy="12" r="9" />
           </svg> Agents</button>
+        <button class="side-nav-item" data-tab="ai-assistant"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
+            <circle cx="12" cy="12" r="3" />
+          </svg> AI Assistant</button>
       </nav>
     </aside>
 
@@ -691,6 +697,47 @@
           </div>
         </details>
 
+        <details class="settings-acc">
+          <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+              <path d="M12 6a1 1 0 0 0-1 1v4a1 1 0 0 0 .29.71l3 3a1 1 0 0 0 1.42-1.42l-2.71-2.71V7a1 1 0 0 0-1-1z"/>
+            </svg><span>AI Copilot</span></summary>
+          <div class="settings-box">
+            <label class="switch-row"><span>Enable AI Copilot</span><input type="checkbox" id="set-ai-enabled" /></label>
+            <label>Provider
+              <select id="set-ai-provider" class="input" style="max-width:200px">
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="ollama">Ollama (Local)</option>
+              </select>
+            </label>
+            <label>API Key <input id="set-ai-key" class="input" type="password" placeholder="sk-..." /></label>
+            <label>Custom Base URL (optional, for Ollama or proxy)
+              <input id="set-ai-base" class="input" type="url" placeholder="http://localhost:11434" />
+            </label>
+            <label>Model name
+              <input id="set-ai-model" class="input" type="text" placeholder="gpt-4o-mini" value="gpt-4o-mini" />
+            </label>
+            <label>Max tokens <input id="set-ai-max-tokens" class="input" type="number" value="1024" min="256" max="8192" style="max-width:120px" /></label>
+            <label>Temperature (0.0–1.0)
+              <input id="set-ai-temp" class="input" type="number" value="0.7" min="0" max="1" step="0.1" style="max-width:120px" />
+            </label>
+            <label>Context window (messages)
+              <input id="set-ai-context" class="input" type="number" value="10" min="2" max="50" style="max-width:120px" />
+            </label>
+            <label>System prompt
+              <textarea id="set-ai-system" class="input" rows="3" style="width:100%;max-width:500px">You are a helpful Linux system administration assistant. Help users with shell commands, diagnostics, and server management tasks. Always prioritize safety and explain what commands do before suggesting them.</textarea>
+            </label>
+            <p class="muted" style="font-size:12px;margin-top:8px">
+              <strong>Examples:</strong><br/>
+              • OpenAI: Model = <code>gpt-4o-mini</code><br/>
+              • Anthropic: Model = <code>claude-sonnet-4-20250514</code><br/>
+              • Ollama: Base URL = <code>http://host.docker.internal:11434</code>, Model = <code>llama3.1</code>
+            </p>
+          </div>
+        </details>
+
         <div class="settings-box" style="margin-top:8px">
           <div class="modal-actions">
             <button id="set-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
@@ -1047,6 +1094,11 @@
           style="display:none;margin:0 14px 10px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--panel);">
         </div>
         <div id="topo-list" style="margin:14px;max-height:38vh;overflow-y:auto"></div>
+      </div>
+
+      <!-- AI Assistant View -->
+      <div id="view-ai-assistant" class="hidden">
+        <!-- Content loaded dynamically by JavaScript -->
       </div>
     </section>
   </main>
