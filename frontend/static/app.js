@@ -3024,6 +3024,13 @@ function addAIMessage(content, role) {
     `;
   }
 
+  // Build message content (strip JSON if action detected)
+  let displayContent = content;
+  if (execAction || configAction) {
+    // Remove JSON block from display
+    displayContent = content.replace(/\{[\s\S]*?"action"\s*:\s*"(execute_command|configure_device)"[\s\S]*?\}/g, '').trim();
+  }
+
   const msgDiv = document.createElement("div");
   msgDiv.style.cssText = `display:flex;gap:12px;${role === "user" ? "flex-direction:row-reverse;" : ""}`;
   
@@ -3042,7 +3049,7 @@ function addAIMessage(content, role) {
       `}
     </div>
     <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;white-space:pre-wrap;word-break:break-word;">
-      ${role === "user" ? escapeHtml(content) : escapeHtml(content)}
+      ${displayContent ? (role === "user" ? escapeHtml(displayContent) : renderMarkdown(displayContent)) : ''}
       ${configHtml}
       ${execHtml}
     </div>
