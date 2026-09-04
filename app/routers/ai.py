@@ -237,6 +237,39 @@ async def clear_chat_history(
     return {"deleted": result.rowcount}
 
 
+@router.post("/chat/execution-result")
+async def save_execution_result(
+    request: dict,
+    current_user: User = Depends(get_current_user),
+    ai_service: AIService = Depends(get_ai_service),
+    db: Session = Depends(get_db),
+):
+    """Save command execution result to chat history."""
+    from app.models import AIChatMessage
+    
+    device_id = request.get("device_id")
+    result_content = request.get("result")
+    
+    if not result_content:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Result content is required"
+        )
+    
+    # Save as assistant message
+    msg = AIChatMessage(
+        user_id=current_user.id,
+        device_id=device_id,
+        role="assistant",
+        content=result_content,
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    
+    return {"message_id": msg.id}
+
+
 @router.post("/command/generate", response_model=AICommandResponse)
 async def generate_command(
     request: AICommandRequest,

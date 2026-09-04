@@ -3107,6 +3107,16 @@ async function executeAICommand(deviceId, commandJson, btn) {
       : `✗ Command failed (exit code ${result.returncode})\n\n<pre style="background:var(--bg);padding:12px;border-radius:6px;overflow-x:auto;margin:8px 0;"><code>${escapeHtml(result.stderr || result.stdout || '(no output)')}</code></pre>`;
     
     addAIMessage(output, "assistant", true);
+    
+    // Save execution result to database for persistence
+    await api("/api/ai/chat/execution-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        device_id: deviceId,
+        result: output,
+      }),
+    });
   } catch (err) {
     addAIMessage(`✗ Execution failed: ${err.message}`, "assistant");
   }
