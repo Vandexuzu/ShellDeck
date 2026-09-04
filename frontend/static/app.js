@@ -3048,7 +3048,7 @@ function addAIMessage(content, role) {
         </svg>
       `}
     </div>
-    <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;white-space:pre-wrap;word-break:break-word;">
+    <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;word-break:break-word;">
       ${displayContent ? (role === "user" ? escapeHtml(displayContent) : renderMarkdown(displayContent)) : ''}
       ${configHtml}
       ${execHtml}
