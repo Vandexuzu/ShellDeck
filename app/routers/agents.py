@@ -191,6 +191,22 @@ def enroll_agent(payload: AgentEnroll, request: Request, db: Session = Depends(g
     }
 
 
+@router.get("/enroll")
+def enroll_info() -> dict:
+    """Return enrollment info for agents that mistakenly use GET.
+    
+    This endpoint exists to reduce log noise from old agents that still use GET
+    instead of POST. It returns a helpful message directing them to use POST.
+    """
+    return {
+        "message": "Agent enrollment requires POST method",
+        "method": "POST",
+        "endpoint": "/api/agents/enroll",
+        "required_fields": ["secret", "name", "os"],
+        "hint": "Re-install the agent using: curl -fsSL http://YOUR_SERVER/install.sh | bash"
+    }
+
+
 class AgentClaim(BaseModel):
     name: str | None = None
 
