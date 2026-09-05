@@ -134,12 +134,14 @@ class AgentEnroll(BaseModel):
 def enroll_agent(payload: AgentEnroll, request: Request, db: Session = Depends(get_db)) -> dict:
     ip = request.client.host if request.client else "unknown"
     now = time.time()
-    _ENROLL_FAILS[ip] = [t for t in _ENROLL_FAILS[ip] if now - t < _ENROLL_WINDOW]
-    if len(_ENROLL_FAILS[ip]) >= _ENROLL_MAX_FAILS:
-        raise HTTPException(status_code=429, detail="Too many enrollment attempts. Try again later.")
 
     row = db.get(SettingsRow, 1)
     if not row or not row.enroll_secret or not secrets.compare_digest(payload.secret, row.enroll_secret):
+        # Rate-limit only on wrong-secret attempts (root cause: correct secret
+        # must never be blocked by accumulated failures from retries).
+        _ENROLL_FAILS[ip] = [t for t in _ENROLL_FAILS[ip] if now - t < _ENROLL_WINDOW]
+        if len(_ENROLL_FAILS[ip]) >= _ENROLL_MAX_FAILS:
+            raise HTTPException(status_code=429, detail="Too many enrollment attempts. Try again later.")
         _ENROLL_FAILS[ip].append(now)
         # Audit failed enrollment attempts (wrong/leaked secret) for threat visibility.
         try:
