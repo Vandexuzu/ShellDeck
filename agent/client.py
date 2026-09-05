@@ -593,6 +593,19 @@ def _enroll_or_load(url: str, secret: str, name: str) -> str:
     except urllib.error.HTTPError as e:
         print(f"[agent] enrollment rejected ({e.code}): {e.read().decode('utf-8', 'replace')}")
         return ""
+    except urllib.error.URLError as e:
+        # Network/DNS failure — give clear diagnostic so user knows what to fix.
+        reason = str(e.reason)
+        if "Name or service not known" in reason or "getaddrinfo failed" in reason or "Temporary failure in name resolution" in reason:
+            print(f"[agent] DNS resolution failed for {url}")
+            print(f"[agent] Check: can this device resolve the hostname? Try: ping {url.split('//')[1].split('/')[0]}")
+            print(f"[agent] Or use IP address: SHELLDECK_URL='http://IP:PORT'")
+        elif "Connection refused" in reason:
+            print(f"[agent] Connection refused to {url}")
+            print(f"[agent] Check: is ShellDeck server running and accessible from this device?")
+        else:
+            print(f"[agent] network error: {reason}")
+        return ""
     except Exception as e:
         print(f"[agent] enrollment error: {e}")
         traceback.print_exc()
