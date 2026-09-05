@@ -867,7 +867,7 @@
       </div>
         <div id="user-modal" class="modal hidden">
           <div class="modal-card">
-            <form id="user-form" class="user-form">
+            <div class="user-form">
           <h3>New user</h3>
           <label>Username <input id="user-username" class="input" /></label>
           <label>Password <input id="user-password" type="password" class="input" /></label>
@@ -879,18 +879,18 @@
             </select>
           </label>
           <div class="modal-actions">
-            <button id="user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            <button type="button" id="user-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg><span>Cancel</span></button>
-            <button id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            <button type="button" id="user-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10" />
               <polyline points="16 9 11 14 8 11" />
             </svg><span>Create</span></button>
           </div>
-            </form>
+            </div>
           </div>
         </div>
         <div id="user-edit-modal" class="modal hidden">
