@@ -54,11 +54,6 @@ async function api(path, opts = {}) {
   // Content-Type with its boundary instead of forcing application/json.
   if (!(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
   
-  // Debug: log token presence for troubleshooting
-  if (!token) {
-    console.warn("API call without token:", path);
-  }
-  
   // Add timeout to prevent hanging requests
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
@@ -71,14 +66,7 @@ async function api(path, opts = {}) {
     });
     clearTimeout(timeoutId);
     
-    // Debug: log response status
-    console.log(`API ${path}: ${res.status}`);
-    
-    if (res.status === 401) { 
-      console.error("401 Unauthorized - token may be invalid or expired");
-      logout(); 
-      throw new Error("Unauthorized"); 
-    }
+    if (res.status === 401) { logout(); throw new Error("Unauthorized"); }
     if (!res.ok) {
       let detail = res.statusText;
       try { detail = (await res.json()).detail || detail; } catch (_) {}
