@@ -582,10 +582,12 @@ def _enroll_or_load(url: str, secret: str, name: str) -> str:
     )
     try:
         with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            raw = resp.read().decode("utf-8")
+            print(f"[agent] enrollment response: {raw[:200]}")  # Debug log
+            data = json.loads(raw)
         tok = data.get("token", "")
         if not tok:
-            print("[agent] enrollment failed: server returned no token.")
+            print(f"[agent] enrollment failed: server returned no token. Response: {data}")
             return ""
         try:
             with open(store, "w") as f:

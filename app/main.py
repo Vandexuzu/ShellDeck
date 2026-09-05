@@ -135,7 +135,7 @@ def install_sh(request: Request):
     hb = str(row.agent_heartbeat if row else 15)
     rc = str(row.agent_reconnect if row else 5)
     script = _render_installer("install.sh", base, secret, hb, rc)
-    return Response(script, media_type="text/x-shellscript")
+    return Response(script, media_type="text/x-shellscript", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
 
 @app.get("/install.ps1")
@@ -148,7 +148,7 @@ def install_ps1(request: Request):
     hb = str(row.agent_heartbeat if row else 15)
     rc = str(row.agent_reconnect if row else 5)
     script = _render_installer("install.ps1", base, secret, hb, rc)
-    return Response(script, media_type="text/plain")
+    return Response(script, media_type="text/plain", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
 
 
 @app.get("/agent_client")
