@@ -23,6 +23,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+*.whl
 
 # Database
 *.db
@@ -35,25 +36,69 @@ wheels/
 *.swp
 *.swo
 *~
+.project
+.classpath
+.settings/
 
 # OS
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+ehthumbs.db
+Desktop.ini
 
 # Logs
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # Environment
 .env
 .env.local
+.env.*.local
 
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
+.tox/
+.nox/
 
 # Node (if any frontend build)
 node_modules/
 package-lock.json
 yarn.lock
+pnpm-lock.yaml
+
+# Docker
+docker-compose.override.yml
+
+# Cache
+.cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Secrets
+*.pem
+*.key
+*.crt
+credentials.json
+secrets.json
+
+# Backup
+*.bak
+*.backup
+*.old
+*.orig
+
+# Temporary
+*.tmp
+*.temp
+*~
