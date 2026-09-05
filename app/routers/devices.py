@@ -1,6 +1,7 @@
 """CRUD endpoints for managed devices."""
 from __future__ import annotations
 
+import asyncio
 import json
 import socket
 import subprocess as _sp
@@ -1019,12 +1020,15 @@ async def execute_command(
     if not command:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Command is required")
     
+    # Allow longer timeout for installation/long-running commands (default 10 minutes)
+    timeout = payload.get("timeout", 600)
+    
     # ponytail: single command execution, no interactive shell
     # For long-running commands, user should use terminal view instead
     try:
         conn, bastion = await connect_device(device, db)
         try:
-            result = await conn.run(command, check=False, timeout=30)
+            result = await conn.run(command, check=False, timeout=timeout)
             
             # Log to session_logs for audit trail (survives chat deletion)
             now = datetime.now(timezone.utc)
@@ -1049,6 +1053,20 @@ async def execute_command(
             conn.close()
             if bastion:
                 bastion.close()
+    except asyncio.TimeoutError:
+        # Log even on timeout so we have audit trail
+        now = datetime.now(timezone.utc)
+        log = SessionLog(
+            device_id=device.id,
+            user_id=user.id,
+            started_at=now,
+            ended_at=now,
+            commands=command,
+            transcript=f"$ {command}\n[TIMEOUT after {timeout}s]",
+        )
+        db.add(log)
+        db.commit()
+        raise HTTPException(status.HTTP_504_GATEWAY_TIMEOUT, f"Command timed out after {timeout}s")
     except Exception as exc:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, f"Execution failed: {exc}")
 
