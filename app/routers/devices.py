@@ -1025,6 +1025,20 @@ async def execute_command(
         conn, bastion = await connect_device(device, db)
         try:
             result = await conn.run(command, check=False, timeout=30)
+            
+            # Log to session_logs for audit trail (survives chat deletion)
+            now = datetime.now(timezone.utc)
+            log = SessionLog(
+                device_id=device.id,
+                user_id=user.id,
+                started_at=now,
+                ended_at=now,
+                commands=command,
+                transcript=f"$ {command}\n{result.stdout or result.stderr or '(no output)'}",
+            )
+            db.add(log)
+            db.commit()
+            
             return {
                 "success": result.returncode == 0,
                 "stdout": result.stdout,

@@ -117,7 +117,9 @@ async def container_action(device_id: int, body: DockerAction, db: Session = Dep
     if body.action not in ("start", "stop", "restart", "pause", "unpause", "kill", "remove"):
         raise HTTPException(status_code=400, detail="Action must be start|stop|restart|pause|unpause|kill|remove")
     extra = " -f" if body.action == "remove" else ""
-    stdout, stderr, code = await _run_smart(device, f"docker {body.action} {cid}{extra}", db, timeout=60)
+    # Map "remove" to Docker CLI "rm"
+    docker_cmd = "rm" if body.action == "remove" else body.action
+    stdout, stderr, code = await _run_smart(device, f"docker {docker_cmd} {cid}{extra}", db, timeout=60)
     if code != 0:
         raise HTTPException(status_code=502, detail=f"docker {body.action} failed: {stderr.strip()}")
     log_audit(db, user, "docker_action", f"device={device.name} container={cid} action={body.action}")
