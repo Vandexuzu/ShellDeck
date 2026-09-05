@@ -91,6 +91,29 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+function renderMarkdown(text) {
+  let html = escapeHtml(text);
+  // Code blocks (```code```)
+  html = html.replace(/```([\s\S]*?)```/g, '<pre style="background:rgba(0,0,0,0.3);padding:8px;border-radius:4px;overflow-x:auto;margin:8px 0;"><code>$1</code></pre>');
+  // Inline code (`code`)
+  html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,0.3);padding:2px 6px;border-radius:3px;font-family:monospace;">$1</code>');
+  // Bold (**text** or __text__)
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+  // Italic (*text* or _text_)
+  html = html.replace(/(?<!\w)\*([^*]+)\*(?!\w)/g, '<em>$1</em>');
+  // Headers (# ## ###)
+  html = html.replace(/^### (.*$)/gm, '<h3 style="margin:12px 0 8px 0;font-size:1.1em;">$1</h3>');
+  html = html.replace(/^## (.*$)/gm, '<h2 style="margin:14px 0 10px 0;font-size:1.2em;">$1</h2>');
+  html = html.replace(/^# (.*$)/gm, '<h1 style="margin:16px 0 12px 0;font-size:1.3em;">$1</h1>');
+  // Lists (- item or * item)
+  html = html.replace(/^\s*[-*] (.*$)/gm, '<li style="margin-left:20px;">$1</li>');
+  html = html.replace(/(<li[^>]*>.*<\/li>\s*)+/g, '<ul style="margin:8px 0;">$&</ul>');
+  // Line breaks
+  html = html.replace(/\n/g, '<br>');
+  return html;
+}
+
 // ---- Inline Lucide-style icons (MIT). Kept local so ShellDeck stays $0 / offline. ----
 const ICONS = {
   terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
@@ -3115,7 +3138,7 @@ function addAIMessage(content, role, isHtml = false) {
       `}
     </div>
     <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;word-break:break-word;">
-      ${displayContent ? (isHtml ? displayContent : escapeHtml(displayContent)) : ''}
+      ${displayContent ? (isHtml ? displayContent : (role === "assistant" ? renderMarkdown(displayContent) : escapeHtml(displayContent))) : ''}
       ${configHtml}
       ${execHtml}
     </div>
