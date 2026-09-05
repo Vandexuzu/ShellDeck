@@ -53,15 +53,50 @@ async function api(path, opts = {}) {
   // When sending FormData (file uploads) let the browser set the multipart
   // Content-Type with its boundary instead of forcing application/json.
   if (!(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  const res = await fetch(API + path, { ...opts, headers: { ...headers, ...(opts.headers || {}) } });
-  if (res.status === 401) { logout(); throw new Error("Unauthorized"); }
-  if (!res.ok) {
-    let detail = res.statusText;
-    try { detail = (await res.json()).detail || detail; } catch (_) {}
-    throw new Error(detail);
+  
+  // Debug: log token presence for troubleshooting
+  if (!token) {
+    console.warn("API call without token:", path);
   }
-  if (res.status === 204) return null;
-  return res.json();
+  
+  // Add timeout to prevent hanging requests
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+  
+  try {
+    const res = await fetch(API + path, { 
+      ...opts, 
+      headers: { ...headers, ...(opts.headers || {}) },
+      signal: controller.signal 
+    });
+    clearTimeout(timeoutId);
+    
+    // Debug: log response status
+    console.log(`API ${path}: ${res.status}`);
+    
+    if (res.status === 401) { 
+      console.error("401 Unauthorized - token may be invalid or expired");
+      logout(); 
+      throw new Error("Unauthorized"); 
+    }
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (_) {}
+      throw new Error(detail);
+    }
+    if (res.status === 204) return null;
+    return res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error("Request timeout - server took too long to respond");
+    }
+    // Network error - provide more helpful message
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      throw new Error("Network error - cannot connect to server");
+    }
+    throw err;
+  }
 }
 
 function escapeHtml(s) {
