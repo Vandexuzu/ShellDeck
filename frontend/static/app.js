@@ -2945,6 +2945,55 @@ async function loadAIAssistant() {
   }
 }
 
+function extractJSON(text) {
+  // Find JSON object in text, handling nested braces
+  const startIdx = text.indexOf('{');
+  if (startIdx === -1) return null;
+  
+  let braceCount = 0;
+  let inString = false;
+  let escapeNext = false;
+  
+  for (let i = startIdx; i < text.length; i++) {
+    const char = text[i];
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === '{') {
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          const jsonStr = text.substring(startIdx, i + 1);
+          // Validate it's valid JSON
+          try {
+            JSON.parse(jsonStr);
+            return jsonStr;
+          } catch (e) {
+            return null;
+          }
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
 function addAIMessage(content, role, isHtml = false) {
   const messagesContainer = document.getElementById("ai-chat-messages");
   if (!messagesContainer) return;
@@ -2957,26 +3006,18 @@ function addAIMessage(content, role, isHtml = false) {
   let configAction = null;
   let execAction = null;
   if (role === "assistant" && !isHtml) {
-    // Try execute_command first
-    const execMatch = content.match(/\{[\s\S]*?"action"\s*:\s*"execute_command"[\s\S]*?\}/);
-    if (execMatch) {
+    // Try to extract JSON more robustly
+    const jsonMatch = extractJSON(content);
+    if (jsonMatch) {
       try {
-        const parsed = JSON.parse(execMatch[0]);
+        const parsed = JSON.parse(jsonMatch);
         if (parsed.action === "execute_command" && parsed.device_id && parsed.command) {
           execAction = parsed;
+        } else if (parsed.action === "configure_device" && parsed.device_id && parsed.changes) {
+          configAction = parsed;
         }
-      } catch (e) {}
-    }
-    // Try configure_device
-    if (!execAction) {
-      const match = content.match(/\{[\s\S]*?"action"\s*:\s*"configure_device"[\s\S]*?\}/);
-      if (match) {
-        try {
-          const parsed = JSON.parse(match[0]);
-          if (parsed.action === "configure_device" && parsed.device_id && parsed.changes) {
-            configAction = parsed;
-          }
-        } catch (e) {}
+      } catch (e) {
+        console.warn("Failed to parse JSON action:", e);
       }
     }
   }
