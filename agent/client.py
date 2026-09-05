@@ -476,23 +476,28 @@ def main() -> None:
     # environment. Windows scheduled tasks don't pass env files like systemd's
     # EnvironmentFile, so this keeps the agent working even if --url/--enroll-secret
     # aren't passed explicitly.
-    try:
-        _envfile = os.path.join(os.path.dirname(os.path.abspath(__file__)), "shelldeck-agent.env")
-        if os.path.exists(_envfile):
-            with open(_envfile, "r", encoding="utf-8", errors="replace") as _f:
-                for _line in _f:
-                    _line = _line.strip()
-                    if not _line or _line.startswith("#") or "=" not in _line:
-                        continue
-                    _k, _v = _line.split("=", 1)
-                    # Strip whitespace, quotes, and stray CR/LF so Windows CRLF/.env
-                    # quirks never corrupt values (e.g. a trailing \r would break URLs).
-                    _k = _k.strip().strip("'\"").strip()
-                    _v = _v.strip().strip("'\"").strip()
-                    if _k and _v:
-                        os.environ.setdefault(_k, _v)
-    except Exception:
-        pass
+    # Check both the script directory AND /etc (where install.sh writes it on Linux).
+    _env_paths = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "shelldeck-agent.env"),
+        "/etc/shelldeck-agent.env",
+    ]
+    for _envfile in _env_paths:
+        try:
+            if os.path.exists(_envfile):
+                with open(_envfile, "r", encoding="utf-8", errors="replace") as _f:
+                    for _line in _f:
+                        _line = _line.strip()
+                        if not _line or _line.startswith("#") or "=" not in _line:
+                            continue
+                        _k, _v = _line.split("=", 1)
+                        # Strip whitespace, quotes, and stray CR/LF so Windows CRLF/.env
+                        # quirks never corrupt values (e.g. a trailing \r would break URLs).
+                        _k = _k.strip().strip("'\"").strip()
+                        _v = _v.strip().strip("'\"").strip()
+                        if _k and _v:
+                            os.environ.setdefault(_k, _v)
+        except Exception:
+            pass
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--url", default=os.environ.get("SHELLDECK_URL", "http://127.0.0.1:8000"))
