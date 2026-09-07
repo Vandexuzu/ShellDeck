@@ -149,9 +149,9 @@ const ICONS = {
   copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
-function icon(name, cls = "") {
+function icon(name, cls = "", label = "") {
   const body = ICONS[name] || "";
-  return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  return `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"${label ? ` aria-label="${label}" role="img"` : ''}>${body}</svg>`;
 }
 
 // ----------------------------- Auth flow -----------------------------------
@@ -275,11 +275,11 @@ async function loadStatus() {
              <div class="metric"><span></span><b>${escapeHtml(s.message)}</b></div>`}
         ${s.tags ? `<div class="tag-row">${s.tags.split(",").map(t => `<span class="tag">${escapeHtml(t.trim())}</span>`).join("")}</div>` : ""}
         <div class="di-actions" style="margin-top:10px">
-          ${canAccess(s) ? `<button class="btn btn-primary btn-icon-text" data-shell="${s.id}" title="Open shell">${icon("terminal")}<span>Shell</span></button>
-          <button class="btn btn-ghost btn-icon" data-files="${s.id}" title="File manager">${icon("folder")}</button>
-          <button class="btn btn-ghost btn-icon" data-clone="${s.id}" title="Clone device">${icon("copy")}</button>
-          <button class="btn btn-ghost btn-icon" data-edit="${s.id}" title="Edit device">${icon("edit")}</button>
-          <button class="btn btn-danger btn-icon" data-del="${s.id}" title="Delete device">${icon("trash")}</button>` : `<span class="muted" style="font-size:11px">read-only</span>`}
+          ${canAccess(s) ? `<button class="btn btn-primary btn-icon-text" data-shell="${s.id}" title="Open shell">${icon("terminal", "", "Terminal")}<span>Shell</span></button>
+          <button class="btn btn-ghost btn-icon" data-files="${s.id}" title="File manager">${icon("folder", "", "Folder")}</button>
+          <button class="btn btn-ghost btn-icon" data-clone="${s.id}" title="Clone device">${icon("copy", "", "Clone")}</button>
+          <button class="btn btn-ghost btn-icon" data-edit="${s.id}" title="Edit device">${icon("edit", "", "Edit")}</button>
+          <button class="btn btn-danger btn-icon" data-del="${s.id}" title="Delete device">${icon("trash", "", "Delete")}</button>` : `<span class="muted" style="font-size:11px">read-only</span>`}
         </div>`;
       grid.appendChild(card);
       const sh = card.querySelector("[data-shell]");
@@ -837,13 +837,13 @@ function renderFileRows(entries) {
   const filtered = q ? entries.filter(e => e.name.toLowerCase().includes(q)) : entries;
   const rows = filtered.map(e => `
       <div class="file-row ${e.is_dir ? "is-dir" : ""}" data-path="${escapeHtml(e.path)}" data-dir="${e.is_dir}">
-        <span class="file-ico">${e.is_dir ? icon("folder") : icon("file")}</span>
+        <span class="file-ico">${e.is_dir ? icon("folder", "", "Folder") : icon("file", "", "File")}</span>
         <span class="file-name">${escapeHtml(e.name)}</span>
         <span class="file-size">${e.is_dir ? "" : (e.size + " B")}</span>
         <span class="file-acts">
-          ${e.is_dir ? "" : `<button class="btn btn-ghost btn-icon-xs" data-edit-file="${escapeHtml(e.path)}" title="Edit file">${icon("edit")}</button>`}
-          ${e.is_dir ? "" : `<button class="btn btn-ghost btn-icon-xs" data-down-file="${escapeHtml(e.path)}" title="Download">${icon("download")}</button>`}
-          <button class="btn btn-danger btn-icon-xs" data-del-file="${escapeHtml(e.path)}" title="Delete">${icon("trash")}</button>
+          ${e.is_dir ? "" : `<button class="btn btn-ghost btn-icon-xs" data-edit-file="${escapeHtml(e.path)}" title="Edit file">${icon("edit", "", "Edit")}</button>`}
+          ${e.is_dir ? "" : `<button class="btn btn-ghost btn-icon-xs" data-down-file="${escapeHtml(e.path)}" title="Download">${icon("download", "", "Download")}</button>`}
+          <button class="btn btn-danger btn-icon-xs" data-del-file="${escapeHtml(e.path)}" title="Delete">${icon("trash", "", "Delete")}</button>
         </span>
       </div>`).join("");
   list.innerHTML = rows || "<p class='muted'>No matching files.</p>";
@@ -1099,9 +1099,9 @@ async function loadSnippets() {
         <div class="sc-name">${escapeHtml(s.name)}${s.category ? ` <span class="tag">${escapeHtml(s.category)}</span>` : ""}</div>
         <pre class="sc-cmd">${escapeHtml(s.command)}</pre>
         <div class="di-actions">
-          <button class="btn btn-primary btn-icon-text" data-run="${s.id}" title="Run on devices">${icon("play")}<span>Run</span></button>
-          <button class="btn btn-ghost btn-icon" data-edit-snip="${s.id}" title="Edit snippet">${icon("edit")}</button>
-          <button class="btn btn-danger btn-icon" data-del-snip="${s.id}" title="Delete snippet">${icon("trash")}</button>
+          <button class="btn btn-primary btn-icon-text" data-run="${s.id}" title="Run on devices">${icon("play", "", "Run")}<span>Run</span></button>
+          <button class="btn btn-ghost btn-icon" data-edit-snip="${s.id}" title="Edit snippet">${icon("edit", "", "Edit")}</button>
+          <button class="btn btn-danger btn-icon" data-del-snip="${s.id}" title="Delete snippet">${icon("trash", "", "Delete")}</button>
         </div>
       </div>`).join("");
     list.querySelectorAll("[data-run]").forEach(b => b.onclick = () => openSnippetRun(+b.dataset.run, snips));
@@ -1383,16 +1383,16 @@ async function loadDocker() {
         <td data-label="Status">${escapeHtml(c.status)}</td>
         <td data-label="Ports" class="muted">${escapeHtml(c.ports || '-')}</td>
         <td data-label="Actions" class="di-actions">
-          <button class="btn btn-ghost btn-icon-xs" data-logs="${escapeHtml(c.id)}" title="Logs">${icon("logs")}</button>
+          <button class="btn btn-ghost btn-icon-xs" data-logs="${escapeHtml(c.id)}" title="Logs">${icon("logs", "", "Logs")}</button>
           ${isViewer ? "" : `
           ${c.state === 'running'
-            ? `<button class="btn btn-ghost btn-icon-xs" data-act="stop" data-cid="${escapeHtml(c.id)}" title="Stop">${icon("stop")}</button>
-               <button class="btn btn-ghost btn-icon-xs" data-act="pause" data-cid="${escapeHtml(c.id)}" title="Pause">${icon("pause")}</button>
-               <button class="btn btn-ghost btn-icon-xs danger" data-act="kill" data-cid="${escapeHtml(c.id)}" title="Kill">${icon("kill")}</button>`
-            : `<button class="btn btn-ghost btn-icon-xs" data-act="start" data-cid="${escapeHtml(c.id)}" title="Start">${icon("play")}</button>`}
-          <button class="btn btn-ghost btn-icon-xs" data-act="restart" data-cid="${escapeHtml(c.id)}" title="Restart">${icon("restart")}</button>
-          <button class="btn btn-ghost btn-icon-xs danger" data-act="remove" data-cid="${escapeHtml(c.id)}" title="Remove">${icon("trash")}</button>
-          <button class="btn btn-primary btn-icon-xs" data-exec="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}" title="Exec (interactive shell)">${icon("terminal")}</button>`}
+            ? `<button class="btn btn-ghost btn-icon-xs" data-act="stop" data-cid="${escapeHtml(c.id)}" title="Stop">${icon("stop", "", "Stop")}</button>
+               <button class="btn btn-ghost btn-icon-xs" data-act="pause" data-cid="${escapeHtml(c.id)}" title="Pause">${icon("pause", "", "Pause")}</button>
+               <button class="btn btn-ghost btn-icon-xs danger" data-act="kill" data-cid="${escapeHtml(c.id)}" title="Kill">${icon("kill", "", "Kill")}</button>`
+            : `<button class="btn btn-ghost btn-icon-xs" data-act="start" data-cid="${escapeHtml(c.id)}" title="Start">${icon("play", "", "Run")}</button>`}
+          <button class="btn btn-ghost btn-icon-xs" data-act="restart" data-cid="${escapeHtml(c.id)}" title="Restart">${icon("restart", "", "Restart")}</button>
+          <button class="btn btn-ghost btn-icon-xs danger" data-act="remove" data-cid="${escapeHtml(c.id)}" title="Remove">${icon("trash", "", "Delete")}</button>
+          <button class="btn btn-primary btn-icon-xs" data-exec="${escapeHtml(c.id)}" data-name="${escapeHtml(c.name)}" title="Exec (interactive shell)">${icon("terminal", "", "Terminal")}</button>`}
         </td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll("[data-logs]").forEach(b => b.onclick = () => showDockerLogs(deviceId, b.dataset.logs));
@@ -1466,8 +1466,8 @@ async function loadUsers() {
         </select></td>
         <td data-label="Created" class="muted">${new Date(u.created_at).toLocaleDateString()}</td>
         <td data-label="Actions" class="di-actions">
-          <button class="btn btn-ghost btn-icon-xs user-edit" data-id="${u.id}" data-name="${escapeHtml(u.username)}" data-role="${u.role}" title="Edit user">${icon("settings")}</button>
-          ${u.id === currentUser.id ? "" : `<button class="btn btn-ghost btn-icon-xs danger user-del" data-id="${u.id}" data-name="${escapeHtml(u.username)}" title="Delete user">${icon("trash")}</button>`}
+          <button class="btn btn-ghost btn-icon-xs user-edit" data-id="${u.id}" data-name="${escapeHtml(u.username)}" data-role="${u.role}" title="Edit user">${icon("settings", "", "Settings")}</button>
+          ${u.id === currentUser.id ? "" : `<button class="btn btn-ghost btn-icon-xs danger user-del" data-id="${u.id}" data-name="${escapeHtml(u.username)}" title="Delete user">${icon("trash", "", "Delete")}</button>`}
         </td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll(".user-role").forEach(s => s.onchange = async () => {
@@ -1584,9 +1584,9 @@ async function loadAgents() {
             </div>
           </div>` : ''}
         <div class="di-actions" style="margin-top:8px">
-          ${a.pending ? `<button class="btn btn-primary btn-icon-text" data-claim-agent="${a.id}" title="Claim this agent">${icon("check")}<span>Claim</span></button>` : `
-          <button class="btn btn-ghost btn-icon-text" data-reset-agent="${a.id}" title="Reset: unbind device & force re-enroll">${icon("refresh")}<span>Reset</span></button>`}
-          <button class="btn btn-danger btn-icon" data-del-agent="${a.id}" title="Delete agent">${icon("trash")}</button>
+          ${a.pending ? `<button class="btn btn-primary btn-icon-text" data-claim-agent="${a.id}" title="Claim this agent">${icon("check", "", "Claim")}<span>Claim</span></button>` : `
+          <button class="btn btn-ghost btn-icon-text" data-reset-agent="${a.id}" title="Reset: unbind device & force re-enroll">${icon("refresh", "", "Reset")}<span>Reset</span></button>`}
+          <button class="btn btn-danger btn-icon" data-del-agent="${a.id}" title="Delete agent">${icon("trash", "", "Delete")}</button>
         </div>
       </div>`).join("");
     box.querySelectorAll("[data-del-agent]").forEach(b => b.onclick = async () => {
@@ -2044,8 +2044,8 @@ async function loadScheduled() {
         <div class="muted" style="font-size:12px">Devices: ${t.device_ids.join(", ") || "-"} · ${t.run_once ? "single run" : "every " + t.interval_minutes + "m"} · ${t.run_at ? "at " + new Date(t.run_at).toLocaleString() : (t.next_run ? "next: " + new Date(t.next_run).toLocaleString() : (t.run_once ? "on create" : "-"))}</div>
         ${t.last_output ? `<pre class="sc-out">${escapeHtml(t.last_output)}</pre>` : ""}
         <div class="di-actions">
-          <button class="btn btn-primary btn-icon" data-run-now="${t.id}" title="Run now">${icon("play")}</button>
-          <button class="btn btn-danger btn-icon" data-del-task="${t.id}" title="Delete task">${icon("trash")}</button>
+          <button class="btn btn-primary btn-icon" data-run-now="${t.id}" title="Run now">${icon("play", "", "Run")}</button>
+          <button class="btn btn-danger btn-icon" data-del-task="${t.id}" title="Delete task">${icon("trash", "", "Delete")}</button>
         </div>
       </div>`).join("");
     box.querySelectorAll("[data-del-task]").forEach(b => b.onclick = async () => {
@@ -2142,7 +2142,7 @@ async function loadSettings() {
         try { saved = localStorage.getItem("shelldeck_theme") || "dark"; } catch (_) {}
       }
       themeSel.value = ["dark", "light", "premium"].includes(saved) ? saved : "dark";
-      applyBrandLogo(themeSel.value);
+      themeSel.value === "light" ? applyBrandLogoLight() : applyBrandLogoDark();
     }
     // Load AI Copilot settings
     try {
@@ -2286,7 +2286,7 @@ document.getElementById("set-theme").onchange = () => {
   const t = document.getElementById("set-theme").value;
   document.documentElement.setAttribute("data-theme", t);
   try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
-  applyBrandLogo(t);
+  t === "light" ? applyBrandLogoLight() : applyBrandLogoDark();
   showToast("Theme: " + t, "ok");
 };
 
@@ -2342,7 +2342,7 @@ document.getElementById("theme-toggle").onclick = () => {
   try { localStorage.setItem("shelldeck_theme", t); } catch (_) {}
   const sel = document.getElementById("set-theme");
   if (sel) sel.value = t;
-  applyBrandLogo(t);
+  t === "light" ? applyBrandLogoLight() : applyBrandLogoDark();
   showToast("Theme: " + t, "ok");
 };
 // Swap the wordmark logo to match the active theme (light = dark text, others = white text).
@@ -2350,6 +2350,16 @@ function applyBrandLogo(theme) {
   const el = document.getElementById("brand-logo");
   if (!el) return;
   el.src = theme === "light" ? "/static/logo-light.svg" : "/static/logo-dark.svg";
+}
+function applyBrandLogoLight() {
+  const el = document.getElementById("brand-logo");
+  if (!el) return;
+  el.src = "/static/logo-light.svg";
+}
+function applyBrandLogoDark() {
+  const el = document.getElementById("brand-logo");
+  if (!el) return;
+  el.src = "/static/logo-dark.svg";
 }
 document.getElementById("pw-change").onclick = async () => {
   const oldP = document.getElementById("pw-old").value;
@@ -2385,7 +2395,7 @@ async function loadSessions() {
         <td data-label="Started">${fmtTime(r.started_at)}</td>
         <td data-label="Ended">${r.ended_at ? fmtTime(r.ended_at) : "active"}</td>
         <td data-label="Duration">${r.duration_s != null ? r.duration_s + "s" : "-"}</td>
-        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play")}</button> <button class="btn btn-ghost btn-icon-xs" data-rerun="${r.id}" title="Re-run commands on device">${icon("restart")}</button></td>
+        <td data-label="Commands"><button class="btn btn-ghost btn-icon-xs" data-cmds="${r.id}" title="View commands">${icon("list", "", "Commands")}</button> <button class="btn btn-ghost btn-icon-xs" data-play="${r.id}" title="Playback session">${icon("play", "", "Run")}</button> <button class="btn btn-ghost btn-icon-xs" data-rerun="${r.id}" title="Re-run commands on device">${icon("restart", "", "Restart")}</button></td>
       </tr>`).join("")}</tbody></table>`;
     box.querySelectorAll("[data-cmds]").forEach(b => b.onclick = () => {
       const r = rows.find(x => String(x.id) === b.dataset.cmds);
@@ -2458,7 +2468,7 @@ function playStep() {
     spPlaying = false;
     // Playback finished (or was stopped) — restore the play icon.
     const pb = document.getElementById("sp-play");
-    if (pb) pb.innerHTML = icon("play");
+    if (pb) pb.innerHTML = icon("play", "", "Run");
     return;
   }
   const [delay, type, data] = spEvents[spIdx++];
@@ -2473,8 +2483,8 @@ document.getElementById("sp-play").onclick = () => {
   else if (spTimer) clearTimeout(spTimer);
   // Swap the icon between play and pause so the button reflects state.
   document.getElementById("sp-play").innerHTML = spPlaying
-    ? icon("pause")
-    : icon("play");
+    ? icon("pause", "", "Pause")
+    : icon("play", "", "Run");
 };
 document.getElementById("sp-restart").onclick = () => {
   spIdx = 0; spTerm.reset(); spPlaying = true; playStep();
@@ -2784,7 +2794,7 @@ async function loadAIAssistant() {
             <div id="ai-main-grid" style="display:grid;grid-template-columns:1fr;gap:16px;">
               <!-- Chat Area -->
               <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:500px;">
-                <div id="ai-chat-messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
+                <div id="ai-chat-messages" role="log" aria-live="polite" aria-label="Chat messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
                   <div class="muted" style="text-align:center;padding:40px 20px;margin:auto;">
                     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
