@@ -580,8 +580,30 @@ body {
 .file-row .file-ico { width: 22px; }
 .file-row .file-name { flex: 1; font-family: ui-monospace, monospace; font-size: 13px; }
 .file-row .file-size { color: var(--muted); font-size: 12px; width: 80px; text-align: right; }
+.file-row.is-dir .file-name { color: var(--primary); }
+.file-row[data-dir="true"] .file-name::before { content: "📁 "; margin-right: 4px; }
+.file-row[data-dir="false"] .file-name::before { content: "📄 "; margin-right: 4px; }
 .file-editor { padding: 16px 18px; }
-.file-editor-content { width: 100%; min-height: 320px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: ui-monospace, monospace; font-size: 13px; }
+/* Monaco Editor panel */
+#file-editor-panel { margin-top: 12px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--bg-2); position: relative; }
+.editor-header { display: flex; align-items: center; justify-content: space-between; padding: 6px 12px; background: var(--panel); border-bottom: 1px solid var(--border); font-size: 13px; min-height: 34px; }
+.editor-path { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 50%; font-family: ui-monospace, monospace; }
+.editor-actions button { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.editor-tabs { display: flex; background: var(--panel-2); border-bottom: 1px solid var(--border); overflow-x: auto; min-height: 32px; }
+.editor-tab { padding: 6px 16px; cursor: pointer; border-right: 1px solid var(--border); display: flex; align-items: center; gap: 6px; font-size: 13px; white-space: nowrap; color: var(--text-2); position: relative; }
+.editor-tab.active { background: var(--bg); color: var(--text); }
+.editor-tab.modified::after { content: "●"; margin-left: 4px; color: var(--warn); }
+.editor-tab-close { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-size: 14px; color: var(--muted); }
+.editor-tab-close:hover { background: rgba(255,255,255,0.1); color: var(--danger); }
+#monaco-root { height: calc(100vh - 190px); min-height: 200px; }
+.editor-statusbar { display: flex; align-items: center; gap: 16px; padding: 3px 12px; background: var(--panel); border-top: 1px solid var(--border); font-size: 12px; }
+.status-ok, .status-saved { color: var(--ok); }
+.status-saving { color: var(--warn); }
+.status-error { color: var(--danger); }
+.editor-more-menu { position: absolute; right: 12px; top: 100%; background: var(--bg-2); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; padding: 4px 0; }
+.editor-more-menu.hidden { display: none; }
+.editor-more-menu button { width: 100%; text-align: left; padding: 8px 16px; border: none; background: none; color: var(--text); cursor: pointer; font-size: 13px; }
+.editor-more-menu button:hover { background: rgba(255,255,255,0.05); }
 .input-sm { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 
 /* ---- Bulk ---- */

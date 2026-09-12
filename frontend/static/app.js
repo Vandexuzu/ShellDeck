@@ -986,33 +986,288 @@ document.getElementById("files-upload-link").onclick = async () => {
     listFiles(filesCurrent.path);
   } catch (err) { showToast("Upload-link failed: " + err.message, "error"); }
 };
-async function openFileEditor(path) {
-  const box = document.getElementById("file-editor");
-  box.classList.remove("hidden");
-  document.getElementById("file-editor-title").textContent = path ? "Edit: " + path : "New file";
-  document.getElementById("file-editor-content").value = "";
-  if (path) {
-    try {
-      const dev = currentFilesDevice();
-      const data = dev && dev.has_agent
-        ? await fsOp("read", path)
-        : await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
-      document.getElementById("file-editor-content").value = data.content;
-    } catch (e) { showToast(e.message, "error"); }
+// ============================== Monaco File Editor ============================
+let monacoInstance = null;
+let editorOpenTabs = [];
+let activeTabIndex = -1;
+
+const MONACO_LANG_MAP = {
+  ".sh":"bash",".bash":"bash",".zsh":"bash",".ps1":"powershell",
+  ".py":"python",".rb":"ruby",".pl":"perl",
+  ".js":"javascript",".jsx":"javascript",".ts":"typescript",".tsx":"typescript",
+  ".json":"json",".xml":"xml",".html":"html",".css":"css",".scss":"scss",".less":"less",".sql":"sql",
+  ".yaml":"yaml",".yml":"yaml",".toml":"ini",".cfg":"ini",".conf":"plaintext",".ini":"ini",
+  ".php":"php",".java":"java",".c":"c",".cpp":"cpp",".h":"c",".go":"go",".rs":"rust",".swift":"swift",
+  ".md":"markdown",".txt":"plaintext",".log":"plaintext",".csv":"plaintext",
+  ".env":"plaintext",".service":"ini","Dockerfile":"dockerfile","MAKEFILE":"makefile",
+};
+function detectLang(filename) {
+  if (!filename) return "plaintext";
+  const base = filename.toLowerCase();
+  for (const [ext, lang] of Object.entries(MONACO_LANG_MAP)) {
+    if (base.endsWith(ext)) return lang;
   }
-  document.getElementById("file-editor-save").onclick = async () => {
-    const content = document.getElementById("file-editor-content").value;
-    const target = path || (filesCurrent.path.replace(/\/$/, "") + "/" + await showPrompt("New file name:", "", "New file"));
-    if (!target) return;
+  return "plaintext";
+}
+function initMonaco(cb) {
+  if (!monaco) {
+    // Global UMD build not loaded yet; schedule retry
+    setTimeout(() => initMonaco(cb), 50);
+    return;
+  }
+  if (monacoInstance) monacoInstance.dispose();
+  const theme = document.documentElement.getAttribute("data-theme") || "dark";
+  monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");
+  const lang = activeTabIndex >= 0 && editorOpenTabs[activeTabIndex] ? detectLang(editorOpenTabs[activeTabIndex].title) : "plaintext";
+  monacoInstance = monaco.editor.create(document.getElementById("monaco-root"), {
+    value: "", language: lang, theme: theme === "light" ? "vs" : "vs-dark",
+    minimap: { enabled: true }, wordWrap: true, automaticLayout: true,
+    fontSize: 14, fontFamily: "'JetBrains Mono','Fira Code',monospace",
+    scrollBeyondLastLine: false, renderWhitespace: "selection",
+    bracketPairColorization: { enabled: true },
+    suggestOnTriggerCharacters: true, quickSuggestions: true,
+  });
+  monacoInstance.onDidChangeCursorPosition(() => {
+    const pos = monacoInstance.getPosition();
+    const el = document.getElementById("editor-pos");
+    if (el) el.textContent = `Ln ${pos.lineNumber}, Col ${pos.column}`;
+  });
+  // Ctrl+S → save
+  monacoInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => handleMonacoSave());
+  // Ctrl+F → find
+  monacoInstance.addHandler({
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
+    run: () => { monacoInstance.trigger("", "actions.find", undefined); },
+  });
+  // Ctrl+Shift+H → replace
+  monacoInstance.addHandler({
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyH],
+    run: () => { monacoInstance.trigger("", "editor.actions.findReplace", { isReplaceDialogOpen: true }); },
+  });
+  // Track dirty state
+  monacoInstance.onDidChangeModelContent(() => {
+    if (activeTabIndex >= 0 && editorOpenTabs[activeTabIndex]) {
+      editorOpenTabs[activeTabIndex].modified = true;
+      renderTabs();
+      updateStatus();
+    }
+  });
+  if (cb) cb();
+}
+function loadToMonaco(content, filename) {
+  if (!monacoInstance) return;
+  const lang = detectLang(filename);
+  monacoInstance.setModel(monaco.editor.createModel(content, lang));
+  monacoInstance.setValue(content);
+  updateLangDisplay(detectLang(filename));
+}
+function updateLangDisplay(lang) {
+  const el = document.getElementById("editor-lang");
+  if (el) el.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
+}
+function updateStatus() {
+  const el = document.getElementById("editor-status-saved");
+  if (!el) return;
+  if (activeTabIndex < 0) { el.textContent = "Ready"; el.className = ""; return; }
+  const tab = editorOpenTabs[activeTabIndex];
+  if (tab.saving) { el.textContent = "Saving..."; el.className = "status-saving"; return; }
+  if (tab.error) { el.textContent = "Error"; el.className = "status-error"; return; }
+  el.textContent = tab.modified ? "Unsaved" : "✓ Saved";
+  el.className = tab.modified ? "status-ok" : "status-saved";
+}
+function renderTabs() {
+  const c = document.getElementById("editor-tabs-container");
+  if (!c) return;
+  c.innerHTML = editorOpenTabs.map((t, i) =>
+    `<div class="editor-tab${i === activeTabIndex ? " active" : ""}${t.modified ? " modified" : ""}" data-idx="${i}">
+      <span>${escapeHtml(t.title)}</span>
+      <span class="editor-tab-close" data-close="${i}">×</span>
+    </div>`
+  ).join("");
+  c.querySelectorAll(".editor-tab").forEach(el => {
+    el.onclick = () => switchTab(+el.dataset.idx);
+  });
+  c.querySelectorAll(".editor-tab-close").forEach(el => {
+    el.onclick = (e) => { e.stopPropagation(); closeTab(+el.dataset.close); };
+  });
+}
+async function handleMonacoSave() {
+  if (activeTabIndex < 0 || !monacoInstance) return;
+  const tab = editorOpenTabs[activeTabIndex];
+  tab.content = monacoInstance.getValue();
+  if (!tab.modified) return;
+  tab.saving = true;
+  updateStatus();
+  try {
     const dev = currentFilesDevice();
-    if (dev && dev.has_agent) await fsOp("write", target, content);
-    else await api(`/api/files/${filesCurrent.deviceId}/write`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target, content }) });
-    box.classList.add("hidden");
+    let target = tab.path;
+    if (!target) target = (filesCurrent.path.replace(/\/$/, "") + "/" + await showPrompt("New file name:", "", "New file"));
+    if (!target) return;
+    tab.path = target;
+    if (dev && dev.has_agent) await fsOp("write", target, tab.content);
+    else await api(`/api/files/${filesCurrent.deviceId}/write`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target, content: tab.content }) });
+    tab.modified = false; tab.saving = false; tab.error = null;
     listFiles(filesCurrent.path);
     showToast("Saved", "ok");
-  };
-  document.getElementById("file-editor-cancel").onclick = () => box.classList.add("hidden");
+  } catch (e) {
+    tab.saving = false; tab.error = e.message;
+    showToast(`Save failed: ${e.message}`, "error");
+  }
+  updateStatus(); renderTabs();
 }
+function switchTab(idx) {
+  if (!monacoInstance || !editorOpenTabs.length) return;
+  // Save current tab content before switching
+  if (activeTabIndex >= 0 && editorOpenTabs[activeTabIndex]) {
+    editorOpenTabs[activeTabIndex].content = monacoInstance.getValue();
+  }
+  activeTabIndex = idx;
+  if (idx < 0 || idx >= editorOpenTabs.length) return;
+  const tab = editorOpenTabs[idx];
+  if (!tab) return;
+  loadToMonaco(tab.content, tab.title);
+  renderTabs(); updateStatus();
+}
+async function closeTab(idx) {
+  const tab = editorOpenTabs[idx];
+  if (!tab) return;
+  if (tab.modified) {
+    try {
+      const action = await showConfirm(`"${tab.title}" has unsaved changes.`, "Close?");
+      if (action === "cancel") return;
+      if (action === "save" || action === "true") {
+        await handleMonacoSave();
+        // Check again — user might have saved between confirm and save
+        const stillModified = editorOpenTabs[idx]?.modified;
+        if (stillModified) return;
+      }
+    } catch (e) { showToast("Operation interrupted", "error"); return; }
+  }
+  editorOpenTabs.splice(idx, 1);
+  if (editorOpenTabs.length === 0) { hideEditorPanel(); return; }
+  activeTabIndex = Math.min(activeTabIndex, editorOpenTabs.length - 1);
+  switchTab(activeTabIndex);
+}
+function hideEditorPanel() {
+  const panel = document.getElementById("file-editor-panel");
+  if (panel) panel.classList.add("hidden");
+  if (monacoInstance) { monacoInstance.dispose(); monacoInstance = null; }
+  editorOpenTabs = []; activeTabIndex = -1;
+}
+// Open a file for editing using existing API
+async function openFileForEdit(path, isNew) {
+  const panel = document.getElementById("file-editor-panel");
+  if (!panel) { showToast("Editor not available", "error"); return; }
+  panel.classList.remove("hidden");
+  const newPath = isNew
+    ? (filesCurrent.path.replace(/\/$/, "") + "/" + (path || await showPrompt("New file name:", "", "New file")))
+    : path;
+  if (!newPath) return;
+  let content = "";
+  try {
+    const dev = currentFilesDevice();
+    content = dev && dev.has_agent
+      ? (await fsOp("read", newPath))?.content || ""
+      : (await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: newPath }) })).content;
+  } catch (e) {
+    showToast(`Failed to read file: ${e.message}`, "error");
+    return;
+  }
+  const basename = newPath.split("/").pop();
+  // Find if already open
+  let existingIdx = editorOpenTabs.findIndex(t => t.path === newPath);
+  if (existingIdx >= 0) { switchTab(existingIdx); renderTabs(); return; }
+  const newTab = { title: basename, path: newPath, content, modified: false, saving: false, error: null };
+  editorOpenTabs.push(newTab);
+  activeTabIndex = editorOpenTabs.length - 1;
+  renderTabs();
+  initMonaco(() => loadToMonaco(content, basename));
+  document.getElementById("editor-path").textContent = newPath;
+  updateStatus();
+  // Bind event listeners
+  bindEditorActions();
+}
+function bindEditorActions() {
+  // Fullscreen toggle
+  const fsBtn = document.getElementById("editor-fullscreen");
+  if (fsBtn) {
+    let isFs = false;
+    fsBtn.onclick = () => {
+      isFs = !isFs;
+      const root = document.getElementById("monaco-root");
+      if (root) root.style.height = isFs ? "calc(100vh - 80px)" : "";
+      fsBtn.innerHTML = isFs
+        ? '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 3 3 3 3 9"/><line x1="9" y1="3" x2="15" y2="9"/><polyline points="15 21 21 21 21 15"/><line x1="21" y1="3" x2="15" y2="9"/></svg>'
+        : '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>';
+    };
+    document.addEventListener("keydown", (e) => {
+      if (isFs && e.key === "Escape") { fsBtn.click(); }
+    }, { once: true });
+  }
+  // More menu
+  const moreBtn = document.getElementById("editor-more-btn");
+  const moreMenu = document.getElementById("editor-more-menu");
+  if (moreBtn && moreMenu) {
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      moreMenu.classList.toggle("hidden");
+    };
+    moreMenu.querySelectorAll("button").forEach(btn => {
+      btn.onclick = () => {
+        const action = btn.dataset.action;
+        moreMenu.classList.add("hidden");
+        if (action === "reload") handleReloadFromServer();
+        else if (action === "info") handleFileInfo();
+        else if (action === "download") downloadCurrentFile();
+        else if (action === "copy-path") copyFilePath();
+        else if (action === "cancel") closeActiveEditor();
+      };
+    });
+    document.addEventListener("click", () => moreMenu.classList.add("hidden"), { once: true });
+  }
+}
+async function handleReloadFromServer() {
+  if (activeTabIndex < 0) return;
+  const tab = editorOpenTabs[activeTabIndex];
+  try {
+    const dev = currentFilesDevice();
+    const content = dev && dev.has_agent
+      ? (await fsOp("read", tab.path))?.content || ""
+      : (await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: tab.path }) })).content;
+    tab.content = content;
+    tab.modified = false;
+    if (monacoInstance) { monacoInstance.setValue(content); }
+    renderTabs(); updateStatus();
+    showToast("Reloaded from server", "ok");
+  } catch (e) { showToast(`Reload failed: ${e.message}`, "error"); }
+}
+function handleFileInfo() {
+  if (activeTabIndex < 0) return;
+  const tab = editorOpenTabs[activeTabIndex];
+  alert(`File: ${tab.path}\nLanguage: ${detectLang(tab.title)}\nModified: ${tab.modified ? "Yes" : "No"}\nSize: ${(tab.content || "").length} chars`);
+}
+function downloadCurrentFile() {
+  if (activeTabIndex < 0) return;
+  const tab = editorOpenTabs[activeTabIndex];
+  const dev = currentFilesDevice();
+  if (dev && dev.has_agent) {
+    showToast("Download via agent not implemented yet", "warning");
+    return;
+  }
+  const url = `${API}/api/files/${filesCurrent.deviceId}/download?path=${encodeURIComponent(tab.path)}`;
+  window.open(url, "_blank");
+}
+function copyFilePath() {
+  if (activeTabIndex < 0) return;
+  const tab = editorOpenTabs[activeTabIndex];
+  navigator.clipboard.writeText(tab.path).then(() => showToast("Path copied", "ok")).catch(() => {});
+}
+function closeActiveEditor() {
+  if (activeTabIndex < 0) return;
+  closeTab(activeTabIndex);
+}
+// Override original openFileEditor behavior — keep backward compat
+window.openFileEditor = openFileForEdit;
 
 // ----------------------------- Bulk ----------------------------------------
 async function renderBulkDevices() {

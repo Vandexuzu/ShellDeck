@@ -21,8 +21,8 @@
   </script>
   <link rel="stylesheet" href="/static/style.css?v={{VERSION}}" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css" />
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.45.0/min/monaco.js"></script>
 </head>
-
 <body>
   <header class="topbar">
     <div class="brand">
@@ -265,12 +265,29 @@
             <div class="up-fill" id="up-fill"></div>
           </div>
         </div>
-        <div id="file-editor" class="file-editor hidden">
-          <h3 id="file-editor-title">Edit file</h3>
-          <textarea id="file-editor-content" class="file-editor-content" spellcheck="false"></textarea>
-          <div class="modal-actions">
-            <button id="file-editor-cancel" class="btn btn-ghost">Cancel</button>
-            <button id="file-editor-save" class="btn btn-primary">Save</button>
+        <!-- Monaco Editor panel -->
+        <div id="file-editor-panel" class="hidden">
+          <div class="editor-header">
+            <span class="editor-path muted" id="editor-path"></span>
+            <div class="editor-actions">
+              <button class="btn btn-icon-xs btn-ghost" id="editor-fullscreen" title="Fullscreen"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
+              <button class="btn btn-icon-xs btn-ghost" id="editor-more-btn" title="More">⋮</button>
+            </div>
+          </div>
+          <div id="editor-tabs-container" class="editor-tabs"></div>
+          <div id="monaco-root" style="height:calc(100vh - 190px);min-height:200px;"></div>
+          <div class="editor-statusbar">
+            <span id="editor-status-saved" class="status-ok">Saved</span>
+            <span id="editor-lang" class="muted">Plain Text</span>
+            <span id="editor-pos" class="muted">Ln 1, Col 1</span>
+          </div>
+          <!-- More dropdown -->
+          <div id="editor-more-menu" class="editor-more-menu hidden">
+            <button data-action="reload">↻ Reload from server</button>
+            <button data-action="info">ℹ File info</button>
+            <button data-action="download">↓ Download</button>
+            <button data-action="copy-path">📋 Copy path</button>
+            <button data-action="cancel">✕ Cancel</button>
           </div>
         </div>
       </div>
