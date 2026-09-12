@@ -1010,49 +1010,42 @@ function detectLang(filename) {
   return "plaintext";
 }
 function initMonaco(cb) {
-  if (!monaco) {
-    // Global UMD build not loaded yet; schedule retry
-    setTimeout(() => initMonaco(cb), 50);
-    return;
-  }
-  if (monacoInstance) monacoInstance.dispose();
-  const theme = document.documentElement.getAttribute("data-theme") || "dark";
-  monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");
-  const lang = activeTabIndex >= 0 && editorOpenTabs[activeTabIndex] ? detectLang(editorOpenTabs[activeTabIndex].title) : "plaintext";
-  monacoInstance = monaco.editor.create(document.getElementById("monaco-root"), {
-    value: "", language: lang, theme: theme === "light" ? "vs" : "vs-dark",
-    minimap: { enabled: true }, wordWrap: true, automaticLayout: true,
-    fontSize: 14, fontFamily: "'JetBrains Mono','Fira Code',monospace",
-    scrollBeyondLastLine: false, renderWhitespace: "selection",
-    bracketPairColorization: { enabled: true },
-    suggestOnTriggerCharacters: true, quickSuggestions: true,
+  require(["vs/editor/editor.main"], function () {
+    if (monacoInstance) monacoInstance.dispose();
+    const theme = document.documentElement.getAttribute("data-theme") || "dark";
+    monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");
+    const lang = activeTabIndex >= 0 && editorOpenTabs[activeTabIndex] ? detectLang(editorOpenTabs[activeTabIndex].title) : "plaintext";
+    monacoInstance = monaco.editor.create(document.getElementById("monaco-root"), {
+      value: "", language: lang, theme: theme === "light" ? "vs" : "vs-dark",
+      minimap: { enabled: true }, wordWrap: true, automaticLayout: true,
+      fontSize: 14, fontFamily: "'JetBrains Mono','Fira Code',monospace",
+      scrollBeyondLastLine: false, renderWhitespace: "selection",
+      bracketPairColorization: { enabled: true },
+      suggestOnTriggerCharacters: true, quickSuggestions: true,
+    });
+    monacoInstance.onDidChangeCursorPosition(() => {
+      const pos = monacoInstance.getPosition();
+      const el = document.getElementById("editor-pos");
+      if (el) el.textContent = `Ln ${pos.lineNumber}, Col ${pos.column}`;
+    });
+    monacoInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => handleMonacoSave());
+    monacoInstance.addHandler({
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
+      run: () => { monacoInstance.trigger("", "actions.find", undefined); },
+    });
+    monacoInstance.addHandler({
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyH],
+      run: () => { monacoInstance.trigger("", "editor.actions.findReplace", { isReplaceDialogOpen: true }); },
+    });
+    monacoInstance.onDidChangeModelContent(() => {
+      if (activeTabIndex >= 0 && editorOpenTabs[activeTabIndex]) {
+        editorOpenTabs[activeTabIndex].modified = true;
+        renderTabs();
+        updateStatus();
+      }
+    });
+    if (cb) cb();
   });
-  monacoInstance.onDidChangeCursorPosition(() => {
-    const pos = monacoInstance.getPosition();
-    const el = document.getElementById("editor-pos");
-    if (el) el.textContent = `Ln ${pos.lineNumber}, Col ${pos.column}`;
-  });
-  // Ctrl+S → save
-  monacoInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => handleMonacoSave());
-  // Ctrl+F → find
-  monacoInstance.addHandler({
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
-    run: () => { monacoInstance.trigger("", "actions.find", undefined); },
-  });
-  // Ctrl+Shift+H → replace
-  monacoInstance.addHandler({
-    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyH],
-    run: () => { monacoInstance.trigger("", "editor.actions.findReplace", { isReplaceDialogOpen: true }); },
-  });
-  // Track dirty state
-  monacoInstance.onDidChangeModelContent(() => {
-    if (activeTabIndex >= 0 && editorOpenTabs[activeTabIndex]) {
-      editorOpenTabs[activeTabIndex].modified = true;
-      renderTabs();
-      updateStatus();
-    }
-  });
-  if (cb) cb();
 }
 function loadToMonaco(content, filename) {
   if (!monacoInstance) return;
