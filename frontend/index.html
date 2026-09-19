@@ -117,6 +117,15 @@
             <path d="m6 9 3 3-3 3" />
             <line x1="12" y1="15" x2="17" y2="15" />
           </svg> Terminal</button>
+        <button class="side-nav-item" id="side-editor" data-tab="editor" style="display:none"><svg class="ic"
+            viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round">
+            <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="16" y1="13" x2="8" y2="13" />
+            <line x1="16" y1="17" x2="8" y2="17" />
+            <line x1="10" y1="9" x2="8" y2="9" />
+          </svg> Editor</button>
         <button class="side-nav-item" data-tab="settings"><svg class="ic" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="3" />
@@ -271,11 +280,15 @@
             <div class="up-fill" id="up-fill"></div>
           </div>
         </div>
-        <!-- Monaco Editor panel -->
-        <div id="file-editor-panel" class="hidden">
+      </div>
+
+      <!-- Editor view (separate tab) -->
+      <div id="view-editor" class="hidden">
+        <div id="file-editor-panel">
           <div class="editor-header">
             <span class="editor-path muted" id="editor-path"></span>
             <div class="editor-actions">
+              <button class="btn btn-icon-xs btn-ghost" id="editor-save-btn" title="Save (Ctrl+S)" style="color:var(--ok)">💾</button>
               <button class="btn btn-icon-xs btn-ghost" id="editor-fullscreen" title="Fullscreen"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></button>
               <button class="btn btn-icon-xs btn-ghost" id="editor-more-btn" title="More">⋮</button>
             </div>
@@ -443,10 +456,33 @@
           <div class="modal-card">
             <form id="sched-form" class="sched-form">
           <h3>New scheduled task</h3>
+          <div class="sched-templates">
+            <label class="sched-tpl-label">Quick templates</label>
+            <div class="sched-tpl-btns">
+              <button type="button" class="btn btn-ghost btn-xs sched-tpl" data-name="System Update" data-cmd="apt update && apt upgrade -y">🔄 Update</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-tpl" data-name="Disk Cleanup" data-cmd="df -h | grep -E '^/dev'">💾 Disk Check</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-tpl" data-name="Log Cleanup" data-cmd="find /var/log -name '*.log' -mtime +7 -delete">🧹 Old Logs</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-tpl" data-name="Service Restart" data-cmd="systemctl restart nginx">🔁 Restart Svc</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-tpl" data-name="Backup" data-cmd="tar czf /backup/etc-$(date +%Y%m%d).tar.gz /etc">📦 Backup</button>
+            </div>
+          </div>
           <label>Name <input id="sched-name" class="input" placeholder="Daily update" /></label>
-          <label>Command <input id="sched-command" class="input" placeholder="apt update && apt upgrade -y" /></label>
+          <label>Command
+            <div class="sched-cmd-row">
+              <input id="sched-command" class="input" placeholder="apt update && apt upgrade -y" />
+              <button type="button" id="sched-ai-gen" class="btn btn-ghost btn-xs" title="Generate with AI">🤖 AI</button>
+            </div>
+          </label>
           <label>Target devices <div id="sched-devices" class="device-check"></div></label>
-          <label>Interval (minutes) <input id="sched-interval" class="input" type="number" value="60" min="1" /></label>
+          <label>Schedule
+            <div class="sched-preset-btns">
+              <button type="button" class="btn btn-ghost btn-xs sched-preset" data-min="60">Every hour</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-preset" data-min="1440">Daily</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-preset" data-min="10080">Weekly</button>
+              <button type="button" class="btn btn-ghost btn-xs sched-preset" data-min="43200">Monthly</button>
+            </div>
+          </label>
+          <label>Custom interval (minutes) <input id="sched-interval" class="input" type="number" value="60" min="1" /></label>
           <label class="switch-row"><span>Run once (execute a single time, then disable)</span><input type="checkbox"
               id="sched-runonce" /></label>
           <label id="sched-runat-label" class="hidden">Run at <input id="sched-runat" class="input"
@@ -995,6 +1031,31 @@
 
       <div id="view-terminal" class="hidden">
         <div class="terminal-head">
+          <div class="ai-assist-bar" id="ai-assist-bar">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" style="color:var(--ai)">
+              <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm0 18a8 8 0 1 1 8-8 8 8 0 0 1-8 8z"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            <input id="ai-assist-input" class="input-sm flex-1" type="text"
+              placeholder="Describe what you want to do… (e.g. 'restart nginx', 'check disk usage')" />
+            <button id="ai-assist-send" class="btn btn-primary btn-icon-text" disabled>
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+              <span>Generate</span>
+            </button>
+          </div>
+          <div class="ai-assist-result hidden" id="ai-assist-result">
+            <div class="ai-assist-cmd">
+              <code id="ai-assist-cmd-text"></code>
+              <button id="ai-assist-run" class="btn btn-ok btn-xs">Run</button>
+              <button id="ai-assist-copy" class="btn btn-ghost btn-xs">Copy</button>
+            </div>
+            <div class="ai-assist-explain" id="ai-assist-explain"></div>
+            <div class="ai-assist-warnings hidden" id="ai-assist-warnings"></div>
+          </div>
           <div class="terminal-broadcast-bar" id="broadcast-bar">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">

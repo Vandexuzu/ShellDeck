@@ -184,7 +184,7 @@ async function ensureAuth() {
 function switchTab(name) {
   try { localStorage.setItem("shelldeck_view", name); } catch (_) {}
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["home", "devices", "files", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit", "ai-assistant"].forEach(v => {
+  ["home", "devices", "files", "editor", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit", "ai-assistant"].forEach(v => {
     const el = document.getElementById("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
   });
@@ -991,6 +991,24 @@ let monacoInstance = null;
 let editorOpenTabs = [];
 let activeTabIndex = -1;
 
+function saveEditorState() {
+  try {
+    localStorage.setItem("shelldeck_editor_tabs", JSON.stringify(editorOpenTabs));
+    localStorage.setItem("shelldeck_active_tab", activeTabIndex);
+  } catch(e) {}
+}
+
+function loadEditorState() {
+  try {
+    const tabs = localStorage.getItem("shelldeck_editor_tabs");
+    const active = localStorage.getItem("shelldeck_active_tab");
+    if (tabs) editorOpenTabs = JSON.parse(tabs);
+    if (active !== null) activeTabIndex = parseInt(active, 10);
+  } catch(e) { editorOpenTabs = []; activeTabIndex = -1; }
+}
+
+loadEditorState();
+
 const MONACO_LANG_MAP = {
   ".sh":"bash",".bash":"bash",".zsh":"bash",".ps1":"powershell",
   ".py":"python",".rb":"ruby",".pl":"perl",
@@ -1029,11 +1047,15 @@ function initMonaco(cb) {
       if (el) el.textContent = `Ln ${pos.lineNumber}, Col ${pos.column}`;
     });
     monacoInstance.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => handleMonacoSave());
-    monacoInstance.addHandler({
+    monacoInstance.addAction({
+      id: "shelldeck.find",
+      label: "Find",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF],
       run: () => { monacoInstance.trigger("", "actions.find", undefined); },
     });
-    monacoInstance.addHandler({
+    monacoInstance.addAction({
+      id: "shelldeck.replace",
+      label: "Find and Replace",
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyH],
       run: () => { monacoInstance.trigger("", "editor.actions.findReplace", { isReplaceDialogOpen: true }); },
     });
@@ -1078,10 +1100,10 @@ function renderTabs() {
     </div>`
   ).join("");
   c.querySelectorAll(".editor-tab").forEach(el => {
-    el.onclick = () => switchTab(+el.dataset.idx);
+    el.onclick = () => switchEditorTab(+el.dataset.idx);
   });
   c.querySelectorAll(".editor-tab-close").forEach(el => {
-    el.onclick = (e) => { e.stopPropagation(); closeTab(+el.dataset.close); };
+    el.onclick = (e) => { e.stopPropagation(); closeEditorTab(+el.dataset.close); };
   });
 }
 async function handleMonacoSave() {
@@ -1108,7 +1130,7 @@ async function handleMonacoSave() {
   }
   updateStatus(); renderTabs();
 }
-function switchTab(idx) {
+function switchEditorTab(idx) {
   if (!monacoInstance || !editorOpenTabs.length) return;
   // Save current tab content before switching
   if (activeTabIndex >= 0 && editorOpenTabs[activeTabIndex]) {
@@ -1120,8 +1142,9 @@ function switchTab(idx) {
   if (!tab) return;
   loadToMonaco(tab.content, tab.title);
   renderTabs(); updateStatus();
+  saveEditorState();
 }
-async function closeTab(idx) {
+async function closeEditorTab(idx) {
   const tab = editorOpenTabs[idx];
   if (!tab) return;
   if (tab.modified) {
@@ -1137,21 +1160,33 @@ async function closeTab(idx) {
     } catch (e) { showToast("Operation interrupted", "error"); return; }
   }
   editorOpenTabs.splice(idx, 1);
-  if (editorOpenTabs.length === 0) { hideEditorPanel(); return; }
+  if (editorOpenTabs.length === 0) {
+    activeTabIndex = -1;
+    saveEditorState();
+    hideEditorPanel();
+    return;
+  }
   activeTabIndex = Math.min(activeTabIndex, editorOpenTabs.length - 1);
-  switchTab(activeTabIndex);
+  switchEditorTab(activeTabIndex);
+  saveEditorState();
 }
 function hideEditorPanel() {
-  const panel = document.getElementById("file-editor-panel");
-  if (panel) panel.classList.add("hidden");
+  const view = document.getElementById("view-editor");
+  if (view) view.classList.add("hidden");
   if (monacoInstance) { monacoInstance.dispose(); monacoInstance = null; }
   editorOpenTabs = []; activeTabIndex = -1;
 }
 // Open a file for editing using existing API
 async function openFileForEdit(path, isNew) {
-  const panel = document.getElementById("file-editor-panel");
-  if (!panel) { showToast("Editor not available", "error"); return; }
-  panel.classList.remove("hidden");
+  const view = document.getElementById("view-editor");
+  if (!view) { showToast("Editor not available", "error"); return; }
+  // Switch to editor tab
+  view.classList.remove("hidden");
+  // Show editor nav button
+  const editorBtn = document.getElementById("side-editor");
+  if (editorBtn) editorBtn.style.display = "";
+  // Switch active tab
+  switchTab('editor');
   const newPath = isNew
     ? (filesCurrent.path.replace(/\/$/, "") + "/" + (path || await showPrompt("New file name:", "", "New file")))
     : path;
@@ -1169,10 +1204,11 @@ async function openFileForEdit(path, isNew) {
   const basename = newPath.split("/").pop();
   // Find if already open
   let existingIdx = editorOpenTabs.findIndex(t => t.path === newPath);
-  if (existingIdx >= 0) { switchTab(existingIdx); renderTabs(); return; }
+  if (existingIdx >= 0) { switchEditorTab(existingIdx); renderTabs(); return; }
   const newTab = { title: basename, path: newPath, content, modified: false, saving: false, error: null };
   editorOpenTabs.push(newTab);
   activeTabIndex = editorOpenTabs.length - 1;
+  saveEditorState();
   renderTabs();
   initMonaco(() => loadToMonaco(content, basename));
   document.getElementById("editor-path").textContent = newPath;
@@ -1181,6 +1217,10 @@ async function openFileForEdit(path, isNew) {
   bindEditorActions();
 }
 function bindEditorActions() {
+  // Save button
+  const saveBtn = document.getElementById("editor-save-btn");
+  if (saveBtn) saveBtn.onclick = () => handleMonacoSave();
+
   // Fullscreen toggle
   const fsBtn = document.getElementById("editor-fullscreen");
   if (fsBtn) {
@@ -1197,27 +1237,37 @@ function bindEditorActions() {
       if (isFs && e.key === "Escape") { fsBtn.click(); }
     }, { once: true });
   }
-  // More menu
+}
+
+// More menu - register once globally
+function initEditorMoreMenu() {
   const moreBtn = document.getElementById("editor-more-btn");
   const moreMenu = document.getElementById("editor-more-menu");
-  if (moreBtn && moreMenu) {
-    moreBtn.onclick = (e) => {
-      e.stopPropagation();
-      moreMenu.classList.toggle("hidden");
+  if (!moreBtn || !moreMenu) return;
+  
+  moreBtn.onclick = (e) => {
+    e.stopPropagation();
+    moreMenu.classList.toggle("hidden");
+  };
+  
+  moreMenu.querySelectorAll("button").forEach(btn => {
+    btn.onclick = () => {
+      const action = btn.dataset.action;
+      moreMenu.classList.add("hidden");
+      if (action === "reload") handleReloadFromServer();
+      else if (action === "info") handleFileInfo();
+      else if (action === "download") downloadCurrentFile();
+      else if (action === "copy-path") copyFilePath();
+      else if (action === "cancel") closeActiveEditor();
     };
-    moreMenu.querySelectorAll("button").forEach(btn => {
-      btn.onclick = () => {
-        const action = btn.dataset.action;
-        moreMenu.classList.add("hidden");
-        if (action === "reload") handleReloadFromServer();
-        else if (action === "info") handleFileInfo();
-        else if (action === "download") downloadCurrentFile();
-        else if (action === "copy-path") copyFilePath();
-        else if (action === "cancel") closeActiveEditor();
-      };
-    });
-    document.addEventListener("click", () => moreMenu.classList.add("hidden"), { once: true });
-  }
+  });
+  
+  // Close menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!moreBtn.contains(e.target) && !moreMenu.contains(e.target)) {
+      moreMenu.classList.add("hidden");
+    }
+  });
 }
 async function handleReloadFromServer() {
   if (activeTabIndex < 0) return;
@@ -2276,7 +2326,142 @@ document.getElementById("broadcast-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") { e.preventDefault(); doBroadcast(); }
 });
 
+// AI Command Builder: Natural language to shell command
+const aiInput = document.getElementById("ai-assist-input");
+const aiSend = document.getElementById("ai-assist-send");
+const aiResult = document.getElementById("ai-assist-result");
+const aiCmdText = document.getElementById("ai-assist-cmd-text");
+const aiExplain = document.getElementById("ai-assist-explain");
+const aiWarnings = document.getElementById("ai-assist-warnings");
+const aiRun = document.getElementById("ai-assist-run");
+const aiCopy = document.getElementById("ai-assist-copy");
+
+aiInput?.addEventListener("input", () => {
+  aiSend.disabled = !aiInput.value.trim();
+});
+
+aiInput?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !aiSend.disabled) {
+    e.preventDefault();
+    aiSend.click();
+  }
+});
+
+aiSend?.addEventListener("click", async () => {
+  const prompt = aiInput.value.trim();
+  if (!prompt) return;
+  
+  aiSend.disabled = true;
+  aiSend.querySelector("span").textContent = "Generating...";
+  aiResult.classList.add("hidden");
+  
+  try {
+    const response = await fetch("/api/ai/command/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: prompt, safety_check: true })
+    });
+    
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.detail || "AI service error");
+    }
+    
+    const data = await response.json();
+    aiCmdText.textContent = data.command;
+    aiExplain.textContent = data.explanation || "";
+    
+    if (data.warnings && data.warnings.length > 0) {
+      aiWarnings.textContent = "⚠ " + data.warnings.join(" ");
+      aiWarnings.classList.remove("hidden");
+    } else {
+      aiWarnings.classList.add("hidden");
+    }
+    
+    aiResult.classList.remove("hidden");
+  } catch (err) {
+    showToast(err.message, "error");
+  } finally {
+    aiSend.disabled = false;
+    aiSend.querySelector("span").textContent = "Generate";
+  }
+});
+
+aiCopy?.addEventListener("click", () => {
+  navigator.clipboard.writeText(aiCmdText.textContent);
+  showToast("Command copied", "ok");
+});
+
+aiRun?.addEventListener("click", () => {
+  const cmd = aiCmdText.textContent;
+  if (!cmd) return;
+  
+  // Send to active terminal
+  const activeTerminal = document.querySelector(".xterm.active");
+  if (activeTerminal) {
+    const term = activeTerminal._terminal;
+    if (term) {
+      term.paste(cmd + "\n");
+      showToast("Command sent to terminal", "ok");
+    }
+  } else {
+    showToast("No active terminal", "error");
+  }
+});
+
 // ----------------------------- Scheduled tasks -----------------------------
+// Template buttons
+document.querySelectorAll(".sched-tpl").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.getElementById("sched-name").value = btn.dataset.name;
+    document.getElementById("sched-command").value = btn.dataset.cmd;
+  });
+});
+
+// Schedule preset buttons
+document.querySelectorAll(".sched-preset").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.getElementById("sched-interval").value = btn.dataset.min;
+  });
+});
+
+// AI generate button for command
+document.getElementById("sched-ai-gen")?.addEventListener("click", async () => {
+  const prompt = await showPrompt("Describe what you want to schedule", "e.g. 'Clean up old log files every week'");
+  if (!prompt) return;
+  
+  const btn = document.getElementById("sched-ai-gen");
+  const origText = btn.textContent;
+  btn.textContent = "🤖 ...";
+  btn.disabled = true;
+  
+  try {
+    const res = await fetch("/api/ai/command/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, safety_check: true })
+    });
+    
+    if (!res.ok) throw new Error("AI service error");
+    const data = await res.json();
+    
+    if (data.command) {
+      document.getElementById("sched-command").value = data.command;
+      if (data.explanation) {
+        document.getElementById("sched-name").value = data.explanation.substring(0, 50);
+      }
+      showToast("Command generated", "ok");
+    } else {
+      showToast("No command generated", "error");
+    }
+  } catch (err) {
+    showToast("AI generation failed: " + err.message, "error");
+  } finally {
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+});
+
 async function loadScheduled() {
   const box = document.getElementById("sched-list");
   box.innerHTML = "<p class='muted'>Loading…</p>";
@@ -3572,3 +3757,23 @@ function aiQuickAction(action) {
   // Trigger input event to enable send button
   input.dispatchEvent(new Event("input"));
 }
+
+// Initialize editor more menu on load
+initEditorMoreMenu();
+
+// Restore editor tabs from localStorage
+(function restoreEditorTabs() {
+  if (!editorOpenTabs.length) return;
+  const view = document.getElementById("view-editor");
+  const editorBtn = document.getElementById("side-editor");
+  if (editorBtn) editorBtn.style.display = "";
+  if (activeTabIndex >= 0 && activeTabIndex < editorOpenTabs.length) {
+    if (view) view.classList.remove("hidden");
+    switchTab('editor');
+    renderTabs();
+    initMonaco(() => {
+      const tab = editorOpenTabs[activeTabIndex];
+      if (tab) loadToMonaco(tab.content, tab.title);
+    });
+  }
+})();
