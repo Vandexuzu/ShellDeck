@@ -176,6 +176,15 @@ async def run_task(task: ScheduledTask, db: Session) -> None:
     else:
         task.next_run = _next_run_for(task, task.last_run)
     db.commit()
+    # Notify on failed runs (gated by notify_task_failed).
+    failed = [o for o in outputs if "ERROR:" in o or "EXCEPTION" in o]
+    if failed:
+        from app.notifications import notify
+        msg = f"<b>ShellDeck scheduled task failed</b>\nTask <b>{task.name}</b>: {len(failed)} device(s) errored.\n{failed[0][:300]}"
+        try:
+            await notify(msg, db, event="task_failed")
+        except Exception:
+            pass  # notification must never break the scheduler
 
 
 async def scheduler_loop() -> None:

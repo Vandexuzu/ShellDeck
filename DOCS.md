@@ -318,7 +318,7 @@ The AI chat interface includes 4 one-click action buttons at the top:
 - Conversations are saved per-device for context continuity
 - Filter history by device from the AI panel
 - Clear chat with confirmation dialog
-- History stored in SQLite (`ai_chats` table) with encrypted API keys
+- History stored in SQLite (`ai_chat_messages` table) with encrypted API keys
 
 **Security & Safety:**
 - **Human-in-the-loop**: AI never auto-executes; you must click "Run" or "Copy"
@@ -346,6 +346,77 @@ When analyzing errors or generating commands, the AI can access:
 - OpenAI/Anthropic: Pay-per-token (GPT-4o-mini is ~$0.15 per million input tokens)
 - Ollama: Free, runs locally (requires ~8GB RAM for 8B models)
 - Rate limiting: 10 requests/minute per user to prevent runaway costs
+
+### 7.17 Secret Manager
+
+Encrypted vault for storing API keys, tokens, and other sensitive credentials. All values are encrypted at rest using Fernet encryption (same key as SSH credentials).
+
+**Features:**
+- Create, read, update, delete secrets
+- Values hidden by default; click "Reveal" to temporarily show (8-second auto-hide)
+- Copy to clipboard functionality
+- Owner-based access control (admin sees all, operators see own)
+- Export/import support for backup and migration
+
+**Use cases:**
+- Store API keys for external services
+- Save database credentials
+- Keep deployment tokens secure
+- Share secrets across team members with audit trail
+
+### 7.18 Deploy Templates
+
+One-click provisioning of popular server stacks. Templates define a set of commands to install and configure common software combinations.
+
+**Built-in templates:**
+- **LAMP Stack** — Apache, MySQL, PHP
+- **Node.js + MongoDB** — Node.js runtime with MongoDB database
+- **Nginx Static** — Nginx configured for static site hosting
+- **Docker Compose** — Docker Engine with Docker Compose
+
+**Custom templates:**
+- Create your own templates with custom command sequences
+- Templates stored per-user (operators see own, admin sees all)
+- Execute on any device with one click
+- Execution runs via bulk command system (parallel if multiple devices)
+
+### 7.19 Security Scanning
+
+AI-powered security analysis tools for detecting anomalies and vulnerabilities.
+
+**Scan types:**
+- **Log Anomaly Detection** — Analyze log files for suspicious patterns (failed logins, privilege escalation, unusual access)
+- **Config Review** — Review configuration files for security issues (weak permissions, exposed credentials, insecure settings)
+- **Command Anomaly Detection** — Audit executed commands for dangerous patterns (rm -rf, chmod 777, suspicious network activity)
+
+**Auto-scan:**
+- Enable periodic scanning in Settings (default: every 6 hours)
+- Scans run in background, results stored in `security_findings` table
+- Per-event notification gates: choose which findings trigger alerts (device offline, command anomaly, log anomaly, config review, task failed)
+- Severity levels: low, medium, high, critical
+- Findings can be dismissed or marked as resolved
+
+**Integration:**
+- Security findings appear on Home dashboard (recent findings widget)
+- Click finding to view details and take action
+- Audit log tracks all scan activities
+
+### 7.20 Dashboard Customizer
+
+Personalize the Home dashboard by toggling widget visibility and reordering.
+
+**Customizable widgets:**
+- Stat cards (device count, online/offline, alerts)
+- Recent activity feed
+- Security findings
+- Quick actions
+- Device health overview
+
+**Features:**
+- Toggle widgets on/off
+- Drag-and-drop reordering
+- Settings saved per-user in localStorage
+- Reset to default layout option
 
 ---
 

@@ -12,10 +12,11 @@ from app.config import settings
 from app.db import init_db
 from app.models import SettingsRow
 from app.routers import (
-    auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled, public, agents, backup, oidc, home, ai,
+    auth, devices, docker, files, monitoring, snippets, bulk, terminal, users, settings as settings_router, scheduled, public, agents, backup, oidc, home, ai, secrets, deploy, logs,
 )
 from app.notifications import monitor_loop
 from app.routers.scheduled import scheduler_loop
+from app.routers.logs import security_scan_loop
 
 import asyncio
 
@@ -25,11 +26,13 @@ async def lifespan(app: FastAPI):
     init_db()
     bg = asyncio.create_task(monitor_loop(60))
     sched = asyncio.create_task(scheduler_loop())
+    sec = asyncio.create_task(security_scan_loop())
     try:
         yield
     finally:
         bg.cancel()
         sched.cancel()
+        sec.cancel()
 
 
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -101,6 +104,9 @@ app.include_router(backup.router)
 app.include_router(oidc.router)
 app.include_router(home.router)
 app.include_router(ai.router)
+app.include_router(secrets.router)
+app.include_router(deploy.router)
+app.include_router(logs.router)
 
 # Static frontend (served at web root).
 app.mount("/static", StaticFiles(directory="frontend/static"), name="static")

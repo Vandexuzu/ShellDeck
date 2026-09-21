@@ -42,6 +42,10 @@ Open a real terminal in the browser, run commands across hosts at once, transfer
 | 📲 **PWA**              | Install to phone home screen; mobile UI (cards + bottom nav)                                            |
 | 🔐 **2FA**              | TOTP / 2FA (RFC 6238, no external dependency); OIDC SSO (Google / GitHub / corporate)                   |
 | 🤖 **AI Copilot**       | Natural-language command generation, error diagnosis, script writing, command explanation (OpenAI/Anthropic/Ollama) |
+| 🔑 **Secret Manager**   | Encrypted vault for API keys, tokens, and credentials (Fernet encryption at rest)                       |
+| 🚀 **Deploy Templates** | One-click provisioning of popular stacks (LAMP, Node.js+MongoDB, Nginx, Docker)                         |
+| 🛡️ **Security Scanning** | AI-powered log anomaly detection, config file review, command audit with auto-scan and per-event alerts |
+| 🎨 **Dashboard Customizer** | Toggle and reorder Home widgets to match your workflow                                               |
 
 ---
 
@@ -315,6 +319,11 @@ pytest        # auth · RBAC · devices · tags · bulk · docker · settings ·
 - [x] **AI Quick Actions** (Diagnose Error, Generate Command, Explain Command, Write Script)
 - [x] **AI Multi-Provider** (OpenAI, Anthropic, Ollama — local LLM support for privacy)
 - [x] **AI Security** (human-in-the-loop, command sanitization, risk analysis, safety warnings)
+- [x] **Secret Manager** (encrypted vault for API keys, tokens, credentials — Fernet encryption)
+- [x] **Deploy Templates** (one-click provisioning: LAMP, Node.js+MongoDB, Nginx, Docker stacks)
+- [x] **Security Scanning** (AI-powered log anomaly detection, config review, command audit)
+- [x] **Auto-scan & Alerts** (periodic security scanning with per-event notification gates)
+- [x] **Dashboard Customizer** (toggle and reorder Home widgets to match workflow)
 
 **Earlier milestones**
 

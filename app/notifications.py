@@ -151,10 +151,17 @@ def _is_internal_url(url: str) -> bool:
     )
 
 
-async def notify(message: str, db: Session) -> None:
-    """Send a notification through whichever channels are configured."""
+async def notify(message: str, db: Session, event: str | None = None) -> None:
+    """Send a notification through whichever channels are configured.
+
+    `event` optionally gates by per-event toggle in settings (e.g. "device_offline",
+    "command_anomaly"). When None, always sends (subject to notify_enabled).
+    """
     s = _get_settings(db)
     if not s.notify_enabled:
+        return
+    # Per-event gate: settings column is notify_<event>; missing attr = allow.
+    if event and not getattr(s, f"notify_{event}", True):
         return
     token = decrypt(s.telegram_token_enc) if s.telegram_token_enc else ""
     if token and s.telegram_chat_id:
@@ -208,7 +215,8 @@ async def monitor_loop(interval: int = 60) -> None:
                     if prev is not None and prev != ok:
                         state = "✅ reachable again" if ok else "🔥 UNREACHABLE"
                         msg = f"<b>ShellDeck alert</b>\nDevice <b>{d.name}</b> ({d.host}) is now {state}."
-                        await notify(msg, db)
+                        # Offline alerts gated by notify_device_offline; recovery always goes through notify_enabled.
+                        await notify(msg, db, event=None if ok else "device_offline")
                     _last_state[d.id] = ok
             finally:
                 db.close()

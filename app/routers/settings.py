@@ -96,6 +96,19 @@ def update_settings(
         row.enroll_owner_id = _.id
     elif payload.enroll_secret_action == "revoke":
         row.enroll_secret = None
+    if payload.auto_scan_enabled is not None:
+        row.auto_scan_enabled = payload.auto_scan_enabled
+    if payload.auto_scan_interval_h is not None:
+        row.auto_scan_interval_h = max(1, min(payload.auto_scan_interval_h, 168))
+    if payload.auto_scan_notify_min is not None:
+        if payload.auto_scan_notify_min not in ("medium", "high", "critical"):
+            raise HTTPException(status_code=422, detail="Invalid notify threshold")
+        row.auto_scan_notify_min = payload.auto_scan_notify_min
+    for fld in ("notify_device_offline", "notify_command_anomaly", "notify_log_anomaly",
+                "notify_config_review", "notify_task_failed"):
+        v = getattr(payload, fld)
+        if v is not None:
+            setattr(row, fld, v)
     db.commit()
     db.refresh(row)
     log_audit(db, _, "settings_update", f"monitor_interval={row.monitor_interval} public_dashboard={row.public_dashboard} oidc_enabled={row.oidc_enabled} timezone={row.timezone} theme={row.theme} session_retention_days={row.session_retention_days} agent_heartbeat={row.agent_heartbeat} agent_reconnect={row.agent_reconnect}")

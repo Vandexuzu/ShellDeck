@@ -162,6 +162,22 @@
             <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
             <circle cx="12" cy="12" r="3" />
           </svg> AI Assistant</button>
+        <button class="side-nav-item" data-tab="security"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg> Security</button>
+        <button class="side-nav-item" data-tab="deploy"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+            <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+          </svg> Deploy</button>
+        <button class="side-nav-item" data-tab="secrets"><svg class="ic" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg> Secrets</button>
       </nav>
     </aside>
 
@@ -488,12 +504,12 @@
           <label id="sched-runat-label" class="hidden">Run at <input id="sched-runat" class="input"
               type="datetime-local" /></label>
           <div class="modal-actions">
-            <button id="sched-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            <button type="button" id="sched-cancel" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg><span>Cancel</span></button>
-            <button id="sched-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
+            <button type="button" id="sched-save" class="btn btn-primary btn-icon-text"><svg class="ic" viewBox="0 0 24 24"
                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="16 9 11 14 8 11" />
@@ -601,7 +617,7 @@
           </div>
         </details>
 
-        <details class="settings-acc" open>
+        <details class="settings-acc">
           <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3" />
@@ -625,7 +641,7 @@
           </div>
         </details>
 
-        <details class="settings-acc" open>
+        <details class="settings-acc">
           <summary><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
               stroke-linecap="round" stroke-linejoin="round">
               <rect x="3" y="11" width="18" height="11" rx="2" />
@@ -727,6 +743,25 @@
                 max="3600" /></label>
             <label class="switch-row"><span>Enable public status page (<a href="/public" target="_blank"
                   style="color:var(--primary)">/public</a>)</span><input type="checkbox" id="set-public" /></label>
+
+            <h4 style="margin:16px 0 6px">Notify me about (bot channels above)</h4>
+            <label class="switch-row"><span>Device goes offline</span><input type="checkbox" id="set-nf-offline" /></label>
+            <label class="switch-row"><span>Critical command anomaly (auto-scan / audit)</span><input type="checkbox" id="set-nf-command" /></label>
+            <label class="switch-row"><span>High log anomaly</span><input type="checkbox" id="set-nf-log" /></label>
+            <label class="switch-row"><span>Config review high-risk</span><input type="checkbox" id="set-nf-config" /></label>
+            <label class="switch-row"><span>Scheduled task failed</span><input type="checkbox" id="set-nf-task" /></label>
+
+            <h4 style="margin:16px 0 6px">Security auto-scan (AI, periodic)</h4>
+            <p class="muted" style="margin:0 0 8px;font-size:12px">Periodically scans recorded session commands for anomalies and stores results as findings.</p>
+            <label class="switch-row"><span>Enable auto-scan</span><input type="checkbox" id="set-autoscan" /></label>
+            <label>Scan every (hours) <input id="set-autoscan-interval" class="input" type="number" min="1" max="168" value="6" /></label>
+            <label>Notify bot when severity ≥
+              <select id="set-autoscan-min" class="input">
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+                <option value="critical">critical</option>
+              </select>
+            </label>
             <div class="modal-actions">
               <button id="set-test" class="btn btn-ghost btn-icon-text"><svg class="ic" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -822,16 +857,25 @@
       <div id="view-home" class="hidden">
         <div class="content-head">
           <h1>Home</h1><span class="muted" id="home-sub"></span>
+          <button type="button" id="home-customize" class="btn btn-ghost btn-icon-text" title="Customize dashboard">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+            </svg><span>Customize</span>
+          </button>
         </div>
 
         <!-- A: stat cards -->
-        <div class="home-stats" id="home-stats"></div>
+        <div class="home-stats" id="home-stats" data-widget="stats"></div>
 
         <!-- A2: active alerts strip (hidden when none) -->
-        <div id="home-alerts" class="home-alerts hidden"></div>
+        <div id="home-alerts" class="home-alerts hidden" data-widget="alerts"></div>
 
         <!-- E: quick actions -->
-        <div class="home-quick">
+        <div class="home-quick" data-widget="quick">
           <button class="qa" data-go="devices"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -866,26 +910,41 @@
 
         <div class="home-grid">
           <!-- B: device health -->
-          <div class="home-card">
+          <div class="home-card" data-widget="health">
             <h3>Device Health</h3>
             <div id="home-health-summary" class="home-health-summary"></div>
             <div id="home-health" class="home-health"></div>
             <div id="home-health-pager" class="home-pager"></div>
           </div>
           <!-- C: recent activity -->
-          <div class="home-card">
+          <div class="home-card" data-widget="activity">
             <h3>Recent Activity</h3>
             <div id="home-recent" class="home-list"></div>
           </div>
           <!-- D: scheduled -->
-          <div class="home-card">
+          <div class="home-card" data-widget="scheduled">
             <h3>Scheduled Tasks</h3>
             <div id="home-scheduled" class="home-list"></div>
           </div>
           <!-- G: docker -->
-          <div class="home-card">
+          <div class="home-card" data-widget="docker">
             <h3>Docker Overview</h3>
             <div id="home-docker" class="home-list"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Dashboard customizer modal -->
+      <div id="dash-modal" class="modal hidden">
+        <div class="modal-card">
+          <div class="user-form">
+            <h3>Customize Dashboard</h3>
+            <p class="muted" style="margin:0 0 8px">Toggle widgets and set display order. Saved locally per browser.</p>
+            <div id="dash-widget-list"></div>
+            <div class="modal-actions">
+              <button type="button" id="dash-reset" class="btn btn-ghost btn-icon-text"><span>Reset</span></button>
+              <button type="button" id="dash-cancel" class="btn btn-ghost btn-icon-text"><span>Cancel</span></button>
+              <button type="button" id="dash-save" class="btn btn-primary btn-icon-text"><span>Save</span></button>
+            </div>
           </div>
         </div>
       </div>
@@ -923,6 +982,98 @@
           </div>
         </div>
         <div id="audit-log" class="audit-log"></div>
+      </div>
+
+      <!-- Security view: log anomaly + config reviewer -->
+      <div id="view-security" class="hidden">
+        <div class="content-head">
+          <h1>Security</h1><span class="muted">AI-powered log anomaly detection &amp; config review</span>
+        </div>
+        <div class="sec-grid">
+          <div class="home-card">
+            <h3>Log Anomaly Detection</h3>
+            <p class="muted" style="margin:0 0 8px">Paste system logs — AI flags anomalies, severity, and fixes.</p>
+            <textarea id="sec-log-text" class="input" rows="10" placeholder="Paste log lines here (auth.log, syslog, nginx error.log…)"></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <input id="sec-log-context" class="input" style="flex:1;min-width:180px" placeholder="Context (optional), e.g. 'nginx auth failures'" />
+              <button type="button" id="sec-log-analyze" class="btn btn-primary">Analyze</button>
+            </div>
+            <div id="sec-log-result" class="ai-result-box hidden"></div>
+          </div>
+          <div class="home-card">
+            <h3>Config File Reviewer</h3>
+            <p class="muted" style="margin:0 0 8px">Paste a config file — AI reviews security &amp; hardening.</p>
+            <input id="sec-cfg-name" class="input" style="width:100%;margin-bottom:8px" placeholder="Filename, e.g. nginx.conf" />
+            <textarea id="sec-cfg-text" class="input" rows="10" placeholder="Paste config content (nginx.conf, docker-compose.yml, sshd_config…)"></textarea>
+            <div style="margin-top:8px">
+              <button type="button" id="sec-cfg-review" class="btn btn-primary">Review Config</button>
+            </div>
+            <div id="sec-cfg-result" class="ai-result-box hidden"></div>
+          </div>
+        </div>
+        <div class="home-card" style="margin-top:16px">
+          <h3>Command Anomaly Scan</h3>
+          <p class="muted" style="margin:0 0 8px">Scans all recorded session commands for suspicious activity (rm -rf, reverse shells, credential access…).</p>
+          <div class="audit-actions">
+            <button type="button" id="audit-anomaly-btn" class="btn btn-primary btn-icon-text">
+              <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+              <span>Run Scan Now</span>
+            </button>
+            <div id="audit-anomaly-result" class="ai-result-box hidden"></div>
+          </div>
+        </div>
+        <div class="home-card" style="margin-top:16px">
+          <h3 style="display:flex;justify-content:space-between;align-items:center">
+            Scan History
+            <label class="muted" style="font-size:12px;font-weight:400;display:flex;align-items:center;gap:6px">
+              <input type="checkbox" id="sec-findings-dismissed" /> show dismissed
+            </label>
+          </h3>
+          <div id="sec-findings" class="home-list"></div>
+        </div>
+      </div>
+
+      <!-- Deploy view: one-click templates -->
+      <div id="view-deploy" class="hidden">
+        <div class="content-head">
+          <h1>Deploy Templates</h1><span class="muted">One-click stack provisioning on your devices</span>
+        </div>
+        <div class="deploy-controls" style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+          <select id="deploy-device" class="input" style="min-width:200px"></select>
+          <span class="muted">Select target device, then deploy a template below.</span>
+        </div>
+        <div id="deploy-templates" class="deploy-grid"></div>
+        <div id="deploy-result" class="ai-result-box hidden" style="margin-top:12px"></div>
+      </div>
+
+      <!-- Secrets view: encrypted vault -->
+      <div id="view-secrets" class="hidden">
+        <div class="content-head">
+          <h1>Secret Manager</h1>
+          <button type="button" id="secret-add" class="btn btn-primary btn-icon-text">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            <span>New Secret</span>
+          </button>
+        </div>
+        <p class="muted">Encrypted at rest (Fernet). Values are never listed — reveal on demand.</p>
+        <div id="secrets-list" class="secrets-list"></div>
+      </div>
+      <div id="secret-modal" class="modal hidden">
+        <div class="modal-card">
+          <div class="user-form">
+            <h3 id="secret-modal-title">New secret</h3>
+            <input type="hidden" id="secret-edit-id" />
+            <label>Name <input id="secret-name" class="input" placeholder="OPENAI_API_KEY" /></label>
+            <label>Value <input id="secret-value" type="password" class="input" placeholder="secret value" autocomplete="new-password" /></label>
+            <label>Description <input id="secret-desc" class="input" placeholder="optional" /></label>
+            <div class="modal-actions">
+              <button type="button" id="secret-cancel" class="btn btn-ghost btn-icon-text"><span>Cancel</span></button>
+              <button type="button" id="secret-save" class="btn btn-primary btn-icon-text"><span>Save</span></button>
+            </div>
+          </div>
+        </div>
       </div>
         <div id="user-modal" class="modal hidden">
           <div class="modal-card">

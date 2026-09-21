@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Agent, Device, ScheduledTask, SessionLog, SettingsRow, User
+from app.models import Agent, Device, ScheduledTask, SecurityFinding, SessionLog, SettingsRow, User
 from app.routers.devices import _visible_devices
 from app.routers.monitoring import _collect
 from app.security import get_current_user
@@ -127,6 +127,24 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
     ) or 0
     oidc_on = bool(settings and settings.oidc_enabled)
     public_on = bool(settings and settings.public_dashboard)
+    # Unacknowledged high+ security findings from the last 24h.
+    from datetime import timedelta
+    sec_cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+    sec_rows = db.scalars(
+        select(SecurityFinding).where(
+            SecurityFinding.dismissed.is_(False),
+            SecurityFinding.severity.in_(["high", "critical"]),
+            SecurityFinding.created_at >= sec_cutoff,
+        ).order_by(SecurityFinding.created_at.desc()).limit(5)
+    ).all()
+    sec_findings = [
+        {
+            "id": f.id, "kind": f.kind, "severity": f.severity,
+            "summary": (f.summary or "")[:160], "source": f.source,
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+        }
+        for f in sec_rows
+    ]
 
     # --- B: device health -----------------------------------------------
     health = [
@@ -201,6 +219,7 @@ async def home_summary(db: Session = Depends(get_db), user: User = Depends(get_c
             "twofa_users": twofa_users,
             "oidc_enabled": oidc_on,
             "public_dashboard": public_on,
+            "findings": sec_findings,
         },
         "device_health": health,
         "recent_sessions": recent,

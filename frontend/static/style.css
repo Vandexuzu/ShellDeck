@@ -341,10 +341,11 @@ body {
   
   #ai-sidebar {
     position: fixed;
-    top: 60px;
+    top: 53px;
     right: 0;
     width: 280px;
-    height: calc(100vh - 60px);
+    max-width: 85vw;
+    height: calc(100dvh - 53px - 49px);
     z-index: 100;
     background: var(--panel);
     border-left: 1px solid var(--border);
@@ -352,8 +353,10 @@ body {
     transition: transform 0.3s ease;
   }
   
+  /* !important beats the inline display:none set by handleResize() */
   #ai-sidebar.show {
     transform: translateX(0);
+    display: flex !important;
   }
 }
 
@@ -744,9 +747,11 @@ body {
 .health-row .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
 .dot.up { background: var(--ok); } .dot.down { background: var(--danger); }
 .health-row .metrics { color: var(--muted); font-variant-numeric: tabular-nums; }
-.home-alerts { display: flex; align-items: center; gap: 10px; margin: 12px 22px 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
+.home-alerts { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 12px 22px 0; padding: 10px 14px; border-radius: 10px; font-size: 13px; cursor: pointer; border: 1px solid transparent; }
 .home-alerts .ic { width: 18px; height: 18px; flex: none; }
 .home-alerts.alert-danger { background: rgba(248,114,114,.12); border-color: rgba(248,114,114,.5); color: #f87272; }
+.home-alerts.alert-warn { background: rgba(251,191,36,.12); border-color: rgba(251,191,36,.5); color: #fbbf24; }
+.home-alert-row { display: flex; align-items: center; gap: 10px; width: 100%; }
 .home-alerts.hidden { display: none; }
 .health-row.down { background: rgba(248,114,114,.08); }
 .health-row .h-name { display: flex; align-items: center; font-weight: 600; flex: none; }
@@ -866,4 +871,54 @@ body {
   .user-table td::before {
     content: attr(data-label); color: var(--muted); font-weight: 600; text-align: left;
   }
+}
+
+/* ---- Batch-2 features: security / deploy / secrets / dashboard builder ---- */
+.sec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .sec-grid { grid-template-columns: 1fr; } }
+.ai-result-box { margin-top: 10px; padding: 12px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; font-size: 13px; overflow-x: auto; }
+.ai-result-box .sev { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; margin-right: 6px; }
+.sev-low { background: #14532d; color: #86efac; }
+.sev-medium { background: #713f12; color: #fde047; }
+.sev-high { background: #7c2d12; color: #fdba74; }
+.sev-critical { background: #7f1d1d; color: #fca5a5; }
+.deploy-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.deploy-card { background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.deploy-card h3 { margin: 0 0 4px; font-size: 15px; }
+.deploy-card p { margin: 0 0 12px; font-size: 12px; color: var(--text-dim); }
+.secrets-list { display: flex; flex-direction: column; gap: 8px; }
+.secret-row { display: flex; align-items: center; gap: 10px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; flex-wrap: wrap; }
+.secret-row .sname { font-weight: 600; font-family: ui-monospace, monospace; }
+.secret-row .sdesc { color: var(--text-dim); font-size: 12px; flex: 1; min-width: 120px; }
+.dash-widget-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: var(--bg-2); cursor: grab; }
+.dash-widget-item label { flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.dash-widget-item .dw-arrows { display: flex; flex-direction: column; gap: 2px; }
+.dash-widget-item .dw-arrows button { background: none; border: 1px solid var(--border); border-radius: 4px; color: var(--text); cursor: pointer; padding: 0 6px; line-height: 1.2; }
+
+/* Batch-2 views: match Home body spacing (22px desktop / 14px mobile) */
+#view-security > *:not(.content-head),
+#view-deploy > *:not(.content-head),
+#view-secrets > *:not(.content-head) { margin-left: 22px; margin-right: 22px; }
+#view-security > :nth-child(2),
+#view-deploy > :nth-child(2),
+#view-secrets > :nth-child(2) { margin-top: 16px; }
+@media (max-width: 768px) {
+  #view-security > *:not(.content-head),
+  #view-deploy > *:not(.content-head),
+  #view-secrets > *:not(.content-head) { margin-left: 14px; margin-right: 14px; }
+}
+
+/* ---- AI chat: wide bubbles, no avatars, input docked at bottom ---- */
+#view-ai-assistant { height: 100%; display: flex; flex-direction: column; }
+.ai-message { gap: 0; margin-bottom: 8px; }
+.ai-bubble { max-width: 100%; padding: 10px 12px; }
+.ai-message.user .ai-bubble { width: fit-content; max-width: 92%; }
+.ai-bubble pre { white-space: pre-wrap; word-break: break-word; }
+/* Mobile: topbar 53px + bottom nav ~49px; the chat owns the rest so the
+   input bar sits flush on the nav instead of floating 15px above it. */
+@media (max-width: 768px) {
+  #view-ai-assistant { height: calc(100dvh - 53px - 49px); overflow: hidden; }
+  #view-ai-assistant > div { height: 100%; }
+  .layout:has(#view-ai-assistant:not(.hidden)) { padding-bottom: 49px; }
+  #ai-header-text { display: none; }
 }

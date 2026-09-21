@@ -85,6 +85,14 @@ def _migrate_columns() -> None:
             ("settings", "enroll_owner_id", "INTEGER"),
             ("agents", "pending", "BOOLEAN DEFAULT 0"),
             ("agents", "install_slug", "VARCHAR(64)"),
+            ("settings", "auto_scan_enabled", "BOOLEAN DEFAULT 0"),
+            ("settings", "auto_scan_interval_h", "INTEGER DEFAULT 6"),
+            ("settings", "auto_scan_notify_min", "VARCHAR(16) DEFAULT 'high'"),
+            ("settings", "notify_device_offline", "BOOLEAN DEFAULT 1"),
+            ("settings", "notify_command_anomaly", "BOOLEAN DEFAULT 1"),
+            ("settings", "notify_log_anomaly", "BOOLEAN DEFAULT 1"),
+            ("settings", "notify_config_review", "BOOLEAN DEFAULT 1"),
+            ("settings", "notify_task_failed", "BOOLEAN DEFAULT 1"),
         ]
         for table, col, ddl in expected:
             if table not in insp.get_table_names():

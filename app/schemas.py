@@ -217,6 +217,14 @@ class SettingsOut(BaseModel):
     agent_reconnect: int = 5
     enroll_secret: str | None = None
     enroll_owner_id: int | None = None
+    auto_scan_enabled: bool = False
+    auto_scan_interval_h: int = 6
+    auto_scan_notify_min: str = "high"
+    notify_device_offline: bool = True
+    notify_command_anomaly: bool = True
+    notify_log_anomaly: bool = True
+    notify_config_review: bool = True
+    notify_task_failed: bool = True
 
 
 class SettingsUpdate(BaseModel):
@@ -242,6 +250,14 @@ class SettingsUpdate(BaseModel):
     agent_heartbeat: int | None = None
     agent_reconnect: int | None = None
     enroll_secret_action: str | None = None  # "rotate" | "revoke" | None (leave as-is)
+    auto_scan_enabled: bool | None = None
+    auto_scan_interval_h: int | None = None
+    auto_scan_notify_min: str | None = None  # medium | high | critical
+    notify_device_offline: bool | None = None
+    notify_command_anomaly: bool | None = None
+    notify_log_anomaly: bool | None = None
+    notify_config_review: bool | None = None
+    notify_task_failed: bool | None = None
 
 
 # ------------------------------- Scheduled tasks ----------------------------

@@ -184,7 +184,7 @@ async function ensureAuth() {
 function switchTab(name) {
   try { localStorage.setItem("shelldeck_view", name); } catch (_) {}
   document.querySelectorAll(".side-nav-item").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  ["home", "devices", "files", "editor", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit", "ai-assistant"].forEach(v => {
+  ["home", "devices", "files", "editor", "bulk", "docker", "snippets", "scheduled", "sessions", "settings", "users", "agents", "terminal", "topology", "audit", "ai-assistant", "security", "deploy", "secrets"].forEach(v => {
     const el = document.getElementById("view-" + v);
     if (el) el.classList.toggle("hidden", v !== name);
   });
@@ -197,9 +197,16 @@ function switchTab(name) {
   if (name === "audit") loadAudit();
   if (name === "scheduled") loadScheduled();
   if (name === "sessions") loadSessions();
-  if (name === "settings") { loadSettings(); refreshTotpStatus(); }
+  if (name === "settings") {
+    loadSettings(); refreshTotpStatus();
+    // Only "General" (first accordion) open when entering Settings.
+    document.querySelectorAll("#view-settings .settings-acc").forEach((d, i) => d.open = i === 0);
+  }
   if (name === "topology") loadTopology();
   if (name === "home") loadHome();
+  if (name === "security") loadFindings();
+  if (name === "deploy") renderDeployTemplates();
+  if (name === "secrets") loadSecrets();
   if (name === "ai-assistant") loadAIAssistant();
   if (name === "terminal") {
     // The terminal view was just shown — re-fit every open pane so terminals
@@ -781,13 +788,16 @@ let filesCurrent = { deviceId: null, path: "/" };
 function currentFilesDevice() {
   return currentDevices.find(d => d.id === filesCurrent.deviceId) || null;
 }
-function filesApiBase() {
+function useAgentFs() {
   const dev = currentFilesDevice();
-  return (dev && dev.has_agent) ? `/api/agents/fs/${filesCurrent.deviceId}` : `/api/files/${filesCurrent.deviceId}`;
+  // Agent tunnel only when the agent is live; else fall back to direct SFTP.
+  return !!(dev && dev.has_agent && dev.agent_connected);
+}
+function filesApiBase() {
+  return useAgentFs() ? `/api/agents/fs/${filesCurrent.deviceId}` : `/api/files/${filesCurrent.deviceId}`;
 }
 async function fsOp(op, path, data) {
-  const dev = currentFilesDevice();
-  if (dev && dev.has_agent) {
+  if (useAgentFs()) {
     return await api(filesApiBase(), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op, path, data }) });
   }
   return null; // caller falls back to direct SFTP endpoint
@@ -819,7 +829,7 @@ async function listFiles(path) {
   try {
     const dev = currentFilesDevice();
     let entries;
-    if (dev && dev.has_agent) {
+    if (useAgentFs()) {
       entries = await fsOp("list", path);
     } else {
       entries = await api(`/api/files/${filesCurrent.deviceId}/browse?path=${encodeURIComponent(path)}`);
@@ -856,7 +866,7 @@ function renderFileRows(entries) {
     const df = r.querySelector("[data-down-file]"); if (df) df.onclick = async () => {
       try {
         const dev = currentFilesDevice();
-        if (dev && dev.has_agent) {
+        if (useAgentFs()) {
           const r2 = await fsOp("read_b64", df.dataset.downFile);
           const bin = atob(r2.content);
           const bytes = new Uint8Array(bin.length);
@@ -883,7 +893,7 @@ function renderFileRows(entries) {
     const dl = r.querySelector("[data-del-file]"); if (dl) dl.onclick = async () => {
       if (!await showConfirm("Delete " + dl.dataset.delFile + "?", "Delete file")) return;
       const dev = currentFilesDevice();
-      if (dev && dev.has_agent) await fsOp("delete", dl.dataset.delFile);
+      if (useAgentFs()) await fsOp("delete", dl.dataset.delFile);
       else await api(`/api/files/${filesCurrent.deviceId}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: dl.dataset.delFile }) });
       listFiles(filesCurrent.path);
     };
@@ -899,7 +909,7 @@ document.getElementById("files-mkdir").onclick = async () => {
   if (!name) return;
   const path = (filesCurrent.path.replace(/\/$/, "") + "/" + name);
   const dev = currentFilesDevice();
-  if (dev && dev.has_agent) await fsOp("mkdir", path);
+  if (useAgentFs()) await fsOp("mkdir", path);
   else await api(`/api/files/${filesCurrent.deviceId}/mkdir`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
   listFiles(filesCurrent.path);
 };
@@ -914,7 +924,7 @@ async function uploadFiles(files) {
   const label = document.getElementById("up-label");
   for (const f of files) {
     try {
-      if (dev && dev.has_agent) {
+      if (useAgentFs()) {
         const buf = await f.arrayBuffer();
         const b64 = btoa(String.fromCharCode(...new Uint8Array(buf)));
         label.textContent = `Uploading ${f.name} (agent)…`;
@@ -1119,7 +1129,7 @@ async function handleMonacoSave() {
     if (!target) target = (filesCurrent.path.replace(/\/$/, "") + "/" + await showPrompt("New file name:", "", "New file"));
     if (!target) return;
     tab.path = target;
-    if (dev && dev.has_agent) await fsOp("write", target, tab.content);
+    if (useAgentFs()) await fsOp("write", target, tab.content);
     else await api(`/api/files/${filesCurrent.deviceId}/write`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: target, content: tab.content }) });
     tab.modified = false; tab.saving = false; tab.error = null;
     listFiles(filesCurrent.path);
@@ -1194,7 +1204,7 @@ async function openFileForEdit(path, isNew) {
   let content = "";
   try {
     const dev = currentFilesDevice();
-    content = dev && dev.has_agent
+    content = useAgentFs()
       ? (await fsOp("read", newPath))?.content || ""
       : (await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: newPath }) })).content;
   } catch (e) {
@@ -1274,7 +1284,7 @@ async function handleReloadFromServer() {
   const tab = editorOpenTabs[activeTabIndex];
   try {
     const dev = currentFilesDevice();
-    const content = dev && dev.has_agent
+    const content = useAgentFs()
       ? (await fsOp("read", tab.path))?.content || ""
       : (await api(`/api/files/${filesCurrent.deviceId}/read`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: tab.path }) })).content;
     tab.content = content;
@@ -1293,7 +1303,7 @@ function downloadCurrentFile() {
   if (activeTabIndex < 0) return;
   const tab = editorOpenTabs[activeTabIndex];
   const dev = currentFilesDevice();
-  if (dev && dev.has_agent) {
+  if (useAgentFs()) {
     showToast("Download via agent not implemented yet", "warning");
     return;
   }
@@ -2018,7 +2028,10 @@ function createPane(tabEl, deviceId, initialCommand) {
 
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const dev = (currentDevices || []).find(d => d.id === deviceId);
-  const wsPath = (dev && dev.has_agent) ? `/api/agents/terminal/${deviceId}` : `/api/terminal/${deviceId}`;
+  // Route through the agent tunnel ONLY when the agent is actually live; a linked-but-offline
+  // agent would otherwise instant-close the WS ("[session closed]"). Fall back to direct SSH.
+  const useAgent = dev && dev.has_agent && dev.agent_connected;
+  const wsPath = useAgent ? `/api/agents/terminal/${deviceId}` : `/api/terminal/${deviceId}`;
   const ws = new WebSocket(`${proto}://${location.host}${wsPath}?token=${token}`);
   ws.onmessage = (e) => term.write(e.data);
   ws.onclose = () => term.write("\r\n\x1b[31m[session closed]\x1b[0m\r\n");
@@ -2356,18 +2369,11 @@ aiSend?.addEventListener("click", async () => {
   aiResult.classList.add("hidden");
   
   try {
-    const response = await fetch("/api/ai/command/generate", {
+    const data = await api("/api/ai/command/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ description: prompt, safety_check: true })
     });
     
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.detail || "AI service error");
-    }
-    
-    const data = await response.json();
     aiCmdText.textContent = data.command;
     aiExplain.textContent = data.explanation || "";
     
@@ -2396,17 +2402,9 @@ aiRun?.addEventListener("click", () => {
   const cmd = aiCmdText.textContent;
   if (!cmd) return;
   
-  // Send to active terminal
-  const activeTerminal = document.querySelector(".xterm.active");
-  if (activeTerminal) {
-    const term = activeTerminal._terminal;
-    if (term) {
-      term.paste(cmd + "\n");
-      showToast("Command sent to terminal", "ok");
-    }
-  } else {
-    showToast("No active terminal", "error");
-  }
+  // Send to all open terminals using existing broadcast function
+  const n = broadcastTerminals(cmd);
+  showToast(n ? `Command sent to ${n} terminal(s)` : "No open terminals", n ? "ok" : "error");
 });
 
 // ----------------------------- Scheduled tasks -----------------------------
@@ -2436,14 +2434,10 @@ document.getElementById("sched-ai-gen")?.addEventListener("click", async () => {
   btn.disabled = true;
   
   try {
-    const res = await fetch("/api/ai/command/generate", {
+    const data = await api("/api/ai/command/generate", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, safety_check: true })
     });
-    
-    if (!res.ok) throw new Error("AI service error");
-    const data = await res.json();
     
     if (data.command) {
       document.getElementById("sched-command").value = data.command;
@@ -2562,6 +2556,14 @@ async function loadSettings() {
     set("set-email-user", s.email_user);
     set("set-interval", s.monitor_interval);
     setCheck("set-public", s.public_dashboard);
+    setCheck("set-nf-offline", s.notify_device_offline);
+    setCheck("set-nf-command", s.notify_command_anomaly);
+    setCheck("set-nf-log", s.notify_log_anomaly);
+    setCheck("set-nf-config", s.notify_config_review);
+    setCheck("set-nf-task", s.notify_task_failed);
+    setCheck("set-autoscan", s.auto_scan_enabled);
+    set("set-autoscan-interval", s.auto_scan_interval_h ?? 6);
+    set("set-autoscan-min", s.auto_scan_notify_min || "high");
     setCheck("set-oidc", s.oidc_enabled);
     set("set-retention", s.session_retention_days ?? 90);
     set("set-agent-hb", s.agent_heartbeat ?? 15);
@@ -2649,6 +2651,14 @@ document.getElementById("set-save").onclick = async () => {
   email_user: document.getElementById("set-email-user").value.trim(),
   monitor_interval: parseInt(document.getElementById("set-interval").value, 10) || 60,
   public_dashboard: document.getElementById("set-public").checked,
+  notify_device_offline: document.getElementById("set-nf-offline").checked,
+  notify_command_anomaly: document.getElementById("set-nf-command").checked,
+  notify_log_anomaly: document.getElementById("set-nf-log").checked,
+  notify_config_review: document.getElementById("set-nf-config").checked,
+  notify_task_failed: document.getElementById("set-nf-task").checked,
+  auto_scan_enabled: document.getElementById("set-autoscan").checked,
+  auto_scan_interval_h: parseInt(document.getElementById("set-autoscan-interval").value, 10) || 6,
+  auto_scan_notify_min: document.getElementById("set-autoscan-min").value || "high",
   oidc_enabled: document.getElementById("set-oidc").checked,
   timezone: document.getElementById("set-timezone").value || "Asia/Jakarta",
   theme: document.getElementById("set-theme").value || "dark",
@@ -3049,13 +3059,33 @@ async function loadHome() {
     document.getElementById("home-sub").textContent =
       `2FA: ${d.security.twofa_users} user(s) · OIDC: ${d.security.oidc_enabled ? "on" : "off"} · Public: ${d.security.public_dashboard ? "on" : "off"}`;
 
-    // A2: active alerts strip (offline devices)
+    // A2: active alerts strip (offline devices + security findings)
     const alertBox = document.getElementById("home-alerts");
     const offline = s.devices_total - s.online;
+    const findings = d.security.findings || [];
+    const parts = [];
     if (offline > 0) {
-      alertBox.className = "home-alerts alert-danger";
-      alertBox.innerHTML = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span><b>${offline} device${offline > 1 ? "s" : ""} offline</b> — click to view</span>`;
-      alertBox.onclick = () => switchTab("devices");
+      parts.push({
+        cls: "alert-danger",
+        html: `<b>${offline} device${offline > 1 ? "s" : ""} offline</b> — click to view`,
+        go: "devices",
+      });
+    }
+    if (findings.length) {
+      const crit = findings.filter(f => f.severity === "critical").length;
+      parts.push({
+        cls: crit ? "alert-danger" : "alert-warn",
+        html: `<b>⚠️ ${findings.length} security finding${findings.length > 1 ? "s" : ""} (24h)</b> — ${findings[0].kind}: ${escapeHtml((findings[0].summary || "").slice(0, 80))}${findings[0].summary?.length > 80 ? "…" : ""}`,
+        go: "security",
+      });
+    }
+    if (parts.length) {
+      alertBox.className = "home-alerts " + parts[0].cls;
+      alertBox.innerHTML = parts.map((p, i) =>
+        `<div class="home-alert-row" data-go="${p.go}" style="${i ? "margin-top:6px" : ""}">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>${p.html}</span></div>`).join("");
+      alertBox.querySelectorAll("[data-go]").forEach(row => row.onclick = () => switchTab(row.dataset.go));
     } else {
       alertBox.className = "home-alerts hidden";
       alertBox.innerHTML = "";
@@ -3126,6 +3156,9 @@ document.getElementById("files-device").onchange = loadFiles;
   if (currentUser && ["admin", "operator"].includes(currentUser.role)) {
     const sa = document.getElementById("side-agents");
     if (sa) sa.style.display = "";
+  } else {
+    // Viewer: hide write-only features (deploy, secrets).
+    document.querySelectorAll('[data-tab="deploy"], [data-tab="secrets"]').forEach(b => b.style.display = "none");
   }
   // Register service worker for PWA installability.
   if ("serviceWorker" in navigator) {
@@ -3181,7 +3214,7 @@ async function loadAIAssistant() {
     const settings = await api("/api/ai/settings");
     
     container.innerHTML = `
-      <div style="padding:16px;max-width:1200px;margin:0 auto;">
+      <div style="padding:8px;max-width:1200px;margin:0 auto;height:100%;box-sizing:border-box;display:flex;flex-direction:column;">
         ${!settings.is_configured || !settings.enabled ? `
           <div class="card" style="text-align:center;padding:40px;">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:64px;height:64px;color:var(--muted);margin-bottom:16px;">
@@ -3195,15 +3228,15 @@ async function loadAIAssistant() {
             </button>
           </div>
         ` : `
-          <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;flex-direction:column;gap:10px;flex:1;min-height:0;">
             <!-- Header -->
-            <div class="card" style="padding:16px;">
+            <div class="card" style="padding:12px;flex:none;">
               <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
-                <div>
+                <div id="ai-header-text">
                   <h2 style="margin:0;font-size:18px;">AI Chat Assistant</h2>
                   <p class="muted" style="margin:4px 0 0;font-size:13px;">Get help with Linux commands, diagnostics, and server management</p>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto;">
                   <select id="ai-device-context" class="input" style="width:180px;max-width:100%;" title="Optional: include device context">
                     <option value="">No device context</option>
                     ${currentDevices.map(d => `<option value="${d.id}" ${d.id === aiCurrentDeviceId ? 'selected' : ''}>${escapeHtml(d.name)}</option>`).join('')}
@@ -3224,11 +3257,11 @@ async function loadAIAssistant() {
             </div>
             
             <!-- Main Content Area -->
-            <div id="ai-main-grid" style="display:grid;grid-template-columns:1fr;gap:16px;">
+            <div id="ai-main-grid" style="display:grid;grid-template-columns:1fr;gap:12px;flex:1;min-height:0;">
               <!-- Chat Area -->
-              <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:500px;">
-                <div id="ai-chat-messages" role="log" aria-live="polite" aria-label="Chat messages" style="flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;">
-                  <div class="muted" style="text-align:center;padding:40px 20px;margin:auto;">
+              <div class="card" style="padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+                <div id="ai-chat-messages" role="log" aria-live="polite" aria-label="Chat messages" style="flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:240px;">
+                  <div class="muted" style="text-align:center;padding:40px 20px;margin-top:40px;width:100%;">
                     <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;color:var(--muted);margin-bottom:12px;">
                       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                     </svg>
@@ -3236,7 +3269,7 @@ async function loadAIAssistant() {
                     <p style="font-size:12px;margin-top:8px;">Ask about commands, troubleshoot errors, or get help with server management</p>
                   </div>
                 </div>
-                <div style="padding:16px;border-top:1px solid var(--border);">
+                <div style="padding:10px;border-top:1px solid var(--border);flex:none;background:var(--panel);">
                   <form id="ai-chat-form" style="display:flex;gap:8px;">
                     <input id="ai-chat-input" class="input" placeholder="Describe what you want to do..." style="flex:1;min-width:0;" autocomplete="off" />
                     <button type="submit" class="btn btn-primary" id="ai-send-btn" disabled style="white-space:nowrap;">
@@ -3375,6 +3408,11 @@ async function loadAIAssistant() {
       sendBtn.disabled = true;
       input.value = "";
 
+      // Read device_id directly from dropdown to ensure it's in sync
+      const deviceSelect = document.getElementById("ai-device-context");
+      const deviceId = deviceSelect.value ? parseInt(deviceSelect.value) : null;
+      aiCurrentDeviceId = deviceId; // Keep variable in sync
+
       // Add user message to chat
       addAIMessage(message, "user");
 
@@ -3384,7 +3422,7 @@ async function loadAIAssistant() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: message,
-            device_id: aiCurrentDeviceId,
+            device_id: deviceId,
           }),
         });
 
@@ -3497,6 +3535,11 @@ function addAIMessage(content, role, isHtml = false) {
     const explanationHtml = configAction.explanation
       ? `<div class="ai-device-explanation">${escapeHtml(configAction.explanation)}</div>`
       : '';
+    
+    // Read current device from dropdown (most reliable source)
+    const deviceSelect = document.getElementById("ai-device-context");
+    const targetDeviceId = (deviceSelect && deviceSelect.value) ? parseInt(deviceSelect.value) : configAction.device_id;
+    
     configHtml = `
       <div class="ai-device-action">
         <div class="ai-device-action-header">
@@ -3506,13 +3549,13 @@ function addAIMessage(content, role, isHtml = false) {
           <span>Device Configuration</span>
         </div>
         <div class="ai-device-action-body">
-          <div><strong>Device ID:</strong> ${configAction.device_id}</div>
+          <div><strong>Device ID:</strong> ${targetDeviceId}</div>
           <div><strong>Changes:</strong></div>
           <ul class="ai-device-changes">${changesList}</ul>
           ${explanationHtml}
         </div>
         <div class="ai-device-action-footer">
-          <button class="btn btn-primary btn-sm" onclick='applyDeviceConfig(${configAction.device_id}, ${JSON.stringify(JSON.stringify(configAction.changes))})'>
+          <button class="btn btn-primary btn-sm" onclick="applyDeviceConfigFromBtn(this)" data-device="${targetDeviceId}" data-changes="${escapeHtml(JSON.stringify(configAction.changes))}">
             <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
@@ -3530,8 +3573,12 @@ function addAIMessage(content, role, isHtml = false) {
       ? `<div class="ai-device-explanation">${escapeHtml(execAction.explanation)}</div>`
       : '';
     
+    // Read current device from dropdown (most reliable source)
+    const deviceSelect = document.getElementById("ai-device-context");
+    const targetDeviceId = (deviceSelect && deviceSelect.value) ? parseInt(deviceSelect.value) : execAction.device_id;
+    
     // Check if already executed (persist across refresh)
-    const execKey = `exec_${execAction.device_id}_${btoa(execAction.command).substring(0, 20)}`;
+    const execKey = `exec_${targetDeviceId}_${btoa(execAction.command).substring(0, 20)}`;
     const isExecuted = localStorage.getItem(execKey) === '1';
     
     execHtml = `
@@ -3543,12 +3590,12 @@ function addAIMessage(content, role, isHtml = false) {
           <span>Execute Command</span>
         </div>
         <div class="ai-device-action-body">
-          <div><strong>Device ID:</strong> ${execAction.device_id}</div>
+          <div><strong>Device ID:</strong> ${targetDeviceId}</div>
           <div><strong>Command:</strong> <code>${escapeHtml(execAction.command)}</code></div>
           ${explanationHtml}
         </div>
         <div class="ai-device-action-footer">
-          <button id="exec-btn-${Date.now()}" class="btn ${isExecuted ? 'btn-ghost' : 'btn-primary'} btn-sm" ${isExecuted ? 'disabled' : ''} onclick='executeAICommand(${execAction.device_id}, ${JSON.stringify(JSON.stringify(execAction.command))}, this)'>
+          <button id="exec-btn-${Date.now()}" class="btn ${isExecuted ? 'btn-ghost' : 'btn-primary'} btn-sm" ${isExecuted ? 'disabled' : ''} onclick="executeAICommandFromBtn(this)" data-device="${targetDeviceId}" data-command="${escapeHtml(execAction.command)}">
             ${isExecuted ? '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polyline points="20 6 9 17 4 12"/></svg> Executed' : '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg> Run Command'}
           </button>
         </div>
@@ -3564,23 +3611,10 @@ function addAIMessage(content, role, isHtml = false) {
   }
 
   const msgDiv = document.createElement("div");
-  msgDiv.style.cssText = `display:flex;gap:12px;${role === "user" ? "flex-direction:row-reverse;" : ""}`;
-  
+  msgDiv.className = "ai-message " + role;
+
   msgDiv.innerHTML = `
-    <div style="width:32px;height:32px;border-radius:50%;background:${role === "user" ? "var(--primary)" : "var(--surface)"};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-      ${role === "user" ? `
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" style="width:18px;height:18px;">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-          <circle cx="12" cy="7" r="4"/>
-        </svg>
-      ` : `
-        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="width:18px;height:18px;">
-          <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z"/>
-          <circle cx="12" cy="12" r="3"/>
-        </svg>
-      `}
-    </div>
-    <div style="max-width:70%;padding:12px 16px;border-radius:12px;background:${role === "user" ? "var(--primary);color:white;" : "var(--surface);"};line-height:1.5;word-break:break-word;">
+    <div class="ai-bubble">
       ${displayContent ? (isHtml ? displayContent : (role === "assistant" ? renderMarkdown(displayContent) : escapeHtml(displayContent))) : ''}
       ${configHtml}
       ${execHtml}
@@ -3591,8 +3625,13 @@ function addAIMessage(content, role, isHtml = false) {
   messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-async function applyDeviceConfig(deviceId, changesJson) {
-  const changes = JSON.parse(changesJson);
+async function applyDeviceConfigFromBtn(btn) {
+  const deviceId = parseInt(btn.dataset.device);
+  const changes = JSON.parse(btn.dataset.changes);
+  await applyDeviceConfig(deviceId, changes);
+}
+
+async function applyDeviceConfig(deviceId, changes) {
   if (!await showConfirm(`Apply configuration changes to device ${deviceId}?\n\n${Object.entries(changes).map(([k,v])=>`${k}: ${v}`).join('\n')}`, "Confirm Device Configuration")) return;
   try {
     await api(`/api/devices/${deviceId}`, {
@@ -3605,6 +3644,12 @@ async function applyDeviceConfig(deviceId, changesJson) {
   } catch (err) {
     showToast("Failed to update device: " + err.message, "error");
   }
+}
+
+async function executeAICommandFromBtn(btn) {
+  const deviceId = parseInt(btn.dataset.device);
+  const command = btn.dataset.command;
+  await executeAICommand(deviceId, JSON.stringify(command), btn);
 }
 
 async function executeAICommand(deviceId, commandJson, btn) {
@@ -3725,8 +3770,9 @@ async function loadAIChatHistory() {
       addAIMessage(msg.content, msg.role, isHtml);
     });
 
-    // Scroll to bottom
+    // Scroll to bottom (twice: after layout settles, in case container had no height yet)
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    requestAnimationFrame(() => { messagesContainer.scrollTop = messagesContainer.scrollHeight; });
   } catch (err) {
     console.error("Failed to load chat history:", err);
   }
@@ -3777,3 +3823,293 @@ initEditorMoreMenu();
     });
   }
 })();
+
+// ===================== Batch-2: Security / Deploy / Secrets / Dashboard =====
+function renderAiFindings(box, data, kind) {
+  box.classList.remove("hidden");
+  if (kind === "logs") {
+    const anoms = (data.anomalies || []);
+    box.innerHTML = `<div><span class="sev sev-${data.severity || "low"}">${escapeHtml((data.severity || "low").toUpperCase())}</span> ${escapeHtml(data.summary || "No summary")}</div>`
+      + (anoms.length ? `<ul style="margin:8px 0 8px 18px">${anoms.map(a => `<li><span class="sev sev-${a.severity || "low"}">${escapeHtml((a.severity || "low").toUpperCase())}</span> <b>${escapeHtml(a.type || "")}</b>: ${escapeHtml(a.description || "")}</li>`).join("")}</ul>` : "<p class='muted'>No anomalies detected.</p>")
+      + ((data.recommendations || []).length ? `<div><b>Recommendations:</b><ul style="margin:4px 0 0 18px">${data.recommendations.map(r => `<li>${escapeHtml(r)}</li>`).join("")}</ul></div>` : "");
+  } else if (kind === "config") {
+    const f = data.findings || [];
+    box.innerHTML = `<div><span class="sev sev-${data.risk || "low"}">RISK: ${escapeHtml((data.risk || "low").toUpperCase())}</span> ${escapeHtml(data.summary || "")}</div>`
+      + (f.length ? `<ul style="margin:8px 0 0 18px">${f.map(x => `<li><span class="sev sev-${x.severity || "low"}">${escapeHtml((x.severity || "low").toUpperCase())}</span> ${escapeHtml(x.issue || "")}${x.fix ? ` — <i>fix:</i> ${escapeHtml(x.fix)}` : ""}</li>`).join("")}</ul>` : "<p class='muted'>No issues found.</p>");
+  } else if (kind === "commands") {
+    const fl = data.flagged || [];
+    box.innerHTML = (fl.length ? `<div>${fl.length} suspicious command(s) flagged:</div><ul style="margin:8px 0 0 18px">${fl.map(x => `<li><span class="sev sev-${x.risk || "low"}">${escapeHtml((x.risk || "low").toUpperCase())}</span> <code>${escapeHtml(x.command || "")}</code> — ${escapeHtml(x.reason || "")}</li>`).join("")}</ul>` : "<div>No suspicious commands detected. ✅</div>")
+      + (data.summary ? `<div class="muted" style="margin-top:6px">${escapeHtml(data.summary)}</div>` : "");
+  }
+}
+
+async function aiPost(path, body, box, btn, kind, busyLabel) {
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = busyLabel;
+  box.classList.remove("hidden"); box.innerHTML = "<span class='muted'>Analyzing with AI…</span>";
+  try {
+    const data = await api(path, { method: "POST", body: JSON.stringify(body) });
+    renderAiFindings(box, data, kind);
+    if (typeof loadFindings === "function") loadFindings();
+  } catch (e) {
+    box.innerHTML = `<span style="color:#f87171">Error: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+// #2 Log anomaly
+document.getElementById("sec-log-analyze").onclick = function () {
+  const text = document.getElementById("sec-log-text").value.trim();
+  if (!text) { showToast("Paste some log text first", "error"); return; }
+  aiPost("/api/logs/analyze", { log_text: text, context: document.getElementById("sec-log-context").value.trim() || null },
+    document.getElementById("sec-log-result"), this, "logs", "Analyzing…");
+};
+
+// #3 Config reviewer
+document.getElementById("sec-cfg-review").onclick = function () {
+  const content = document.getElementById("sec-cfg-text").value.trim();
+  if (!content) { showToast("Paste config content first", "error"); return; }
+  aiPost("/api/logs/config-review", { filename: document.getElementById("sec-cfg-name").value.trim() || "config", content },
+    document.getElementById("sec-cfg-result"), this, "config", "Reviewing…");
+};
+
+// #9 Command anomaly scan from audit/session commands
+document.getElementById("audit-anomaly-btn").onclick = async function () {
+  const box = document.getElementById("audit-anomaly-result");
+  try {
+    const rows = await api("/api/devices/sessions");
+    const cmds = [...new Set(rows.flatMap(r => (r.commands || "").split("\n").filter(Boolean)))].slice(0, 500);
+    if (!cmds.length) { showToast("No recorded commands to scan", "error"); return; }
+    await aiPost("/api/logs/command-anomaly", { commands: cmds.join("\n") }, box, this, "commands", "Scanning…");
+  } catch (e) {
+    box.classList.remove("hidden");
+    box.innerHTML = `<span style="color:#f87171">Error: ${escapeHtml(e.message)}</span>`;
+  }
+};
+
+// #5 Deploy templates
+let deployTemplates = [];
+async function renderDeployTemplates() {
+  const grid = document.getElementById("deploy-templates");
+  const sel = document.getElementById("deploy-device");
+  // Populate device dropdown
+  try {
+    const devs = currentDevices?.length ? currentDevices : await api("/api/devices");
+    sel.innerHTML = devs.map(d => `<option value="${d.id}">${escapeHtml(d.name)}</option>`).join("") || '<option value="">(no devices)</option>';
+  } catch (_) {}
+  grid.innerHTML = "<p class='muted'>Loading templates…</p>";
+  try {
+    if (!deployTemplates.length) deployTemplates = await api("/api/deploy/builtin");
+    const custom = await api("/api/deploy").catch(() => []);
+    const all = [...deployTemplates.map(t => ({ ...t, builtin: true })), ...custom.map(t => ({ ...t, builtin: false }))];
+    grid.innerHTML = all.map((t, i) => `
+      <div class="deploy-card">
+        <h3>${escapeHtml(t.name)} ${t.builtin ? "" : '<span class="muted" style="font-size:11px">(custom)</span>'}</h3>
+        <p>${escapeHtml(t.description || "")}</p>
+        <button type="button" class="btn btn-primary" data-deploy="${i}">Deploy</button>
+        ${t.builtin ? "" : `<button type="button" class="btn btn-ghost" data-deltpl="${t.id}">Delete</button>`}
+      </div>`).join("");
+    grid._all = all;
+    grid.querySelectorAll("[data-deploy]").forEach(b => b.onclick = () => deployTemplate(all[+b.dataset.deploy], b));
+    grid.querySelectorAll("[data-deltpl]").forEach(b => b.onclick = async () => {
+      if (!await showConfirm("Delete this template?", "Delete")) return;
+      await api("/api/deploy/" + b.dataset.deltpl, { method: "DELETE" });
+      showToast("Template deleted", "ok"); renderDeployTemplates();
+    });
+  } catch (e) {
+    grid.innerHTML = `<p style="color:#f87171">Failed: ${escapeHtml(e.message)}</p>`;
+  }
+}
+
+async function deployTemplate(tpl, btn) {
+  const devId = +document.getElementById("deploy-device").value;
+  if (!devId) { showToast("Select a target device first", "error"); return; }
+  const cfg = JSON.parse(tpl.config_json);
+  const script = (cfg.commands || []).join(" && ");
+  if (!await showConfirm(`Deploy "${tpl.name}" to selected device?\n\nThis runs:\n${script.slice(0, 300)}${script.length > 300 ? "…" : ""}`, "Confirm deploy")) return;
+  const box = document.getElementById("deploy-result");
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = "Deploying…";
+  box.classList.remove("hidden"); box.innerHTML = "<span class='muted'>Running deployment…</span>";
+  try {
+    const results = await api("/api/bulk/run", { method: "POST", body: JSON.stringify({ device_ids: [devId], command: script }) });
+    const r = results[0] || {};
+    box.innerHTML = r.reachable && !r.error
+      ? `<div>✅ Deploy finished on ${escapeHtml(r.name || "device")}</div><pre style="margin-top:8px;white-space:pre-wrap">${escapeHtml(r.output || "(no output)")}</pre>`
+      : `<div style="color:#f87171">❌ Failed: ${escapeHtml(r.error || "device unreachable")}</div>${r.output ? `<pre style="margin-top:8px;white-space:pre-wrap">${escapeHtml(r.output)}</pre>` : ""}`;
+    showToast("Deploy finished", "ok");
+  } catch (e) {
+    box.innerHTML = `<span style="color:#f87171">Error: ${escapeHtml(e.message)}</span>`;
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+// #10 Secrets manager
+async function loadSecrets() {
+  const box = document.getElementById("secrets-list");
+  box.innerHTML = "<p class='muted'>Loading…</p>";
+  try {
+    const rows = await api("/api/secrets/");
+    if (!rows.length) { box.innerHTML = "<p class='muted'>No secrets yet. Click “New Secret” to add one.</p>"; return; }
+    box.innerHTML = rows.map(s => `
+      <div class="secret-row">
+        <span class="sname">${escapeHtml(s.name)}</span>
+        <span class="sdesc">${escapeHtml(s.description || "")}</span>
+        <span class="muted" style="font-size:11px">updated ${s.updated_at ? fmtTime(s.updated_at) : fmtTime(s.created_at)}</span>
+        <button type="button" class="btn btn-ghost" data-reveal="${s.id}">Reveal</button>
+        <button type="button" class="btn btn-ghost" data-copy="${s.id}">Copy</button>
+        <button type="button" class="btn btn-ghost" data-edit="${s.id}" data-name="${escapeHtml(s.name)}" data-desc="${escapeHtml(s.description || "")}">Edit</button>
+        <button type="button" class="btn btn-ghost" data-del="${s.id}">Delete</button>
+      </div>`).join("");
+    box.querySelectorAll("[data-reveal]").forEach(b => b.onclick = async () => {
+      const d = await api(`/api/secrets/${b.dataset.reveal}/value`);
+      b.textContent = d.value; b.style.fontFamily = "monospace";
+      setTimeout(() => { b.textContent = "Reveal"; b.style.fontFamily = ""; }, 8000);
+    });
+    box.querySelectorAll("[data-copy]").forEach(b => b.onclick = async () => {
+      const d = await api(`/api/secrets/${b.dataset.copy}/value`);
+      navigator.clipboard.writeText(d.value); showToast("Copied to clipboard", "ok");
+    });
+    box.querySelectorAll("[data-edit]").forEach(b => b.onclick = () => {
+      document.getElementById("secret-modal-title").textContent = "Edit secret";
+      document.getElementById("secret-edit-id").value = b.dataset.edit;
+      document.getElementById("secret-name").value = b.dataset.name;
+      document.getElementById("secret-name").disabled = true;
+      document.getElementById("secret-desc").value = b.dataset.desc;
+      document.getElementById("secret-value").value = "";
+      document.getElementById("secret-modal").classList.remove("hidden");
+    });
+    box.querySelectorAll("[data-del]").forEach(b => b.onclick = async () => {
+      if (!await showConfirm("Delete this secret permanently?", "Delete")) return;
+      await api("/api/secrets/" + b.dataset.del, { method: "DELETE" });
+      showToast("Secret deleted", "ok"); loadSecrets();
+    });
+  } catch (e) {
+    box.innerHTML = `<p style="color:#f87171">${escapeHtml(e.message)}</p>`;
+  }
+}
+
+document.getElementById("secret-add").onclick = () => {
+  document.getElementById("secret-modal-title").textContent = "New secret";
+  document.getElementById("secret-edit-id").value = "";
+  document.getElementById("secret-name").value = "";
+  document.getElementById("secret-name").disabled = false;
+  document.getElementById("secret-desc").value = "";
+  document.getElementById("secret-value").value = "";
+  document.getElementById("secret-modal").classList.remove("hidden");
+};
+document.getElementById("secret-cancel").onclick = () => document.getElementById("secret-modal").classList.add("hidden");
+document.getElementById("secret-save").onclick = async () => {
+  const id = document.getElementById("secret-edit-id").value;
+  const name = document.getElementById("secret-name").value.trim();
+  const value = document.getElementById("secret-value").value;
+  const desc = document.getElementById("secret-desc").value.trim();
+  if (id) {
+    if (!value) { showToast("Enter a new value (or cancel)", "error"); return; }
+    await api("/api/secrets/" + id, { method: "PUT", body: JSON.stringify({ value, description: desc }) });
+  } else {
+    if (!name || !value) { showToast("Name and value required", "error"); return; }
+    await api("/api/secrets/", { method: "POST", body: JSON.stringify({ name, value, description: desc }) });
+  }
+  document.getElementById("secret-modal").classList.add("hidden");
+  showToast("Secret saved", "ok"); loadSecrets();
+};
+
+// #6 Dashboard builder (localStorage widget order/visibility)
+const DASH_WIDGETS = [
+  { id: "stats", label: "Stat cards" },
+  { id: "alerts", label: "Alerts strip" },
+  { id: "quick", label: "Quick actions" },
+  { id: "health", label: "Device health" },
+  { id: "activity", label: "Recent activity" },
+  { id: "scheduled", label: "Scheduled tasks" },
+  { id: "docker", label: "Docker overview" },
+];
+function loadDashConfig() {
+  try { return JSON.parse(localStorage.getItem("shelldeck_dashboard")) || null; } catch (_) { return null; }
+}
+function applyDashConfig() {
+  const cfg = loadDashConfig();
+  if (!cfg) return;
+  // visibility
+  DASH_WIDGETS.forEach(w => {
+    const el = document.querySelector(`[data-widget="${w.id}"]`);
+    if (el) el.style.display = cfg.hidden?.includes(w.id) ? "none" : "";
+  });
+  // order: reorder .home-grid children
+  if (cfg.order?.length) {
+    const grid = document.querySelector(".home-grid");
+    if (grid) cfg.order.forEach(id => {
+      const el = grid.querySelector(`[data-widget="${id}"]`);
+      if (el) grid.appendChild(el);
+    });
+  }
+}
+let dashDraft = [];
+function renderDashList() {
+  const box = document.getElementById("dash-widget-list");
+  box.innerHTML = dashDraft.map((w, i) => `
+    <div class="dash-widget-item">
+      <label><input type="checkbox" data-dw="${w.id}" ${w.visible ? "checked" : ""} /> ${escapeHtml(w.label)}</label>
+      <span class="dw-arrows">
+        <button type="button" data-up="${i}" ${i === 0 ? "disabled" : ""}>▲</button>
+        <button type="button" data-down="${i}" ${i === dashDraft.length - 1 ? "disabled" : ""}>▼</button>
+      </span>
+    </div>`).join("");
+  box.querySelectorAll("[data-dw]").forEach(c => c.onchange = () => { dashDraft.find(w => w.id === c.dataset.dw).visible = c.checked; });
+  box.querySelectorAll("[data-up]").forEach(b => b.onclick = () => { const i = +b.dataset.up; [dashDraft[i - 1], dashDraft[i]] = [dashDraft[i], dashDraft[i - 1]]; renderDashList(); });
+  box.querySelectorAll("[data-down]").forEach(b => b.onclick = () => { const i = +b.dataset.down; [dashDraft[i + 1], dashDraft[i]] = [dashDraft[i], dashDraft[i + 1]]; renderDashList(); });
+}
+document.getElementById("home-customize").onclick = () => {
+  const cfg = loadDashConfig();
+  dashDraft = DASH_WIDGETS.map(w => ({ ...w, visible: true }));
+  if (cfg) {
+    dashDraft.forEach(w => w.visible = !cfg.hidden?.includes(w.id));
+    if (cfg.order?.length) dashDraft.sort((a, b) => { const ia = cfg.order.indexOf(a.id), ib = cfg.order.indexOf(b.id); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+  }
+  renderDashList();
+  document.getElementById("dash-modal").classList.remove("hidden");
+};
+document.getElementById("dash-cancel").onclick = () => document.getElementById("dash-modal").classList.add("hidden");
+document.getElementById("dash-reset").onclick = () => {
+  localStorage.removeItem("shelldeck_dashboard");
+  document.getElementById("dash-modal").classList.add("hidden");
+  location.reload();
+};
+document.getElementById("dash-save").onclick = () => {
+  const cfg = { hidden: dashDraft.filter(w => !w.visible).map(w => w.id), order: dashDraft.map(w => w.id) };
+  try { localStorage.setItem("shelldeck_dashboard", JSON.stringify(cfg)); } catch (_) {}
+  document.getElementById("dash-modal").classList.add("hidden");
+  applyDashConfig();
+  showToast("Dashboard saved", "ok");
+};
+applyDashConfig();
+
+// ---- Security findings history (persisted scan results) ----
+async function loadFindings() {
+  const box = document.getElementById("sec-findings");
+  if (!box) return;
+  box.innerHTML = "<p class='muted'>Loading…</p>";
+  try {
+    const inc = document.getElementById("sec-findings-dismissed")?.checked ? "?include_dismissed=true" : "";
+    const rows = await api("/api/logs/findings" + inc);
+    if (!rows.length) { box.innerHTML = "<p class='muted'>No scan results yet. Run a scan above, or enable auto-scan in Settings.</p>"; return; }
+    box.innerHTML = rows.map(f => `
+      <div class="health-row" style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span class="sev sev-${f.severity}">${f.severity.toUpperCase()}</span>
+        <b style="min-width:64px">${f.kind}</b>
+        <span class="muted" style="font-size:11px">${f.source === "auto" ? "🤖 auto" : "manual"} · ${fmtTime(f.created_at)}</span>
+        <span style="flex:1;min-width:120px">${escapeHtml((f.summary || "").slice(0, 140))}${(f.summary || "").length > 140 ? "…" : ""}</span>
+        ${f.dismissed ? '<span class="muted">dismissed</span>' : `<button type="button" class="btn btn-ghost btn-xs" data-dismiss="${f.id}">Dismiss</button>`}
+      </div>`).join("");
+    box.querySelectorAll("[data-dismiss]").forEach(b => b.onclick = async () => {
+      await api(`/api/logs/findings/${b.dataset.dismiss}/dismiss`, { method: "POST" });
+      showToast("Finding dismissed", "ok"); loadFindings();
+    });
+  } catch (e) {
+    box.innerHTML = `<p style="color:#f87171">${escapeHtml(e.message)}</p>`;
+  }
+}
+document.getElementById("sec-findings-dismissed")?.addEventListener("change", loadFindings);

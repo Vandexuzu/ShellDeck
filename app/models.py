@@ -132,6 +132,16 @@ class SettingsRow(Base):
     # `enroll_owner_id`, then an operator claims it from the UI. Revocable here.
     enroll_secret: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
     enroll_owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, default=None)
+    # ---- Security auto-scan (background AI scan of session commands) ----
+    auto_scan_enabled: Mapped[bool] = mapped_column(default=False)
+    auto_scan_interval_h: Mapped[int] = mapped_column(Integer, default=6)  # hours between scans
+    auto_scan_notify_min: Mapped[str] = mapped_column(String(16), default="high")  # min severity to notify: medium|high|critical
+    # ---- Per-event notification gates (only apply when notify_enabled) ----
+    notify_device_offline: Mapped[bool] = mapped_column(default=True)
+    notify_command_anomaly: Mapped[bool] = mapped_column(default=True)
+    notify_log_anomaly: Mapped[bool] = mapped_column(default=True)
+    notify_config_review: Mapped[bool] = mapped_column(default=True)
+    notify_task_failed: Mapped[bool] = mapped_column(default=True)
 
 
 class ScheduledTask(Base):
@@ -242,9 +252,56 @@ class AIChatMessage(Base):
     device: Mapped["Device | None"] = relationship()
 
 
+class Secret(Base):
+    """Encrypted secret storage for API keys, tokens, passwords."""
+    
+    __tablename__ = "secrets"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True)
+    value_enc: Mapped[str] = mapped_column(Text)  # encrypted
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    
+    owner: Mapped["User"] = relationship()
+
+
+class DeployTemplate(Base):
+    """Pre-configured deployment templates."""
+    
+    __tablename__ = "deploy_templates"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    stack_type: Mapped[str] = mapped_column(String(32))  # lamp, node_mongo, static, custom
+    config_json: Mapped[str] = mapped_column(Text)  # JSON config
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    
+    owner: Mapped["User"] = relationship()
+
+
+class SecurityFinding(Base):
+    """Persisted AI security-scan result (log anomaly / config review / command audit)."""
+    
+    __tablename__ = "security_findings"
+    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), index=True)  # log | config | command
+    severity: Mapped[str] = mapped_column(String(16), default="low", index=True)  # low|medium|high|critical
+    summary: Mapped[str] = mapped_column(Text, default="")
+    detail_json: Mapped[str] = mapped_column(Text, default="{}")  # full AI JSON
+    source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | auto
+    dismissed: Mapped[bool] = mapped_column(default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, index=True)
+
+
 class AISettingsRow(Base):
     """AI/LLM configuration settings."""
-
+    
     __tablename__ = "ai_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
